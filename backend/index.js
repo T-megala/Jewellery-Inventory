@@ -3,6 +3,7 @@ import pool from "./src/config/database.js";
 import productRoutes from "./src/routes/productRoutes.js";
 import stockVerificationRoutes from "./src/routes/stockVerificationRoutes.js";
 import stockVerificationReportRoutes from "./src/routes/stockVerificationReportRoutes.js";
+import dropdownRoutes from "./src/routes/dropdownRoutes.js";
 import { errorHandler } from "./src/middleware/errorHandler.js";
 
 const app = express();
@@ -16,6 +17,7 @@ app.get("/", (req, res) => {
 app.use("/api/v1", productRoutes);
 app.use("/api/v1", stockVerificationRoutes);
 app.use("/api/v1", stockVerificationReportRoutes);
+app.use("/api/v1", dropdownRoutes);
 
 app.use(errorHandler);
 
