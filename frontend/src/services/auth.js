@@ -44,8 +44,12 @@ export function getToken() {
 }
 
 export function getUser() {
-  const raw = localStorage.getItem(USER_KEY)
-  return raw ? JSON.parse(raw) : null
+  try {
+    const raw = localStorage.getItem(USER_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
 }
 
 export function isAuthenticated() {

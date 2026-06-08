@@ -10,10 +10,18 @@ function ProtectedRoute({ children }) {
   return children
 }
 
+function LoginRoute() {
+  if (isAuthenticated()) {
+    return <Navigate to="/dashboard" replace />
+  }
+  return <Login />
+}
+
 export default function App() {
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
+      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="/login" element={<LoginRoute />} />
       <Route
         path="/dashboard"
         element={
