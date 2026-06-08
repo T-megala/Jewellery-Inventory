@@ -7,17 +7,27 @@
 }
 
 :root {
-  --color-bg: #f8f6f3;
+  --font-display: 'Cormorant Garamond', Georgia, serif;
+  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+
+  --color-bg: #f6f2eb;
   --color-surface: #ffffff;
   --color-primary: #b8860b;
   --color-primary-dark: #9a7209;
-  --color-text: #1a1a1a;
-  --color-text-muted: #6b6b6b;
-  --color-border: #e5e0d8;
+  --color-primary-light: #d4af37;
+  --color-gold-soft: #fdf8ee;
+  --color-text: #2c2116;
+  --color-text-muted: #7a6e62;
+  --color-border: #e8dfd0;
   --color-error: #c0392b;
   --color-error-bg: #fdecea;
-  --radius: 12px;
-  --shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+
+  --radius-sm: 10px;
+  --radius: 14px;
+  --radius-lg: 20px;
+  --shadow-soft: 0 12px 40px rgba(120, 90, 30, 0.07);
+  --shadow-card: 0 4px 24px rgba(60, 40, 10, 0.05);
+  --shadow-hover: 0 16px 48px rgba(120, 90, 30, 0.1);
 }
 
 html,
@@ -27,7 +37,7 @@ body,
 }
 
 body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-body);
   background: var(--color-bg);
   color: var(--color-text);
   -webkit-font-smoothing: antialiased;

@@ -25,7 +25,7 @@ export async function login(username, password) {
   await new Promise((resolve) => setTimeout(resolve, 800))
 
   if (username === 'admin' && password === 'admin123') {
-    const user = { id: 1, name: 'Jeyachandran Admin', username, role: 'admin' }
+    const user = { id: 1, name: 'Jeyachandran Admin', username, role: 'superadmin' }
     const token = 'mock-jwt-token'
     setSession(token, user)
     return { token, user }
