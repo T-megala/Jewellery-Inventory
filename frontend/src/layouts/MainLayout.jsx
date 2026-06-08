@@ -12,6 +12,8 @@ const REPORTS_NAV_ITEMS = [
   { to: '/reports', label: 'Reports', icon: 'reports' },
 ]
 
+const NAV_ITEMS = [...MAIN_NAV_ITEMS, ...REPORTS_NAV_ITEMS]
+
 const PAGE_META = {
   '/dashboard': { title: 'Dashboard', subtitle: 'Your showroom at a glance' },
   '/import': { title: 'Import', subtitle: 'Upload daily stock via Excel' },
@@ -22,7 +24,7 @@ const PAGE_META = {
 function NavIcon({ name }) {
   if (name === 'dashboard') {
     return (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <rect x="3" y="3" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.8" />
         <rect x="13" y="3" width="8" height="5" rx="2" stroke="currentColor" strokeWidth="1.8" />
         <rect x="13" y="10" width="8" height="11" rx="2" stroke="currentColor" strokeWidth="1.8" />
@@ -32,7 +34,7 @@ function NavIcon({ name }) {
   }
   if (name === 'import') {
     return (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M12 3v12M8 11l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       </svg>
@@ -40,14 +42,14 @@ function NavIcon({ name }) {
   }
   if (name === 'stock') {
     return (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M4 7l8-4 8 4-8 4-8-4z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
         <path d="M4 12l8 4 8-4M4 17l8 4 8-4" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
       </svg>
     )
   }
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M4 19V5M4 19h16M8 15l3-3 3 2 4-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
@@ -62,9 +64,9 @@ function getInitials(name) {
 
 function formatToday() {
   return new Date().toLocaleDateString('en-IN', {
-    weekday: 'short',
+    weekday: 'long',
     day: 'numeric',
-    month: 'short',
+    month: 'long',
     year: 'numeric',
   })
 }
@@ -83,105 +85,103 @@ export default function MainLayout() {
 
   return (
     <div className="app-layout">
-      <header className="shell-header">
-        <div className="shell-header__brand">
-          <div className="shell-header__logo-wrap">
-            <img src="/images/logo.png" alt="Jeyachandran Gold House" className="shell-header__logo" />
+      <aside className="sidebar">
+        <div className="sidebar-glow" aria-hidden="true" />
+
+        <div className="sidebar-brand">
+          <div className="sidebar-logo-wrap">
+            <img src="/images/logo.png" alt="Jeyachandran Gold House" className="sidebar-logo" />
           </div>
-          <div>
-            <p className="shell-header__name">Jeyachandran</p>
-            <p className="shell-header__tagline">Gold House</p>
+          <div className="sidebar-brand__text">
+            <p className="sidebar-name">Jeyachandran</p>
+            <p className="sidebar-tagline">Gold House</p>
+            <span className="sidebar-brand__line" aria-hidden="true" />
           </div>
         </div>
 
-        <div className="shell-header__main">
-          <div className="shell-header__page">
-            <p className="shell-header__crumb">
-              <span>Inventory</span>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              </svg>
-              <span>{page.title}</span>
-            </p>
-            <h1 className="shell-header__title">{page.title}</h1>
-            <p className="shell-header__subtitle">{page.subtitle}</p>
+        <div className="sidebar-nav-wrap">
+          <p className="sidebar-menu-label">Main Menu</p>
+          <nav className="sidebar-nav">
+            {MAIN_NAV_ITEMS.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) =>
+                  `sidebar-link${isActive ? ' sidebar-link--active' : ''}`
+                }
+              >
+                <span className="sidebar-link__icon">
+                  <NavIcon name={item.icon} />
+                </span>
+                <span className="sidebar-link__label">{item.label}</span>
+                <span className="sidebar-link__indicator" aria-hidden="true" />
+              </NavLink>
+            ))}
+          </nav>
+
+          <p className="sidebar-menu-label sidebar-menu-label--reports">Reports</p>
+          <nav className="sidebar-nav sidebar-nav--reports">
+            {REPORTS_NAV_ITEMS.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) =>
+                  `sidebar-link${isActive ? ' sidebar-link--active' : ''}`
+                }
+              >
+                <span className="sidebar-link__icon">
+                  <NavIcon name={item.icon} />
+                </span>
+                <span className="sidebar-link__label">{item.label}</span>
+                <span className="sidebar-link__indicator" aria-hidden="true" />
+              </NavLink>
+            ))}
+          </nav>
+        </div>
+
+        <div className="sidebar-footer">
+          <button type="button" className="sidebar-logout" onClick={handleLogout}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Sign out
+          </button>
+        </div>
+      </aside>
+
+      <div className="main-area">
+        <header className="topbar">
+          <div className="topbar-left">
+            <p className="topbar-eyebrow">Inventory System</p>
+            <div className="topbar-title-row">
+              <span className="topbar-page-icon">
+                <NavIcon name={NAV_ITEMS.find((item) => item.to === location.pathname)?.icon || 'dashboard'} />
+              </span>
+              <div>
+                <h1 className="topbar-title">{page.title}</h1>
+                <p className="topbar-subtitle">{page.subtitle}</p>
+              </div>
+            </div>
           </div>
 
-          <div className="shell-header__actions">
-            <div className="shell-header__chip shell-header__date">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <div className="topbar-right">
+            <div className="topbar-chip topbar-date">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.8" />
                 <path d="M16 2v4M8 2v4M3 10h18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
               </svg>
               <span>{formatToday()}</span>
             </div>
 
-            <div className="shell-header__chip shell-header__user">
-              <span className="shell-header__avatar">{getInitials(displayName)}</span>
+            <div className="topbar-chip topbar-user">
+              <span className="topbar-user__avatar">{getInitials(displayName)}</span>
               <div>
-                <p className="shell-header__user-name">{displayName}</p>
-                <p className="shell-header__user-role">{user?.role || 'Staff'}</p>
+                <p className="topbar-user__name">{displayName}</p>
+                <p className="topbar-user__role">{user?.role || 'Staff'}</p>
               </div>
             </div>
           </div>
-        </div>
-      </header>
-
-      <div className="app-body">
-        <aside className="sidebar">
-          <div className="sidebar-nav-wrap">
-            <div className="sidebar-section">
-              <p className="sidebar-menu-label">Main Menu</p>
-              <nav className="sidebar-nav">
-                {MAIN_NAV_ITEMS.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    className={({ isActive }) =>
-                      `sidebar-link${isActive ? ' sidebar-link--active' : ''}`
-                    }
-                  >
-                    <span className="sidebar-link__rail" aria-hidden="true" />
-                    <span className="sidebar-link__icon">
-                      <NavIcon name={item.icon} />
-                    </span>
-                    <span className="sidebar-link__label">{item.label}</span>
-                  </NavLink>
-                ))}
-              </nav>
-            </div>
-
-            <div className="sidebar-section">
-              <p className="sidebar-menu-label">Reports</p>
-              <nav className="sidebar-nav">
-                {REPORTS_NAV_ITEMS.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    className={({ isActive }) =>
-                      `sidebar-link${isActive ? ' sidebar-link--active' : ''}`
-                    }
-                  >
-                    <span className="sidebar-link__rail" aria-hidden="true" />
-                    <span className="sidebar-link__icon">
-                      <NavIcon name={item.icon} />
-                    </span>
-                    <span className="sidebar-link__label">{item.label}</span>
-                  </NavLink>
-                ))}
-              </nav>
-            </div>
-          </div>
-
-          <div className="sidebar-footer">
-            <button type="button" className="sidebar-logout" onClick={handleLogout}>
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              Sign out
-            </button>
-          </div>
-        </aside>
+        </header>
 
         <main className="page-content">
           <div className="page-content__inner">
