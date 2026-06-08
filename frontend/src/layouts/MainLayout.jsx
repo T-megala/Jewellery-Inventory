@@ -12,11 +12,9 @@ const REPORTS_NAV_ITEMS = [
   { to: '/reports', label: 'Reports', icon: 'reports' },
 ]
 
-const NAV_ITEMS = [...MAIN_NAV_ITEMS, ...REPORTS_NAV_ITEMS]
-
 const PAGE_META = {
   '/dashboard': { title: 'Dashboard', subtitle: 'Your showroom at a glance' },
-  '/import': { title: 'Import', subtitle: 'Upload daily stock via Excel' },
+  '/import': { title: 'Bulk Stock Upload', subtitle: 'Tag Wise Stock Report — Excel import' },
   '/stock': { title: 'Stock', subtitle: 'All products in your showroom' },
   '/reports': { title: 'Reports', subtitle: 'Sales, stock and gold rate insights' },
 }
@@ -152,30 +150,18 @@ export default function MainLayout() {
       <div className="main-area">
         <header className="topbar">
           <div className="topbar-left">
-            <p className="topbar-eyebrow">Inventory System</p>
-            <div className="topbar-title-row">
-              <span className="topbar-page-icon">
-                <NavIcon name={NAV_ITEMS.find((item) => item.to === location.pathname)?.icon || 'dashboard'} />
-              </span>
-              <div>
-                <h1 className="topbar-title">{page.title}</h1>
-                <p className="topbar-subtitle">{page.subtitle}</p>
-              </div>
-            </div>
+            <h1 className="topbar-title">{page.title}</h1>
+            <p className="topbar-subtitle">{page.subtitle}</p>
           </div>
 
           <div className="topbar-right">
-            <div className="topbar-chip topbar-date">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <rect x="3" y="4" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.8" />
-                <path d="M16 2v4M8 2v4M3 10h18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-              </svg>
-              <span>{formatToday()}</span>
-            </div>
+            <time className="topbar-date" dateTime={new Date().toISOString().slice(0, 10)}>
+              {formatToday()}
+            </time>
 
-            <div className="topbar-chip topbar-user">
+            <div className="topbar-user">
               <span className="topbar-user__avatar">{getInitials(displayName)}</span>
-              <div>
+              <div className="topbar-user__text">
                 <p className="topbar-user__name">{displayName}</p>
                 <p className="topbar-user__role">{user?.role || 'Staff'}</p>
               </div>
