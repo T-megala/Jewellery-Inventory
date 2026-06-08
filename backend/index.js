@@ -1,9 +1,23 @@
-import app from "./src/app.js";
+import express from "express";
 import pool from "./src/config/database.js";
+import productRoutes from "./src/routes/productRoutes.js";
+import stockVerificationRoutes from "./src/routes/stockVerificationRoutes.js";
+import stockVerificationReportRoutes from "./src/routes/stockVerificationReportRoutes.js";
+import { errorHandler } from "./src/middleware/errorHandler.js";
+
+const app = express();
+
+app.use(express.json());
 
 app.get("/", (req, res) => {
   res.send("Hello World");
 });
+
+app.use("/api/v1", productRoutes);
+app.use("/api/v1", stockVerificationRoutes);
+app.use("/api/v1", stockVerificationReportRoutes);
+
+app.use(errorHandler);
 
 const PORT = process.env.PORT || 5004;
 
