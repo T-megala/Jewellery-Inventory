@@ -36,32 +36,6 @@
   padding: 24px 28px 20px;
 }
 
-.import-panel__top {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  margin-bottom: 14px;
-}
-
-.import-link-btn {
-  flex-shrink: 0;
-  padding: 8px 14px;
-  background: transparent;
-  border: 1px solid #e8dfd0;
-  border-radius: 8px;
-  font-family: var(--font-body);
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: #9a7209;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-}
-
-.import-link-btn:hover {
-  background: #fdf8ee;
-  border-color: #d4af37;
-}
-
 .import-drop {
   display: flex;
   flex-direction: column;
@@ -304,11 +278,6 @@
 @media (max-width: 640px) {
   .import-panel__upload {
     padding: 20px 18px 16px;
-  }
-
-  .import-link-btn {
-    width: 100%;
-    text-align: center;
   }
 
   .import-panel__footer {

@@ -7,7 +7,7 @@ import {
   saveDailyImport,
   setTodayImports,
 } from '../services/stockImport.js'
-import { downloadStockTemplate, parseStockExcel } from '../utils/parseStockExcel.js'
+import { parseStockExcel } from '../utils/parseStockExcel.js'
 import './Import.css'
 
 function categoryBadge(cat) {
@@ -129,12 +129,6 @@ export default function Import() {
 
       <div className="import-panel">
         <div className="import-panel__upload">
-          <div className="import-panel__top">
-            <button type="button" className="import-link-btn" onClick={downloadStockTemplate}>
-              Download sample format
-            </button>
-          </div>
-
           <div
             className={`import-drop${isDragging ? ' import-drop--active' : ''}${isUploading ? ' import-drop--loading' : ''}`}
             onDrop={handleDrop}
