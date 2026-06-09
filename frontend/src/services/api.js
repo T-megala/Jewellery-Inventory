@@ -1,6 +1,6 @@
-const LOCAL_API = '/api/v1';
+const LOCAL_API = 'http://localhost:5005/api/v1';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || LOCAL_API;
+export const API_BASE = import.meta.env.VITE_API_BASE_URL || LOCAL_API;
 
 export function buildQueryString(params) {
   return Object.entries(params)
@@ -64,12 +64,14 @@ export async function apiFetchPaged(path, options = {}) {
   };
 }
 
-export async function apiFetchReport(path, options = {}) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
+export async function apiFetchReport(path, params = {}) {
+  const query = buildQueryString(params);
+  const url = query ? `${path}?${query}` : path;
+
+  const res = await fetch(`${API_BASE}${url}`, {
+    method: 'GET',
     headers: {
       'Content-Type': 'application/json',
-      ...options.headers,
     },
   });
 

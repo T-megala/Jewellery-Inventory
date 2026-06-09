@@ -16,6 +16,42 @@ const STATUS_OPTIONS = [
   { value: 'NEW', label: 'New' },
 ]
 
+const STAT_CARDS = [
+  { key: 'total', label: 'Total Tags', field: 'totalTags', variant: 'total' },
+  { key: 'found', label: 'Found', field: 'totalFound', variant: 'found' },
+  { key: 'missing', label: 'Missing', field: 'totalMissing', variant: 'missing' },
+  { key: 'new', label: 'New', field: 'totalNew', variant: 'new' },
+]
+
+function StatIcon({ variant }) {
+  if (variant === 'found') {
+    return (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M9 12l2 2 4-4M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    )
+  }
+  if (variant === 'missing') {
+    return (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 8v4m0 4h.01M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    )
+  }
+  if (variant === 'new') {
+    return (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    )
+  }
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4 7h16M4 12h10M4 17h7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 function statusBadgeClass(status) {
   if (status === 'FOUND') return 'report-status report-status--found'
   if (status === 'MISSING') return 'report-status report-status--missing'
@@ -41,6 +77,12 @@ function formatDate(value) {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+function formatStatValue(summary, field) {
+  if (!summary) return '—'
+  const value = summary[field]
+  return Number(value ?? 0).toLocaleString('en-IN')
 }
 
 export default function Reports() {
@@ -144,40 +186,6 @@ export default function Reports() {
     return () => { cancelled = true }
   }, [product, subProduct])
 
-  const stats = useMemo(() => {
-    if (!summary) {
-      return [
-        { label: 'Total Tags', value: '—', hint: 'Run report to view' },
-        { label: 'Found', value: '—', hint: 'Run report to view' },
-        { label: 'Missing', value: '—', hint: 'Run report to view' },
-        { label: 'New', value: '—', hint: 'Run report to view' },
-      ]
-    }
-
-    return [
-      {
-        label: 'Total Tags',
-        value: String(summary.totalTags),
-        hint: 'Matching filters',
-      },
-      {
-        label: 'Found',
-        value: String(summary.totalFound),
-        hint: 'Tags verified in stock',
-      },
-      {
-        label: 'Missing',
-        value: String(summary.totalMissing),
-        hint: 'Expected but not scanned',
-      },
-      {
-        label: 'New',
-        value: String(summary.totalNew),
-        hint: 'Scanned but not expected',
-      },
-    ]
-  }, [summary])
-
   async function loadReport(nextPage = 1) {
     setLoadingReport(true)
     setError('')
@@ -259,150 +267,150 @@ export default function Reports() {
     }
   }
 
+  const rowRange = pagination && rows.length
+    ? {
+        start: (page - 1) * PAGE_LIMIT + 1,
+        end: (page - 1) * PAGE_LIMIT + rows.length,
+        total: pagination.totalRecords,
+      }
+    : null
+
   return (
     <div className="reports-page">
-      {summary && (
-        <div className="reports-meta">
-          <span className="reports-meta__badge">
-            {summary.totalTags} tag{summary.totalTags === 1 ? '' : 's'}
-          </span>
-        </div>
-      )}
-
       <div className="reports-stats">
-        {stats.map((stat) => (
-          <div key={stat.label} className="reports-stat">
-            <p className="reports-stat__label">{stat.label}</p>
-            <strong className="reports-stat__value">{stat.value}</strong>
-            <span className="reports-stat__hint">{stat.hint}</span>
-          </div>
+        {STAT_CARDS.map((card) => (
+          <article
+            key={card.key}
+            className={`reports-stat reports-stat--${card.variant}${summary ? '' : ' reports-stat--idle'}`}
+          >
+            <div className="reports-stat__icon">
+              <StatIcon variant={card.variant} />
+            </div>
+            <div className="reports-stat__body">
+              <p className="reports-stat__label">{card.label}</p>
+              <strong className="reports-stat__value">
+                {formatStatValue(summary, card.field)}
+              </strong>
+            </div>
+          </article>
         ))}
       </div>
 
-      <div className="reports-panel">
-        <div className="reports-panel__head">
-          <h2 className="reports-panel__title">Filters</h2>
-          <p className="reports-panel__desc">Product, sub product, counter and status</p>
-        </div>
-        <div className="reports-panel__body">
-          <form className="report-filters" onSubmit={handleGenerate}>
-            <div className="report-filters__grid">
-              <label className="report-field">
-                <span>Product</span>
-                <select
-                  value={product}
-                  onChange={(e) => setProduct(e.target.value)}
-                  disabled={loadingFilters}
-                >
-                  <option value="">All Products</option>
-                  {products.map((item) => (
-                    <option key={item.id} value={item.name}>{item.name}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="report-field">
-                <span>Sub Product</span>
-                <select
-                  value={subProduct}
-                  onChange={(e) => setSubProduct(e.target.value)}
-                  disabled={!product}
-                >
-                  <option value="">All Sub Products</option>
-                  {subProducts.map((item) => (
-                    <option key={item.id} value={item.name}>{item.name}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="report-field">
-                <span>Counter</span>
-                <select
-                  value={counter}
-                  onChange={(e) => setCounter(e.target.value)}
-                  disabled={!product || !subProduct}
-                >
-                  <option value="">All Counters</option>
-                  {counters.map((item) => (
-                    <option key={item.id} value={item.name}>{item.name}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="report-field">
-                <span>Status</span>
-                <select
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value)}
-                >
-                  {STATUS_OPTIONS.map((item) => (
-                    <option key={item.value || 'all'} value={item.value}>{item.label}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            {error && (
-              <p className="report-alert report-alert--error" role="alert">{error}</p>
-            )}
-
-            <div className="report-filters__actions">
-              <button
-                type="button"
-                className="report-btn report-btn--ghost"
-                onClick={handleReset}
-                disabled={loadingReport || exporting}
+      <section className="reports-filters-card">
+        <form className="report-filters" onSubmit={handleGenerate}>
+          <div className="report-filters__grid">
+            <label className="report-field">
+              <span>Product</span>
+              <select
+                value={product}
+                onChange={(e) => setProduct(e.target.value)}
+                disabled={loadingFilters}
               >
-                Reset
-              </button>
-              <button
-                type="submit"
-                className="report-btn report-btn--primary"
-                disabled={loadingReport || loadingFilters || exporting}
-              >
-                {loadingReport ? 'Generating…' : 'Generate Report'}
-              </button>
-            </div>
-          </form>
+                <option value="">All Products</option>
+                {products.map((item) => (
+                  <option key={item.id} value={item.name}>{item.name}</option>
+                ))}
+              </select>
+            </label>
 
-          {hasSearched && (
-            <div className="reports-results">
-              <div className="reports-results__head">
-                <div className="reports-results__title-wrap">
-                  <h3 className="reports-panel__title">Results</h3>
-                  {pagination && (
-                    <span className="reports-results__count">
-                      Page {pagination.page} of {pagination.totalPages}
-                      {' · '}
-                      {pagination.totalRecords} records
-                    </span>
-                  )}
-                </div>
-                {rows.length > 0 && (
-                  <div className="reports-export">
-                    <button
-                      type="button"
-                      className="report-btn report-btn--export"
-                      onClick={handleExportExcel}
-                      disabled={exporting}
-                    >
-                      {exporting ? 'Exporting…' : 'Excel'}
-                    </button>
-                    <button
-                      type="button"
-                      className="report-btn report-btn--export"
-                      onClick={handleExportPdf}
-                      disabled={exporting}
-                    >
-                      {exporting ? 'Exporting…' : 'PDF'}
-                    </button>
-                  </div>
-                )}
+            <label className="report-field">
+              <span>Sub Product</span>
+              <select
+                value={subProduct}
+                onChange={(e) => setSubProduct(e.target.value)}
+                disabled={!product}
+              >
+                <option value="">All Sub Products</option>
+                {subProducts.map((item) => (
+                  <option key={item.id} value={item.name}>{item.name}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="report-field">
+              <span>Counter</span>
+              <select
+                value={counter}
+                onChange={(e) => setCounter(e.target.value)}
+                disabled={!product || !subProduct}
+              >
+                <option value="">All Counters</option>
+                {counters.map((item) => (
+                  <option key={item.id} value={item.name}>{item.name}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="report-field">
+              <span>Status</span>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+              >
+                {STATUS_OPTIONS.map((item) => (
+                  <option key={item.value || 'all'} value={item.value}>{item.label}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {error && (
+            <p className="report-alert report-alert--error" role="alert">{error}</p>
+          )}
+
+          <div className="report-filters__actions">
+            <button
+              type="button"
+              className="report-btn report-btn--ghost"
+              onClick={handleReset}
+              disabled={loadingReport || exporting}
+            >
+              Reset
+            </button>
+            <button
+              type="submit"
+              className="report-btn report-btn--primary"
+              disabled={loadingReport || loadingFilters || exporting}
+            >
+              {loadingReport ? 'Generating…' : 'Generate Report'}
+            </button>
+          </div>
+        </form>
+      </section>
+
+      {hasSearched && (
+        <section className="reports-results-card">
+          <div className="reports-results__head">
+            <h3 className="reports-results__title">Results</h3>
+            {rows.length > 0 && (
+              <div className="reports-export">
+                <button
+                  type="button"
+                  className="report-btn report-btn--export"
+                  onClick={handleExportExcel}
+                  disabled={exporting}
+                >
+                  Excel
+                </button>
+                <button
+                  type="button"
+                  className="report-btn report-btn--export"
+                  onClick={handleExportPdf}
+                  disabled={exporting}
+                >
+                  PDF
+                </button>
               </div>
+            )}
+          </div>
+
+          {loadingReport ? (
+            <p className="report-loading">Loading results…</p>
+          ) : rows.length === 0 ? (
+            <p className="report-empty">No records found for the selected filters.</p>
+          ) : (
+            <>
               <div className="reports-table-wrap">
-              {rows.length === 0 ? (
-                <p className="report-empty">No verification records found for the selected filters.</p>
-              ) : (
                 <table className="reports-table">
                   <thead>
                     <tr>
@@ -418,10 +426,10 @@ export default function Reports() {
                     {rows.map((row) => (
                       <tr key={row.id}>
                         <td>{formatDate(row.verificationDate)}</td>
-                        <td>{row.product}</td>
+                        <td className="reports-table__product">{row.product}</td>
                         <td>{row.subProduct}</td>
                         <td>{row.counter}</td>
-                        <td>{row.tagNo}</td>
+                        <td className="reports-table__tag">{row.tagNo}</td>
                         <td>
                           <span className={statusBadgeClass(row.status)}>
                             {formatStatus(row.status)}
@@ -431,10 +439,9 @@ export default function Reports() {
                     ))}
                   </tbody>
                 </table>
-              )}
               </div>
 
-              {pagination && pagination.totalPages > 1 && (
+              {pagination && rowRange && pagination.totalPages > 1 && (
                 <div className="reports-pagination">
                   <button
                     type="button"
@@ -445,7 +452,9 @@ export default function Reports() {
                     Previous
                   </button>
                   <span className="reports-pagination__info">
-                    Page {pagination.page} of {pagination.totalPages}
+                    {rowRange.start.toLocaleString('en-IN')}–{rowRange.end.toLocaleString('en-IN')}
+                    {' of '}
+                    {rowRange.total.toLocaleString('en-IN')}
                   </span>
                   <button
                     type="button"
@@ -457,10 +466,10 @@ export default function Reports() {
                   </button>
                 </div>
               )}
-            </div>
+            </>
           )}
-        </div>
-      </div>
+        </section>
+      )}
     </div>
   )
 }

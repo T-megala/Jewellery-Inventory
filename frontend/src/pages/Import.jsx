@@ -64,9 +64,9 @@ export default function Import() {
     setIsUploading(true)
 
     try {
-      const data = await uploadStockExcel(selectedFile)
-      setResult(data)
-      setToast(`${data.imported.toLocaleString('en-IN')} tags imported successfully.`)
+      await uploadStockExcel(selectedFile)
+      setResult(true)
+      setToast('Import completed successfully.')
     } catch (err) {
       setError(err.message || 'Failed to upload Excel file.')
     } finally {
@@ -203,28 +203,10 @@ export default function Import() {
           )}
 
           {result && (
-            <div className="import-success">
-              <div className="import-success__head">
-                <span className="import-success__tick" aria-hidden="true">✓</span>
-                <div>
-                  <p className="import-success__title">Import complete</p>
-                  <p className="import-success__file">{selectedFile?.name}</p>
-                </div>
-              </div>
-              <div className="import-success__grid">
-                <div className="import-stat import-stat--highlight">
-                  <strong>{result.imported.toLocaleString('en-IN')}</strong>
-                  <span>Imported</span>
-                </div>
-                <div className="import-stat">
-                  <strong>{result.totalRowsInFile.toLocaleString('en-IN')}</strong>
-                  <span>Total rows</span>
-                </div>
-                <div className="import-stat">
-                  <strong>{result.skipped.toLocaleString('en-IN')}</strong>
-                  <span>Skipped</span>
-                </div>
-              </div>
+            <div className="import-success import-success--simple">
+              <span className="import-success__tick import-success__tick--large" aria-hidden="true">✓</span>
+              <p className="import-success__title">Import completed</p>
+              <p className="import-success__file">{selectedFile?.name}</p>
               <button type="button" className="import-send import-send--outline" onClick={handleReset}>
                 Upload another file
               </button>
