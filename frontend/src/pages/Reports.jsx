@@ -89,8 +89,6 @@ export default function Reports() {
   const [subProduct, setSubProduct] = useState('')
   const [counter, setCounter] = useState('')
   const [status, setStatus] = useState('')
-  const [fromDate, setFromDate] = useState('')
-  const [toDate, setToDate] = useState('')
 
   const [products, setProducts] = useState([])
   const [subProducts, setSubProducts] = useState([])
@@ -113,9 +111,7 @@ export default function Reports() {
     subProductName: subProduct || undefined,
     centerName: counter || undefined,
     status: status || undefined,
-    fromDate: fromDate || undefined,
-    toDate: toDate || undefined,
-  }), [product, subProduct, counter, status, fromDate, toDate])
+  }), [product, subProduct, counter, status])
 
   useEffect(() => {
     let cancelled = false
@@ -197,25 +193,7 @@ export default function Reports() {
     return () => { cancelled = true }
   }, [product, subProduct])
 
-  function validateDateRange() {
-    if ((fromDate && !toDate) || (!fromDate && toDate)) {
-      setError('Both From Date and To Date are required for date filtering.')
-      return false
-    }
-
-    if (fromDate && toDate && fromDate > toDate) {
-      setError('From Date cannot be later than To Date.')
-      return false
-    }
-
-    return true
-  }
-
   async function loadReport(nextPage = 1) {
-    if (!validateDateRange()) {
-      return
-    }
-
     setLoadingReport(true)
     setError('')
 
@@ -247,8 +225,6 @@ export default function Reports() {
     setSubProduct('')
     setCounter('')
     setStatus('')
-    setFromDate('')
-    setToDate('')
     setRows([])
     setSummary(null)
     setPagination(null)
@@ -258,7 +234,7 @@ export default function Reports() {
   }
 
   async function handleExportExcel() {
-    if (!hasSearched || !validateDateRange()) return
+    if (!hasSearched) return
 
     setExporting(true)
     setError('')
@@ -273,7 +249,7 @@ export default function Reports() {
   }
 
   async function handleExportPdf() {
-    if (!hasSearched || !validateDateRange()) return
+    if (!hasSearched) return
 
     setExporting(true)
     setError('')
@@ -318,7 +294,7 @@ export default function Reports() {
 
       <section className="reports-filters-card">
         <form className="report-filters" onSubmit={handleGenerate}>
-          <div className="report-filters__grid report-filters__grid--wide">
+          <div className="report-filters__grid">
             <label className="report-field">
               <span>Product</span>
               <select
@@ -373,23 +349,6 @@ export default function Reports() {
               </select>
             </label>
 
-            <label className="report-field">
-              <span>From Date</span>
-              <input
-                type="date"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-              />
-            </label>
-
-            <label className="report-field">
-              <span>To Date</span>
-              <input
-                type="date"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-              />
-            </label>
           </div>
 
           {filtersNotice && (

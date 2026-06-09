@@ -3,6 +3,7 @@ import { fetchProductList } from '../services/stock.js'
 import './Stock.css'
 
 const PAGE_LIMIT = 10
+const SEARCH_DEBOUNCE_MS = 400
 
 function formatValue(value) {
   if (value === null || value === undefined || value === '') {
@@ -43,31 +44,53 @@ export default function Stock() {
   }, [])
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setSearch(searchInput.trim())
+    }, SEARCH_DEBOUNCE_MS)
+
+    return () => window.clearTimeout(timer)
+  }, [searchInput])
+
+  useEffect(() => {
     loadStock(1, search)
   }, [loadStock, search])
 
-  function handleSearch(e) {
-    e.preventDefault()
-    setSearch(searchInput.trim())
-  }
-
   function handleClearSearch() {
     setSearchInput('')
-    setSearch('')
   }
 
   return (
     <div className="stock-page">
       <div className="stock-meta">
-        <form className="stock-search" onSubmit={handleSearch}>
-          <input
-            type="text"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search product, tag, counter…"
-          />
-          <button type="submit" disabled={loading}>Search</button>
-        </form>
+        <div className="stock-search">
+          <div className="stock-search__field">
+            <span className="stock-search__icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8" />
+                <path d="M20 20l-3.5-3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </span>
+            <input
+              type="search"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search product, tag, counter…"
+              aria-label="Search stock"
+            />
+            {searchInput && (
+              <button
+                type="button"
+                className="stock-search__clear"
+                onClick={handleClearSearch}
+                aria-label="Clear search"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
         {pagination && (
           <span className="stock-meta__badge">
             {pagination.totalRecords.toLocaleString('en-IN')} item{pagination.totalRecords === 1 ? '' : 's'}
