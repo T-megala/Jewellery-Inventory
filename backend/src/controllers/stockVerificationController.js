@@ -1,4 +1,28 @@
 import stockVerificationService from '../services/stockVerificationService.js';
+import { isAllProducts } from '../utils/verificationScope.js';
+
+const validateScopeObject = (obj, fieldName, { required = true } = {}) => {
+  if (obj === undefined || obj === null) {
+    return required ? `${fieldName} is mandatory` : null;
+  }
+
+  if (typeof obj !== 'object') {
+    return `${fieldName} must be an object`;
+  }
+
+  const hasId = obj.id !== undefined && obj.id !== null;
+  const hasName = obj.name && String(obj.name).trim();
+
+  if (!hasId && !hasName) {
+    return `${fieldName} must include id and/or name`;
+  }
+
+  if (hasId && (typeof obj.id !== 'number' || !Number.isFinite(obj.id))) {
+    return `${fieldName}.id must be a valid number`;
+  }
+
+  return null;
+};
 
 const validateUploadRequest = (body) => {
   if (body.datetimeMillis === undefined || body.datetimeMillis === null) {
@@ -9,28 +33,27 @@ const validateUploadRequest = (body) => {
     return 'datetimeMillis must be a valid number';
   }
 
-  if (!body.product || typeof body.product !== 'object') {
-    return 'product is mandatory';
+  const productError = validateScopeObject(body.product, 'product');
+  if (productError) {
+    return productError;
   }
 
-  if (!body.product.name || !String(body.product.name).trim()) {
-    return 'product is mandatory';
-  }
+  if (isAllProducts(body.product)) {
+    // Scenario 5: all products — subProduct and center are optional/ignored
+  } else {
+    const subProductError = validateScopeObject(body.subProduct, 'subProduct');
+    if (subProductError) {
+      return subProductError;
+    }
 
-  if (!body.subProduct || typeof body.subProduct !== 'object') {
-    return 'subProduct is mandatory';
-  }
-
-  if (!body.subProduct.name || !String(body.subProduct.name).trim()) {
-    return 'subProduct is mandatory';
-  }
-
-  if (!body.center || typeof body.center !== 'object') {
-    return 'center is mandatory';
-  }
-
-  if (!body.center.name || !String(body.center.name).trim()) {
-    return 'center is mandatory';
+    if (body.center !== undefined && body.center !== null) {
+      const centerError = validateScopeObject(body.center, 'center', {
+        required: false,
+      });
+      if (centerError) {
+        return centerError;
+      }
+    }
   }
 
   if (!Array.isArray(body.tagData)) {
@@ -66,9 +89,9 @@ export const uploadStockVerification = async (req, res) => {
 
   const result = await stockVerificationService.uploadStockVerification({
     datetimeMillis,
-    productName: String(product.name).trim(),
-    subProductName: String(subProduct.name).trim(),
-    centerName: String(center.name).trim(),
+    product,
+    subProduct: isAllProducts(product) ? null : subProduct,
+    center: isAllProducts(product) ? null : center,
     tagData,
   });
 

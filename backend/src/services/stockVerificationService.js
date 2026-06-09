@@ -1,6 +1,10 @@
 import pool from '../config/database.js';
 import { getActiveBatchId } from '../services/productBatchService.js';
 import ApiError from '../utils/ApiError.js';
+import {
+  buildExpectedTagsQuery,
+  resolveStoredScope,
+} from '../utils/verificationScope.js';
 
 const categorizeTags = (expectedTags, scannedTags) => {
   const expectedSet = new Set(expectedTags);
@@ -46,9 +50,9 @@ const insertDetailRecords = async (
 
 const uploadStockVerification = async ({
   datetimeMillis,
-  productName,
-  subProductName,
-  centerName,
+  product,
+  subProduct,
+  center,
   tagData,
 }) => {
   const activeBatchId = await getActiveBatchId();
@@ -57,17 +61,20 @@ const uploadStockVerification = async ({
     throw new ApiError(400, 'No active product batch found. Upload inventory first.');
   }
 
-  const [rows] = await pool.execute(
-    `SELECT tag_packet_no
-     FROM products
-     WHERE batch_id = ?
-       AND product = ?
-       AND sub_product = ?
-       AND counter_name = ?
-       AND tag_packet_no IS NOT NULL
-       AND TRIM(tag_packet_no) != ''`,
-    [activeBatchId, productName, subProductName, centerName]
+  const { productName, subProductName, centerName } = resolveStoredScope(
+    product,
+    subProduct,
+    center
   );
+
+  const { sql, params } = buildExpectedTagsQuery(
+    activeBatchId,
+    product,
+    subProduct,
+    center
+  );
+
+  const [rows] = await pool.execute(sql, params);
 
   const expectedTags = [
     ...new Set(
