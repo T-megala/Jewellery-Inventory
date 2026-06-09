@@ -507,7 +507,7 @@ export default function Dashboard() {
             <DonutChart
               data={counterPieData}
               centerTitle="counters"
-              centerValue={formatCount(totals.counters)}
+              centerValue={formatCount(byCounter.length || totals.counters)}
             />
           </AnalyticsTile>
 

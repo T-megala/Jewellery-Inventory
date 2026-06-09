@@ -65,6 +65,10 @@ const getInventorySummary = async () => {
   const baseWhere = `batch_id = ?
     AND tag_packet_no IS NOT NULL
     AND TRIM(tag_packet_no) != ''`;
+  const counterNameExpr = `CASE
+    WHEN counter_name IS NULL OR TRIM(counter_name) = '' THEN 'Unassigned'
+    ELSE TRIM(counter_name)
+  END`;
 
   const [[totalsRow]] = await pool.execute(
     `SELECT
@@ -74,7 +78,7 @@ const getInventorySummary = async () => {
        COALESCE(SUM(net_wt), 0) AS totalNetWt,
        COUNT(DISTINCT product) AS productGroups,
        COUNT(DISTINCT CONCAT(product, '|', sub_product)) AS subProducts,
-       COUNT(DISTINCT counter_name) AS counters
+       COUNT(DISTINCT ${counterNameExpr}) AS counters
      FROM products
      WHERE ${baseWhere}`,
     [batchId]
@@ -94,16 +98,14 @@ const getInventorySummary = async () => {
 
   const [byCounterRows] = await pool.execute(
     `SELECT
-       counter_name AS name,
+       ${counterNameExpr} AS name,
        COUNT(DISTINCT CONCAT(product, '|', sub_product)) AS subProductCount,
        COUNT(DISTINCT product) AS productCount,
        COUNT(*) AS tagCount
      FROM products
      WHERE ${baseWhere}
-       AND counter_name IS NOT NULL
-       AND TRIM(counter_name) != ''
-     GROUP BY counter_name
-     ORDER BY subProductCount DESC, counter_name ASC`,
+     GROUP BY ${counterNameExpr}
+     ORDER BY subProductCount DESC, name ASC`,
     [batchId]
   );
 
