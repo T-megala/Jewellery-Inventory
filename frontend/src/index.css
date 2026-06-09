@@ -9,6 +9,7 @@
 :root {
   --font-display: 'Cormorant Garamond', Georgia, serif;
   --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-numeric: 'Inter', system-ui, -apple-system, sans-serif;
 
   --color-bg: #f6f2eb;
   --color-surface: #ffffff;

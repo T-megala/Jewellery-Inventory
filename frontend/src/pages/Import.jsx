@@ -27,29 +27,6 @@ function StepItem({ number, label, state }) {
   )
 }
 
-function ImportStats({ result }) {
-  return (
-    <dl className="import-stats">
-      <div className="import-stats__item">
-        <dt>Inserted</dt>
-        <dd>{formatCount(result.inserted)}</dd>
-      </div>
-      <div className="import-stats__item">
-        <dt>Updated</dt>
-        <dd>{formatCount(result.updated)}</dd>
-      </div>
-      <div className="import-stats__item">
-        <dt>Unchanged</dt>
-        <dd>{formatCount(result.unchanged)}</dd>
-      </div>
-      <div className="import-stats__item">
-        <dt>Skipped</dt>
-        <dd>{formatCount(result.skipped)}</dd>
-      </div>
-    </dl>
-  )
-}
-
 export default function Import() {
   const fileInputRef = useRef(null)
   const [selectedFile, setSelectedFile] = useState(null)
@@ -260,15 +237,10 @@ export default function Import() {
           )}
 
           {result && (
-            <div className="import-success">
+            <div className="import-success import-success--simple">
               <span className="import-success__tick import-success__tick--large" aria-hidden="true">✓</span>
               <p className="import-success__title">Import completed</p>
               <p className="import-success__file">{selectedFile?.name}</p>
-              <ImportStats result={result} />
-              <p className="import-success__meta">
-                Batch #{result.batchId}
-                {result.isNewBatch ? ' · New day batch' : ' · Same day batch'}
-              </p>
               <button type="button" className="import-send import-send--outline" onClick={handleReset}>
                 Upload another file
               </button>
