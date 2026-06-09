@@ -4,20 +4,48 @@ import productRoutes from "./src/routes/productRoutes.js";
 import stockVerificationRoutes from "./src/routes/stockVerificationRoutes.js";
 import stockVerificationReportRoutes from "./src/routes/stockVerificationReportRoutes.js";
 import dropdownRoutes from "./src/routes/dropdownRoutes.js";
+import productBatchRoutes from "./src/routes/productBatchRoutes.js";
 import { errorHandler } from "./src/middleware/errorHandler.js";
 
 const app = express();
 
 app.use(express.json());
 
-app.get("/", (req, res) => {
-  res.send("Hello World");
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
+  : [];
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.length === 0) {
+    res.header('Access-Control-Allow-Origin', '*');
+  } else if (origin && allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  }
+
+  res.header(
+    'Access-Control-Allow-Headers',
+    'Origin, X-Requested-With, Content-Type, Accept, Authorization',
+  );
+  res.header(
+    'Access-Control-Allow-Methods',
+    'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+  );
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
+});
+
+app.get('/', (req, res) => {
+  res.send('Hello World');
 });
 
 app.use("/api/v1", productRoutes);
 app.use("/api/v1", stockVerificationRoutes);
 app.use("/api/v1", stockVerificationReportRoutes);
 app.use("/api/v1", dropdownRoutes);
+app.use("/api/v1", productBatchRoutes);
 
 app.use(errorHandler);
 
@@ -32,7 +60,7 @@ const startServer = async () => {
 
     if (!dbName) {
       throw new Error(
-        "Database connection succeeded but no database is selected. Check DB_NAME in .env"
+        "Database connection succeeded but no database is selected. Check DB_NAME in .env",
       );
     }
 

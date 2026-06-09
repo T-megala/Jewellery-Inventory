@@ -1,4 +1,5 @@
 import XLSX from 'xlsx';
+import { toLocalDateString } from './productBatchHelper.js';
 
 const MONTHS = {
   jan: '01',
@@ -31,7 +32,7 @@ const toNumber = (value) => {
 
 const formatDate = (value) => {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return value.toISOString().slice(0, 10);
+    return toLocalDateString(value);
   }
 
   const str = String(value ?? '').trim();
@@ -51,7 +52,8 @@ const formatDate = (value) => {
     return str;
   }
 
-  return str;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? str : toLocalDateString(parsed);
 };
 
 const findHeaderRowIndex = (rows) =>
@@ -144,7 +146,7 @@ const mapRawRow = (rawRow, columnMap) => ({
 });
 
 const toDbRow = (row) => ({
-  tran_no: Number(row.tranNo),
+  tran_no: String(row.tranNo ?? '').trim() || null,
   tran_date: formatDate(row.tranDate),
   product: String(row.product).trim(),
   sub_product: String(row.subProduct).trim(),

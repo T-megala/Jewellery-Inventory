@@ -1,4 +1,5 @@
 import pool from "../config/database.js";
+import { getActiveBatchId } from "./productBatchService.js";
 
 const formatDateTime = (value) => {
   if (!value) return null;
@@ -17,6 +18,7 @@ const formatDate = (value) => {
 
 const mapProductRow = (row) => ({
   id: row.id,
+  batchId: row.batch_id,
   tranNo: row.tran_no,
   tranDate: formatDate(row.tran_date),
   product: row.product,
@@ -55,19 +57,29 @@ const buildSearchClause = (search) => {
   };
 };
 
-const getProductList = async ({ search, page, limit, offset }) => {
+const getProductList = async ({ search, page, limit, offset, batchId = null }) => {
+  const activeBatchId = batchId ?? (await getActiveBatchId());
+
+  if (!activeBatchId) {
+    return {
+      pagination: { page, limit, totalRecords: 0, totalPages: 0 },
+      data: [],
+      batchId: null,
+    };
+  }
+
   const { clause: searchClause, params: searchParams } =
     buildSearchClause(search);
 
   const baseFrom = `
     FROM products
-    WHERE 1 = 1
+    WHERE batch_id = ?
     ${searchClause}
   `;
 
   const [countRows] = await pool.execute(
     `SELECT COUNT(*) AS totalRecords ${baseFrom}`,
-    searchParams,
+    [activeBatchId, ...searchParams],
   );
 
   const totalRecords = Number(countRows[0].totalRecords);
@@ -75,16 +87,17 @@ const getProductList = async ({ search, page, limit, offset }) => {
 
   const [rows] = await pool.execute(
     `SELECT
-       id, tran_no, tran_date, product, sub_product, tag_packet_no,
+       id, batch_id, tran_no, tran_date, product, sub_product, tag_packet_no,
        pieces, gross_wt, net_wt, counter_name, size, tag_type,
        item_pieces, weight_gram, weight_carat, created_at
      ${baseFrom}
      ORDER BY id DESC
      LIMIT ${limit} OFFSET ${offset}`,
-    searchParams,
+    [activeBatchId, ...searchParams],
   );
 
   return {
+    batchId: activeBatchId,
     pagination: { page, limit, totalRecords, totalPages },
     data: rows.map(mapProductRow),
   };
@@ -96,32 +109,58 @@ const mapRowsToNamedList = (rows, column) =>
     name: row[column],
   }));
 
+const activeBatchFilter = async () => {
+  const batchId = await getActiveBatchId();
+  return batchId ? { clause: "AND batch_id = ?", params: [batchId] } : null;
+};
+
 export const getProducts = async () => {
+  const batchFilter = await activeBatchFilter();
+
+  if (!batchFilter) {
+    return [];
+  }
+
   const [rows] = await pool.execute(
     `SELECT DISTINCT product
      FROM products
      WHERE product IS NOT NULL AND TRIM(product) != ''
+     ${batchFilter.clause}
      ORDER BY product ASC`,
+    batchFilter.params,
   );
 
   return mapRowsToNamedList(rows, "product");
 };
 
 export const getSubProducts = async (product) => {
+  const batchFilter = await activeBatchFilter();
+
+  if (!batchFilter) {
+    return [];
+  }
+
   const [rows] = await pool.execute(
     `SELECT DISTINCT sub_product
      FROM products
      WHERE product = ?
        AND sub_product IS NOT NULL
        AND TRIM(sub_product) != ''
+       ${batchFilter.clause}
      ORDER BY sub_product ASC`,
-    [product],
+    [product, ...batchFilter.params],
   );
 
   return mapRowsToNamedList(rows, "sub_product");
 };
 
 export const getCenters = async (product, subProduct) => {
+  const batchFilter = await activeBatchFilter();
+
+  if (!batchFilter) {
+    return [];
+  }
+
   const [rows] = await pool.execute(
     `SELECT DISTINCT counter_name
      FROM products
@@ -129,8 +168,9 @@ export const getCenters = async (product, subProduct) => {
        AND sub_product = ?
        AND counter_name IS NOT NULL
        AND TRIM(counter_name) != ''
+       ${batchFilter.clause}
      ORDER BY counter_name ASC`,
-    [product, subProduct],
+    [product, subProduct, ...batchFilter.params],
   );
 
   return mapRowsToNamedList(rows, "counter_name");

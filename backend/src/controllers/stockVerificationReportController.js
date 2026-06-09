@@ -1,5 +1,6 @@
 import ApiError from '../utils/ApiError.js';
 import stockVerificationReportService from '../services/stockVerificationReportService.js';
+import { getRequestParam } from '../utils/requestParams.js';
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -31,16 +32,18 @@ const validateDate = (value, fieldName) => {
   return dateValue;
 };
 
-const validateFilters = (query) => {
-  const page = parsePositiveInt(query.page, 'page', 1);
-  const limit = parsePositiveInt(query.limit, 'limit', 20);
+const getRequestValue = (req, ...keys) => getRequestParam(req, ...keys);
+
+const validateFilters = (req) => {
+  const page = parsePositiveInt(getRequestParam(req, 'page'), 'page', 1);
+  const limit = parsePositiveInt(getRequestParam(req, 'limit'), 'limit', 20);
 
   if (limit > 100) {
     throw new ApiError(400, 'limit cannot exceed 100');
   }
 
-  const fromDate = validateDate(query.fromDate, 'fromDate');
-  const toDate = validateDate(query.toDate, 'toDate');
+  const fromDate = validateDate(getRequestValue(req, 'fromDate'), 'fromDate');
+  const toDate = validateDate(getRequestValue(req, 'toDate'), 'toDate');
 
   if ((fromDate && !toDate) || (!fromDate && toDate)) {
     throw new ApiError(
@@ -53,19 +56,28 @@ const validateFilters = (query) => {
     throw new ApiError(400, 'fromDate cannot be greater than toDate');
   }
 
-  const status = query.status ? String(query.status).trim().toUpperCase() : null;
+  const requestStatus = getRequestValue(req, 'status');
+  const status = requestStatus ? String(requestStatus).trim().toUpperCase() : null;
 
   if (status && !stockVerificationReportService.VALID_STATUSES.includes(status)) {
     throw new ApiError(400, 'status must be one of FOUND, MISSING, or NEW');
   }
 
+  const productName = getRequestValue(req, 'productName', 'product');
+  const subProductName = getRequestValue(req, 'subProductName', 'subProduct');
+  const centerName = getRequestValue(
+    req,
+    'centerName',
+    'counterName',
+    'center',
+    'counter'
+  );
+
   return {
     filters: {
-      productName: query.productName ? String(query.productName).trim() : null,
-      subProductName: query.subProductName
-        ? String(query.subProductName).trim()
-        : null,
-      centerName: query.centerName ? String(query.centerName).trim() : null,
+      productName: productName ? String(productName).trim() : null,
+      subProductName: subProductName ? String(subProductName).trim() : null,
+      centerName: centerName ? String(centerName).trim() : null,
       status,
       fromDate,
       toDate,
@@ -79,7 +91,7 @@ const validateFilters = (query) => {
 };
 
 export const getStockVerificationReport = async (req, res) => {
-  const { filters, pagination } = validateFilters(req.query);
+  const { filters, pagination } = validateFilters(req);
   const result = await stockVerificationReportService.getReport(
     filters,
     pagination

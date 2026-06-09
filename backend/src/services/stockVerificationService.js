@@ -1,4 +1,6 @@
 import pool from '../config/database.js';
+import { getActiveBatchId } from '../services/productBatchService.js';
+import ApiError from '../utils/ApiError.js';
 
 const categorizeTags = (expectedTags, scannedTags) => {
   const expectedSet = new Set(expectedTags);
@@ -49,15 +51,22 @@ const uploadStockVerification = async ({
   centerName,
   tagData,
 }) => {
+  const activeBatchId = await getActiveBatchId();
+
+  if (!activeBatchId) {
+    throw new ApiError(400, 'No active product batch found. Upload inventory first.');
+  }
+
   const [rows] = await pool.execute(
     `SELECT tag_packet_no
      FROM products
-     WHERE product = ?
+     WHERE batch_id = ?
+       AND product = ?
        AND sub_product = ?
        AND counter_name = ?
        AND tag_packet_no IS NOT NULL
        AND TRIM(tag_packet_no) != ''`,
-    [productName, subProductName, centerName]
+    [activeBatchId, productName, subProductName, centerName]
   );
 
   const expectedTags = [
@@ -132,6 +141,7 @@ const uploadStockVerification = async ({
 
     return {
       verificationId,
+      batchId: activeBatchId,
       totalExpected: expectedTags.length,
       totalScanned: scannedTags.length,
       foundCount: found.length,

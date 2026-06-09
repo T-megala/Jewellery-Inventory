@@ -6,7 +6,10 @@ export const importProducts = async (req, res) => {
     throw new ApiError(400, 'Excel file is required. Use form field name "file"');
   }
 
-  const result = await productImportService.importProductsFromExcel(req.file.buffer);
+  const result = await productImportService.importProductsFromExcel(
+    req.file.buffer,
+    req.body?.uploadedBy ? String(req.body.uploadedBy).trim() : null
+  );
 
   res.status(200).json({
     success: true,

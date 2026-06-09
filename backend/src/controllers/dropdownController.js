@@ -1,5 +1,6 @@
 import ApiError from '../utils/ApiError.js';
 import dropdownService from '../services/dropdownService.js';
+import { getRequestParam } from '../utils/requestParams.js';
 
 const sendSuccess = (res, data) => {
   res.status(200).json({
@@ -15,34 +16,41 @@ export const getProducts = async (req, res) => {
 };
 
 export const getSubProducts = async (req, res) => {
-  const productName =
-    req.query.productName || req.query.product;
+  const productName = getRequestParam(req, 'productName', 'product');
 
-  if (!productName || !String(productName).trim()) {
-    throw new ApiError(400, 'Query parameter "productName" is required');
+  if (!productName) {
+    throw new ApiError(
+      400,
+      'Parameter "productName" is required in query or body',
+    );
   }
 
-  const data = await dropdownService.getSubProducts(String(productName).trim());
+  const data = await dropdownService.getSubProducts(productName);
   sendSuccess(res, data);
 };
 
 export const getCenters = async (req, res) => {
-  const productName =
-    req.query.productName || req.query.product;
-  const subProductName =
-    req.query.subProductName || req.query.subProduct;
-
-  if (!productName || !String(productName).trim()) {
-    throw new ApiError(400, 'Query parameter "productName" is required');
-  }
-
-  if (!subProductName || !String(subProductName).trim()) {
-    throw new ApiError(400, 'Query parameter "subProductName" is required');
-  }
-
-  const data = await dropdownService.getCenters(
-    String(productName).trim(),
-    String(subProductName).trim()
+  const productName = getRequestParam(req, 'productName', 'product');
+  const subProductName = getRequestParam(
+    req,
+    'subProductName',
+    'subProduct',
   );
+
+  if (!productName) {
+    throw new ApiError(
+      400,
+      'Parameter "productName" is required in query or body',
+    );
+  }
+
+  if (!subProductName) {
+    throw new ApiError(
+      400,
+      'Parameter "subProductName" is required in query or body',
+    );
+  }
+
+  const data = await dropdownService.getCenters(productName, subProductName);
   sendSuccess(res, data);
 };

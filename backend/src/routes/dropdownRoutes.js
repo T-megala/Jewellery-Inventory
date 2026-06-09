@@ -9,6 +9,11 @@ router.get(
   '/dropdown/sub-products',
   asyncHandler(dropdownController.getSubProducts)
 );
+router.post(
+  '/dropdown/sub-products',
+  asyncHandler(dropdownController.getSubProducts)
+);
 router.get('/dropdown/centers', asyncHandler(dropdownController.getCenters));
+router.post('/dropdown/centers', asyncHandler(dropdownController.getCenters));
 
 export default router;

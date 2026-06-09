@@ -1,5 +1,6 @@
 import ApiError from "../utils/ApiError.js";
 import productService from "../services/productService.js";
+import { getRequestParam } from "../utils/requestParams.js";
 
 const parsePositiveInt = (value, fieldName, defaultValue) => {
   if (value === undefined || value === null || value === "") {
@@ -24,25 +25,46 @@ const sendSuccess = (res, data) => {
 };
 
 export const getProductList = async (req, res) => {
-  const page = parsePositiveInt(req.query.page, "page", 1);
-  const limit = parsePositiveInt(req.query.limit, "limit", 20);
+  const page = parsePositiveInt(
+    getRequestParam(req, "page") ?? req.query.page,
+    "page",
+    1,
+  );
+  const limit = parsePositiveInt(
+    getRequestParam(req, "limit") ?? req.query.limit,
+    "limit",
+    20,
+  );
 
   if (limit > 100) {
     throw new ApiError(400, "limit cannot exceed 100");
   }
 
-  const search = req.query.search ? String(req.query.search).trim() : null;
+  const search =
+    getRequestParam(req, "search") ??
+    (req.query.search ? String(req.query.search).trim() : null);
+  const batchIdValue =
+    getRequestParam(req, "batchId") ?? req.query.batchId ?? null;
+  const batchId = batchIdValue
+    ? Number.parseInt(String(batchIdValue), 10)
+    : null;
+
+  if (batchId !== null && (!Number.isInteger(batchId) || batchId < 1)) {
+    throw new ApiError(400, "batchId must be a positive integer");
+  }
 
   const result = await productService.getProductList({
     search,
     page,
     limit,
     offset: (page - 1) * limit,
+    batchId,
   });
 
   res.status(200).json({
     success: true,
     message: "Product list fetched successfully",
+    batchId: result.batchId,
     pagination: result.pagination,
     data: result.data,
   });
@@ -54,30 +76,41 @@ export const getProducts = async (req, res) => {
 };
 
 export const getSubProducts = async (req, res) => {
-  const { product } = req.query;
+  const product = getRequestParam(req, "product", "productName");
 
-  if (!product || !String(product).trim()) {
-    throw new ApiError(400, 'Query parameter "product" is required');
+  if (!product) {
+    throw new ApiError(
+      400,
+      'Parameter "product" is required in query or body',
+    );
   }
 
-  const data = await productService.getSubProducts(String(product).trim());
+  const data = await productService.getSubProducts(product);
   sendSuccess(res, data);
 };
 
 export const getCenters = async (req, res) => {
-  const { product, subProduct } = req.query;
-
-  if (!product || !String(product).trim()) {
-    throw new ApiError(400, 'Query parameter "product" is required');
-  }
-
-  if (!subProduct || !String(subProduct).trim()) {
-    throw new ApiError(400, 'Query parameter "subProduct" is required');
-  }
-
-  const data = await productService.getCenters(
-    String(product).trim(),
-    String(subProduct).trim(),
+  const product = getRequestParam(req, "product", "productName");
+  const subProduct = getRequestParam(
+    req,
+    "subProduct",
+    "subProductName",
   );
+
+  if (!product) {
+    throw new ApiError(
+      400,
+      'Parameter "product" is required in query or body',
+    );
+  }
+
+  if (!subProduct) {
+    throw new ApiError(
+      400,
+      'Parameter "subProduct" is required in query or body',
+    );
+  }
+
+  const data = await productService.getCenters(product, subProduct);
   sendSuccess(res, data);
 };
