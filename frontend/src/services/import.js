@@ -3,7 +3,7 @@ import { API_BASE } from './api.js';
 /** Bulk stock import — POST multipart/form-data with field name "file" */
 export const BULK_STOCK_IMPORT_URL = `${API_BASE}/products/import`;
 
-const POLL_INTERVAL_MS = 1500;
+const POLL_INTERVAL_MS = 800;
 
 function normalizeImportResult(data) {
   if (!data) {
@@ -37,8 +37,8 @@ async function parseJsonResponse(res) {
     throw new Error('Unexpected server response');
   }
 
-  if (!json.success && res.status !== 202) {
-    throw new Error(json.message || 'Request failed');
+  if (!json.success && json.status !== true && res.status !== 202) {
+    throw new Error(json.message || json.error || 'Request failed');
   }
 
   return json;
@@ -56,7 +56,7 @@ export async function startAsyncImport(file) {
   const json = await parseJsonResponse(res);
 
   if (!res.ok || res.status !== 202) {
-    throw new Error(json.message || 'Failed to start import');
+    throw new Error(json.message || json.error || 'Failed to start import');
   }
 
   return json.data;
@@ -67,7 +67,7 @@ export async function getImportStatus(jobId) {
   const json = await parseJsonResponse(res);
 
   if (!res.ok) {
-    throw new Error(json.message || 'Failed to fetch import status');
+    throw new Error(json.message || json.error || 'Failed to fetch import status');
   }
 
   return json.data;

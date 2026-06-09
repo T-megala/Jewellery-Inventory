@@ -1,10 +1,28 @@
-export const API_BASE = 'http://23.254.224.191:5005/api/v1';
+const LOCAL_API = 'http://localhost:5005/api/v1';
+
+export const API_BASE = import.meta.env.VITE_API_BASE_URL || LOCAL_API;
 
 export function buildQueryString(params) {
   return Object.entries(params)
     .filter(([, value]) => value !== undefined && value !== null && value !== '')
     .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`)
     .join('&');
+}
+
+function getErrorMessage(json, fallback = 'Request failed') {
+  return json?.message || json?.error || fallback;
+}
+
+function isSuccessResponse(res, json) {
+  if (!res.ok) {
+    return false;
+  }
+
+  if (json?.success === false || json?.status === false) {
+    return false;
+  }
+
+  return json?.success === true || json?.status === true || json?.data !== undefined;
 }
 
 async function parseResponse(res) {
@@ -15,8 +33,8 @@ async function parseResponse(res) {
     throw new Error('Unexpected server response');
   }
 
-  if (!res.ok || !json.success) {
-    throw new Error(json.message || 'Request failed');
+  if (!isSuccessResponse(res, json)) {
+    throw new Error(getErrorMessage(json));
   }
 
   return json;

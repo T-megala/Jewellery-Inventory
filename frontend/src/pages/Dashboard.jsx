@@ -7,7 +7,7 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from 'recharts'
-import { fetchInventorySummary, fetchVerificationSummary } from '../services/dashboard.js'
+import { fetchDashboard } from '../services/dashboard.js'
 import './Module.css'
 import './Dashboard.css'
 
@@ -328,10 +328,7 @@ export default function Dashboard() {
       setError('')
 
       try {
-        const [inventory, verify] = await Promise.all([
-          fetchInventorySummary(),
-          fetchVerificationSummary(),
-        ])
+        const { inventory, verification: verify } = await fetchDashboard()
 
         if (!cancelled) {
           setSummary(inventory)

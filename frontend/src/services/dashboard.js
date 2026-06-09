@@ -1,5 +1,11 @@
 import { apiFetch } from './api.js';
-import { fetchStockVerificationReport } from './reports.js';
+
+const EMPTY_VERIFICATION = {
+  totalFound: 0,
+  totalMissing: 0,
+  totalNew: 0,
+  totalTags: 0,
+};
 
 export function fetchInventorySummary() {
   return apiFetch('/products/summary');
@@ -7,9 +13,17 @@ export function fetchInventorySummary() {
 
 export async function fetchVerificationSummary() {
   try {
-    const result = await fetchStockVerificationReport({ page: 1, limit: 1 });
-    return result.summary;
+    return await apiFetch('/dashboard/verification-summary');
   } catch {
-    return { totalFound: 0, totalMissing: 0, totalNew: 0, totalTags: 0 };
+    return { ...EMPTY_VERIFICATION };
   }
+}
+
+export async function fetchDashboard() {
+  const data = await apiFetch('/dashboard');
+
+  return {
+    inventory: data.inventory ?? null,
+    verification: data.verification ?? { ...EMPTY_VERIFICATION },
+  };
 }

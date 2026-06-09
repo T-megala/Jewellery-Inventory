@@ -163,7 +163,13 @@ const toDbRow = (row) => ({
 });
 
 export const parseStockExcel = (buffer) => {
-  const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
+  const workbook = XLSX.read(buffer, {
+    type: 'buffer',
+    cellDates: true,
+    cellNF: false,
+    cellStyles: false,
+    sheetStubs: false,
+  });
   const sheetName = workbook.SheetNames[0];
 
   if (!sheetName) {

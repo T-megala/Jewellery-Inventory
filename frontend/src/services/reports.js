@@ -37,7 +37,7 @@ export async function downloadReportExport(filters = {}, exportType) {
     let message = 'Export failed';
     try {
       const json = await res.json();
-      message = json.message || message;
+      message = json.message || json.error || message;
     } catch {
       // binary or empty error body
     }

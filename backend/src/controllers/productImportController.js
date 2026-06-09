@@ -2,14 +2,29 @@ import ApiError from '../utils/ApiError.js';
 import productImportService from '../services/productImportService.js';
 import { getRequestParam } from '../utils/requestParams.js';
 
-const isAsyncImport = (req) => {
-  const value = getRequestParam(req, 'async', 'asyncImport');
+const isTruthyParam = (value) => {
   if (!value) {
     return false;
   }
 
   const normalized = String(value).trim().toLowerCase();
   return normalized === 'true' || normalized === '1' || normalized === 'yes';
+};
+
+/** Import is async by default — pass ?sync=true only when a blocking response is required */
+const isSyncImport = (req) => isTruthyParam(getRequestParam(req, 'sync', 'syncImport'));
+
+const isAsyncImport = (req) => {
+  if (isSyncImport(req)) {
+    return false;
+  }
+
+  const value = getRequestParam(req, 'async', 'asyncImport');
+  if (value === undefined || value === null || value === '') {
+    return true;
+  }
+
+  return isTruthyParam(value);
 };
 
 export const importProducts = async (req, res) => {

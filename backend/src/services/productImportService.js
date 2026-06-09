@@ -5,9 +5,17 @@ import { hasProductChanged } from '../utils/productBatchHelper.js';
 import { resolveActiveBatch } from '../services/productBatchService.js';
 import importJobStore from './importJobStore.js';
 
-const BATCH_SIZE = 1000;
+const BATCH_SIZE = Math.max(
+  500,
+  Number.parseInt(process.env.IMPORT_BATCH_SIZE ?? '3000', 10) || 3000
+);
 
-const PRODUCT_FIELDS = [
+const FAST_REIMPORT_THRESHOLD = Math.max(
+  1000,
+  Number.parseInt(process.env.IMPORT_FAST_REIMPORT_THRESHOLD ?? '3000', 10) || 3000
+);
+
+const COMPARE_FIELDS = [
   'tran_no',
   'tran_date',
   'product',
@@ -44,6 +52,43 @@ const rowToValues = (batchId, row) => [
 
 const buildPlaceholders = (rowCount, columnCount) =>
   Array.from({ length: rowCount }, () => `(${Array(columnCount).fill('?').join(', ')})`).join(', ');
+
+const dedupeRowsByTag = (rows) => {
+  const byTag = new Map();
+
+  for (const row of rows) {
+    const tag = String(row.tag_packet_no ?? '').trim();
+    if (tag) {
+      byTag.set(tag, row);
+    }
+  }
+
+  return [...byTag.values()];
+};
+
+const enableBulkSession = async (connection) => {
+  await connection.query(
+    'SET SESSION foreign_key_checks = 0, unique_checks = 0'
+  );
+
+  try {
+    await connection.query('SET SESSION sql_log_bin = 0');
+  } catch {
+    // Managed/replica MySQL may not allow changing sql_log_bin
+  }
+};
+
+const disableBulkSession = async (connection) => {
+  await connection.query(
+    'SET SESSION foreign_key_checks = 1, unique_checks = 1'
+  );
+
+  try {
+    await connection.query('SET SESSION sql_log_bin = 1');
+  } catch {
+    // Ignore restore errors on restricted MySQL users
+  }
+};
 
 const bulkInsert = async (connection, batchId, rows) => {
   if (rows.length === 0) {
@@ -96,8 +141,8 @@ const bulkUpsert = async (connection, batchId, rows) => {
 };
 
 const loadExistingProducts = async (connection, batchId) => {
-  const [rows] = await connection.execute(
-    `SELECT id, ${PRODUCT_FIELDS.join(', ')}
+  const [rows] = await connection.query(
+    `SELECT ${COMPARE_FIELDS.join(', ')}
      FROM products
      WHERE batch_id = ?`,
     [batchId]
@@ -113,6 +158,21 @@ const loadExistingProducts = async (connection, batchId) => {
   }
 
   return map;
+};
+
+const loadExistingTags = async (connection, batchId) => {
+  const [rows] = await connection.query(
+    `SELECT tag_packet_no
+     FROM products
+     WHERE batch_id = ?
+       AND tag_packet_no IS NOT NULL
+       AND TRIM(tag_packet_no) != ''`,
+    [batchId]
+  );
+
+  return new Set(
+    rows.map((row) => String(row.tag_packet_no).trim()).filter(Boolean)
+  );
 };
 
 const classifyRows = (validRows, existingMap) => {
@@ -139,8 +199,28 @@ const classifyRows = (validRows, existingMap) => {
   return { toInsert, toUpsert, unchanged };
 };
 
+const countInsertVsExisting = (validRows, existingTags) => {
+  let inserted = 0;
+  let updated = 0;
+
+  for (const row of validRows) {
+    const tag = String(row.tag_packet_no).trim();
+    if (existingTags.has(tag)) {
+      updated += 1;
+    } else {
+      inserted += 1;
+    }
+  }
+
+  return { inserted, updated };
+};
+
 const runChunked = async (rows, handler, onProgress, progressStart, progressEnd) => {
-  const totalChunks = Math.ceil(rows.length / BATCH_SIZE) || 1;
+  if (rows.length === 0) {
+    return;
+  }
+
+  const totalChunks = Math.ceil(rows.length / BATCH_SIZE);
 
   for (let index = 0; index < rows.length; index += BATCH_SIZE) {
     const chunk = rows.slice(index, index + BATCH_SIZE);
@@ -181,7 +261,8 @@ const importProductsFromExcel = async (
     throw new ApiError(400, error.message);
   }
 
-  const { validRows, totalRowsInFile, skipped } = parsed;
+  const validRows = dedupeRowsByTag(parsed.validRows);
+  const { totalRowsInFile, skipped } = parsed;
 
   if (validRows.length === 0) {
     return {
@@ -199,6 +280,7 @@ const importProductsFromExcel = async (
 
   try {
     await connection.beginTransaction();
+    await enableBulkSession(connection);
 
     reportProgress({
       phase: 'preparing',
@@ -213,14 +295,22 @@ const importProductsFromExcel = async (
       uploadedBy
     );
 
-    const existingMap = await loadExistingProducts(connection, batchId);
-    const isFirstImport = existingMap.size === 0;
+    const existingTags = await loadExistingTags(connection, batchId);
+    const isFirstImport = existingTags.size === 0;
+    const useFastReimport =
+      !isFirstImport &&
+      !isNewBatch &&
+      validRows.length >= FAST_REIMPORT_THRESHOLD;
 
     let inserted = 0;
     let updated = 0;
     let unchanged = 0;
+    let fastPath = false;
+    let fastReimport = false;
 
     if (isFirstImport) {
+      fastPath = true;
+
       reportProgress({
         phase: 'inserting',
         progress: 15,
@@ -245,7 +335,37 @@ const importProductsFromExcel = async (
       );
 
       inserted = validRows.length;
+    } else if (useFastReimport) {
+      fastReimport = true;
+
+      reportProgress({
+        phase: 'upserting',
+        progress: 15,
+        message: 'Fast bulk upserting products',
+        total: validRows.length,
+        processed: 0,
+      });
+
+      await runChunked(
+        validRows,
+        (chunk) => bulkUpsert(connection, batchId, chunk),
+        ({ processed, total, percent }) =>
+          reportProgress({
+            phase: 'upserting',
+            message: 'Fast bulk upserting products',
+            progress: 15 + Math.round((percent / 100) * 75),
+            processed,
+            total,
+          }),
+        0,
+        100
+      );
+
+      const counts = countInsertVsExisting(validRows, existingTags);
+      inserted = counts.inserted;
+      updated = counts.updated;
     } else {
+      const existingMap = await loadExistingProducts(connection, batchId);
       const classified = classifyRows(validRows, existingMap);
       const { toInsert, toUpsert } = classified;
       unchanged = classified.unchanged;
@@ -288,6 +408,7 @@ const importProductsFromExcel = async (
       }
     }
 
+    await disableBulkSession(connection);
     await connection.commit();
 
     reportProgress({
@@ -306,9 +427,11 @@ const importProductsFromExcel = async (
       inserted,
       updated,
       unchanged,
-      fastPath: isFirstImport,
+      fastPath,
+      fastReimport,
     };
   } catch (error) {
+    await disableBulkSession(connection).catch(() => {});
     await connection.rollback();
     console.error('Product import failed:', error);
     throw error;
