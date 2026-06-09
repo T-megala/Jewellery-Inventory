@@ -396,6 +396,10 @@
   min-height: 0;
 }
 
+.page-content__inner--wide {
+  max-width: 1440px;
+}
+
 @media (max-width: 1024px) {
   .topbar-date {
     display: none;

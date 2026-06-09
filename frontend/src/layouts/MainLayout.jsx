@@ -76,6 +76,7 @@ export default function MainLayout() {
   const displayName = user?.name || user?.username || 'User'
   const page = PAGE_META[location.pathname] || PAGE_META['/dashboard']
   const isFillPage = location.pathname === '/import'
+  const isWidePage = location.pathname === '/dashboard'
 
   function handleLogout() {
     logout()
@@ -171,7 +172,7 @@ export default function MainLayout() {
         </header>
 
         <main className="page-content">
-          <div className={`page-content__inner${isFillPage ? ' page-content__inner--fill' : ''}`}>
+          <div className={`page-content__inner${isFillPage ? ' page-content__inner--fill' : ''}${isWidePage ? ' page-content__inner--wide' : ''}`}>
             <Outlet />
           </div>
         </main>
