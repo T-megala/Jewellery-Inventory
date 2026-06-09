@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fetchCenters, fetchProducts, fetchSubProducts } from '../services/products.js'
 import {
-  downloadReportExport,
+  fetchAllReportRows,
   fetchStockVerificationReport,
 } from '../services/reports.js'
+import { exportReportToExcel, exportReportToPdf } from '../utils/exportReport.js'
 import './Reports.css'
 
 const PAGE_LIMIT = 20
@@ -233,34 +234,34 @@ export default function Reports() {
     setError('')
   }
 
-  async function handleExportExcel() {
+  async function handleExport(exportFn, label) {
     if (!hasSearched) return
 
     setExporting(true)
     setError('')
 
     try {
-      await downloadReportExport(filterParams, 'excel')
+      const { rows } = await fetchAllReportRows(filterParams)
+
+      if (!rows.length) {
+        setError('No records to export for the selected filters.')
+        return
+      }
+
+      exportFn(rows)
     } catch (err) {
-      setError(err.message || 'Failed to export Excel')
+      setError(err.message || `Failed to export ${label}`)
     } finally {
       setExporting(false)
     }
   }
 
+  async function handleExportExcel() {
+    await handleExport(exportReportToExcel, 'Excel')
+  }
+
   async function handleExportPdf() {
-    if (!hasSearched) return
-
-    setExporting(true)
-    setError('')
-
-    try {
-      await downloadReportExport(filterParams, 'pdf')
-    } catch (err) {
-      setError(err.message || 'Failed to export PDF')
-    } finally {
-      setExporting(false)
-    }
+    await handleExport(exportReportToPdf, 'PDF')
   }
 
   const rowRange = pagination && rows.length

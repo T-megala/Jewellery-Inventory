@@ -7,8 +7,9 @@ export default defineConfig({
     port: 5174,
     proxy: {
       '/api': {
-        target: 'http://23.254.224.191:5005',
+        target: 'https://devjeweltrack.2cqr.in',
         changeOrigin: true,
+        secure: true,
       },
     },
   },
@@ -16,8 +17,9 @@ export default defineConfig({
     port: 5174,
     proxy: {
       '/api': {
-        target: 'http://23.254.224.191:5005',
+        target: 'https://devjeweltrack.2cqr.in',
         changeOrigin: true,
+        secure: true,
       },
     },
   },

@@ -1,6 +1,4 @@
-const LOCAL_API = 'http://localhost:5005/api/v1';
-
-export const API_BASE = import.meta.env.VITE_API_BASE_URL || LOCAL_API;
+export const API_BASE = 'https://devjeweltrack.2cqr.in/api/v1';
 
 export function buildQueryString(params) {
   return Object.entries(params)
