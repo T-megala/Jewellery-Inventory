@@ -3,6 +3,7 @@ import stockVerificationReportService from '../services/stockVerificationReportS
 import { getRequestParam } from '../utils/requestParams.js';
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const VALID_EXPORT_TYPES = ['excel', 'pdf'];
 
 const parsePositiveInt = (value, fieldName, defaultValue) => {
   if (value === undefined || value === null || value === '') {
@@ -34,11 +35,11 @@ const validateDate = (value, fieldName) => {
 
 const getRequestValue = (req, ...keys) => getRequestParam(req, ...keys);
 
-const validateFilters = (req) => {
+const validateFilters = (req, { isExport = false } = {}) => {
   const page = parsePositiveInt(getRequestParam(req, 'page'), 'page', 1);
   const limit = parsePositiveInt(getRequestParam(req, 'limit'), 'limit', 20);
 
-  if (limit > 100) {
+  if (!isExport && limit > 100) {
     throw new ApiError(400, 'limit cannot exceed 100');
   }
 
@@ -73,6 +74,15 @@ const validateFilters = (req) => {
     'counter'
   );
 
+  const exportTypeRaw = getRequestValue(req, 'export_type', 'exportType');
+  const exportType = exportTypeRaw
+    ? String(exportTypeRaw).trim().toLowerCase()
+    : null;
+
+  if (exportType && !VALID_EXPORT_TYPES.includes(exportType)) {
+    throw new ApiError(400, 'export_type must be excel or pdf');
+  }
+
   return {
     filters: {
       productName: productName ? String(productName).trim() : null,
@@ -87,11 +97,31 @@ const validateFilters = (req) => {
       limit,
       offset: (page - 1) * limit,
     },
+    exportType,
   };
 };
 
 export const getStockVerificationReport = async (req, res) => {
-  const { filters, pagination } = validateFilters(req);
+  const { filters, pagination, exportType } = validateFilters(req, {
+    isExport: Boolean(
+      getRequestValue(req, 'export_type', 'exportType')
+    ),
+  });
+
+  if (exportType) {
+    const file = await stockVerificationReportService.exportReport(
+      filters,
+      exportType
+    );
+
+    res.setHeader('Content-Type', file.contentType);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${file.fileName}"`
+    );
+    return res.status(200).send(file.buffer);
+  }
+
   const result = await stockVerificationReportService.getReport(
     filters,
     pagination

@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fetchCenters, fetchProducts, fetchSubProducts } from '../services/products.js'
 import {
-  fetchAllStockVerificationReport,
+  downloadReportExport,
   fetchStockVerificationReport,
 } from '../services/reports.js'
-import { exportReportToExcel, exportReportToPdf } from '../utils/exportReport.js'
 import './Reports.css'
 
 const PAGE_LIMIT = 20
@@ -90,6 +89,8 @@ export default function Reports() {
   const [subProduct, setSubProduct] = useState('')
   const [counter, setCounter] = useState('')
   const [status, setStatus] = useState('')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
 
   const [products, setProducts] = useState([])
   const [subProducts, setSubProducts] = useState([])
@@ -105,22 +106,32 @@ export default function Reports() {
   const [loadingReport, setLoadingReport] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState('')
+  const [filtersNotice, setFiltersNotice] = useState('')
 
   const filterParams = useMemo(() => ({
     productName: product || undefined,
     subProductName: subProduct || undefined,
     centerName: counter || undefined,
     status: status || undefined,
-  }), [product, subProduct, counter, status])
+    fromDate: fromDate || undefined,
+    toDate: toDate || undefined,
+  }), [product, subProduct, counter, status, fromDate, toDate])
 
   useEffect(() => {
     let cancelled = false
 
     async function loadProducts() {
       setLoadingFilters(true)
+      setFiltersNotice('')
+
       try {
         const data = await fetchProducts()
-        if (!cancelled) setProducts(data)
+        if (!cancelled) {
+          setProducts(data)
+          if (!data.length) {
+            setFiltersNotice('No active inventory batch found. Upload Excel on the Import page first.')
+          }
+        }
       } catch (err) {
         if (!cancelled) setError(err.message || 'Failed to load products')
       } finally {
@@ -186,7 +197,25 @@ export default function Reports() {
     return () => { cancelled = true }
   }, [product, subProduct])
 
+  function validateDateRange() {
+    if ((fromDate && !toDate) || (!fromDate && toDate)) {
+      setError('Both From Date and To Date are required for date filtering.')
+      return false
+    }
+
+    if (fromDate && toDate && fromDate > toDate) {
+      setError('From Date cannot be later than To Date.')
+      return false
+    }
+
+    return true
+  }
+
   async function loadReport(nextPage = 1) {
+    if (!validateDateRange()) {
+      return
+    }
+
     setLoadingReport(true)
     setError('')
 
@@ -218,6 +247,8 @@ export default function Reports() {
     setSubProduct('')
     setCounter('')
     setStatus('')
+    setFromDate('')
+    setToDate('')
     setRows([])
     setSummary(null)
     setPagination(null)
@@ -226,27 +257,14 @@ export default function Reports() {
     setError('')
   }
 
-  const activeFilters = useMemo(() => ({
-    product: product || undefined,
-    subProduct: subProduct || undefined,
-    counter: counter || undefined,
-    status: status || undefined,
-  }), [product, subProduct, counter, status])
-
-  async function fetchExportRows() {
-    const result = await fetchAllStockVerificationReport({
-      ...filterParams,
-      limit: pagination?.totalRecords || 10000,
-    })
-    return result.rows
-  }
-
   async function handleExportExcel() {
-    if (!rows.length) return
+    if (!hasSearched || !validateDateRange()) return
+
     setExporting(true)
+    setError('')
+
     try {
-      const exportRows = await fetchExportRows()
-      exportReportToExcel(exportRows)
+      await downloadReportExport(filterParams, 'excel')
     } catch (err) {
       setError(err.message || 'Failed to export Excel')
     } finally {
@@ -255,11 +273,13 @@ export default function Reports() {
   }
 
   async function handleExportPdf() {
-    if (!rows.length) return
+    if (!hasSearched || !validateDateRange()) return
+
     setExporting(true)
+    setError('')
+
     try {
-      const exportRows = await fetchExportRows()
-      exportReportToPdf(exportRows, activeFilters, summary)
+      await downloadReportExport(filterParams, 'pdf')
     } catch (err) {
       setError(err.message || 'Failed to export PDF')
     } finally {
@@ -298,7 +318,7 @@ export default function Reports() {
 
       <section className="reports-filters-card">
         <form className="report-filters" onSubmit={handleGenerate}>
-          <div className="report-filters__grid">
+          <div className="report-filters__grid report-filters__grid--wide">
             <label className="report-field">
               <span>Product</span>
               <select
@@ -352,7 +372,29 @@ export default function Reports() {
                 ))}
               </select>
             </label>
+
+            <label className="report-field">
+              <span>From Date</span>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+              />
+            </label>
+
+            <label className="report-field">
+              <span>To Date</span>
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+              />
+            </label>
           </div>
+
+          {filtersNotice && (
+            <p className="report-alert report-alert--info" role="status">{filtersNotice}</p>
+          )}
 
           {error && (
             <p className="report-alert report-alert--error" role="alert">{error}</p>
@@ -382,26 +424,24 @@ export default function Reports() {
         <section className="reports-results-card">
           <div className="reports-results__head">
             <h3 className="reports-results__title">Results</h3>
-            {rows.length > 0 && (
-              <div className="reports-export">
-                <button
-                  type="button"
-                  className="report-btn report-btn--export"
-                  onClick={handleExportExcel}
-                  disabled={exporting}
-                >
-                  Excel
-                </button>
-                <button
-                  type="button"
-                  className="report-btn report-btn--export"
-                  onClick={handleExportPdf}
-                  disabled={exporting}
-                >
-                  PDF
-                </button>
-              </div>
-            )}
+            <div className="reports-export">
+              <button
+                type="button"
+                className="report-btn report-btn--export"
+                onClick={handleExportExcel}
+                disabled={exporting || loadingReport}
+              >
+                {exporting ? 'Exporting…' : 'Excel'}
+              </button>
+              <button
+                type="button"
+                className="report-btn report-btn--export"
+                onClick={handleExportPdf}
+                disabled={exporting || loadingReport}
+              >
+                {exporting ? 'Exporting…' : 'PDF'}
+              </button>
+            </div>
           </div>
 
           {loadingReport ? (

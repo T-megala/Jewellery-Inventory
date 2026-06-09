@@ -8,5 +8,9 @@ router.get(
   '/stock-verification/report',
   asyncHandler(stockVerificationReportController.getStockVerificationReport)
 );
+router.post(
+  '/stock-verification/report',
+  asyncHandler(stockVerificationReportController.getStockVerificationReport)
+);
 
 export default router;

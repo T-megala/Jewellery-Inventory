@@ -119,6 +119,10 @@
   gap: 16px;
 }
 
+.report-filters__grid--wide {
+  grid-template-columns: repeat(3, 1fr);
+}
+
 .report-field {
   display: flex;
   flex-direction: column;
@@ -224,6 +228,12 @@
   background: #fef2f2;
   border: 1px solid #fecaca;
   color: #b91c1c;
+}
+
+.report-alert--info {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
 }
 
 /* ── Results card ── */

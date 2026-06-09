@@ -14,6 +14,10 @@ function formatFileSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+function formatCount(value) {
+  return Number(value ?? 0).toLocaleString('en-IN')
+}
+
 function StepItem({ number, label, state }) {
   return (
     <div className={`import-step import-step--${state}`}>
@@ -23,10 +27,34 @@ function StepItem({ number, label, state }) {
   )
 }
 
+function ImportStats({ result }) {
+  return (
+    <dl className="import-stats">
+      <div className="import-stats__item">
+        <dt>Inserted</dt>
+        <dd>{formatCount(result.inserted)}</dd>
+      </div>
+      <div className="import-stats__item">
+        <dt>Updated</dt>
+        <dd>{formatCount(result.updated)}</dd>
+      </div>
+      <div className="import-stats__item">
+        <dt>Unchanged</dt>
+        <dd>{formatCount(result.unchanged)}</dd>
+      </div>
+      <div className="import-stats__item">
+        <dt>Skipped</dt>
+        <dd>{formatCount(result.skipped)}</dd>
+      </div>
+    </dl>
+  )
+}
+
 export default function Import() {
   const fileInputRef = useRef(null)
   const [selectedFile, setSelectedFile] = useState(null)
   const [result, setResult] = useState(null)
+  const [importStatus, setImportStatus] = useState(null)
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
   const [isDragging, setIsDragging] = useState(false)
@@ -49,11 +77,13 @@ export default function Import() {
       setError('Please choose an Excel file (.xlsx or .xls).')
       setSelectedFile(null)
       setResult(null)
+      setImportStatus(null)
       return
     }
 
     setError('')
     setResult(null)
+    setImportStatus(null)
     setSelectedFile(file)
   }
 
@@ -61,16 +91,20 @@ export default function Import() {
     if (!selectedFile || isUploading) return
 
     setError('')
+    setImportStatus(null)
     setIsUploading(true)
 
     try {
-      await uploadStockExcel(selectedFile)
-      setResult(true)
+      const importResult = await uploadStockExcel(selectedFile, {
+        onProgress: setImportStatus,
+      })
+      setResult(importResult)
       setToast('Import completed successfully.')
     } catch (err) {
       setError(err.message || 'Failed to upload Excel file.')
     } finally {
       setIsUploading(false)
+      setImportStatus(null)
     }
   }
 
@@ -88,12 +122,15 @@ export default function Import() {
   function handleReset() {
     setSelectedFile(null)
     setResult(null)
+    setImportStatus(null)
     setError('')
   }
 
   const step1State = selectedFile ? 'done' : 'active'
   const step2State = result ? 'done' : selectedFile ? 'active' : 'pending'
   const step3State = result ? 'active' : 'pending'
+  const progressValue = importStatus?.progress ?? 0
+  const progressLabel = importStatus?.message || 'Processing import…'
 
   return (
     <div className="import-page">
@@ -182,6 +219,26 @@ export default function Import() {
                 </button>
               </div>
 
+              {isUploading && importStatus && (
+                <div className="import-progress" aria-live="polite">
+                  <div className="import-progress__head">
+                    <span>{progressLabel}</span>
+                    <strong>{progressValue}%</strong>
+                  </div>
+                  <div className="import-progress__track">
+                    <div
+                      className="import-progress__bar"
+                      style={{ width: `${progressValue}%` }}
+                    />
+                  </div>
+                  {importStatus.total > 0 && (
+                    <p className="import-progress__meta">
+                      {formatCount(importStatus.processed)} of {formatCount(importStatus.total)} rows
+                    </p>
+                  )}
+                </div>
+              )}
+
               {error && <p className="import-msg import-msg--error" role="alert">{error}</p>}
 
               <button
@@ -193,7 +250,7 @@ export default function Import() {
                 {isUploading ? (
                   <>
                     <span className="import-send__spin" aria-hidden="true" />
-                    Sending…
+                    Importing…
                   </>
                 ) : (
                   'Send'
@@ -203,10 +260,15 @@ export default function Import() {
           )}
 
           {result && (
-            <div className="import-success import-success--simple">
+            <div className="import-success">
               <span className="import-success__tick import-success__tick--large" aria-hidden="true">✓</span>
               <p className="import-success__title">Import completed</p>
               <p className="import-success__file">{selectedFile?.name}</p>
+              <ImportStats result={result} />
+              <p className="import-success__meta">
+                Batch #{result.batchId}
+                {result.isNewBatch ? ' · New day batch' : ' · Same day batch'}
+              </p>
               <button type="button" className="import-send import-send--outline" onClick={handleReset}>
                 Upload another file
               </button>

@@ -17,5 +17,9 @@ router.post(
   upload.single("file"),
   asyncHandler(productImportController.importProducts),
 );
+router.get(
+  "/products/import/status/:jobId",
+  asyncHandler(productImportController.getImportStatus),
+);
 
 export default router;
