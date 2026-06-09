@@ -1,64 +1,176 @@
-import './Module.css'
+import { useCallback, useEffect, useState } from 'react'
+import { fetchProductList } from '../services/stock.js'
+import './Stock.css'
 
-const SAMPLE_STOCK = [
-  { id: 'JG-001', name: 'Gold Chain 22K', category: 'Gold', weight: '12.5g', qty: 8 },
-  { id: 'JG-002', name: 'Silver Ring', category: 'Silver', weight: '4.2g', qty: 15 },
-  { id: 'JG-003', name: 'Diamond Pendant', category: 'Diamond', weight: '2.1g', qty: 3 },
-  { id: 'JG-004', name: 'Gold Bangle 24K', category: 'Gold', weight: '28.0g', qty: 5 },
-  { id: 'JG-005', name: 'Gold Coin 8g', category: 'Gold', weight: '8.0g', qty: 12 },
-]
+const PAGE_LIMIT = 10
 
-function categoryBadge(cat) {
-  const key = cat.toLowerCase()
-  if (key === 'gold') return 'badge badge--gold'
-  if (key === 'silver') return 'badge badge--silver'
-  return 'badge badge--diamond'
+function formatValue(value) {
+  if (value === null || value === undefined || value === '') {
+    return <span className="stock-cell--empty">—</span>
+  }
+  return value
 }
 
 export default function Stock() {
+  const [rows, setRows] = useState([])
+  const [pagination, setPagination] = useState(null)
+  const [page, setPage] = useState(1)
+  const [search, setSearch] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  const loadStock = useCallback(async (pageNum, searchTerm) => {
+    setLoading(true)
+    setError('')
+
+    try {
+      const result = await fetchProductList({
+        page: pageNum,
+        limit: PAGE_LIMIT,
+        search: searchTerm || undefined,
+      })
+      setRows(result.rows)
+      setPagination(result.pagination)
+      setPage(pageNum)
+    } catch (err) {
+      setError(err.message || 'Failed to load stock list.')
+      setRows([])
+      setPagination(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadStock(1, search)
+  }, [loadStock, search])
+
+  function handleSearch(e) {
+    e.preventDefault()
+    setSearch(searchInput.trim())
+  }
+
+  function handleClearSearch() {
+    setSearchInput('')
+    setSearch('')
+  }
+
   return (
-    <div className="module-page">
-      <div className="module-header">
-        <div className="module-header__main">
-          <h2>Showroom Stock</h2>
-          <p>All products currently available in inventory</p>
-        </div>
-        <span className="module-header__badge">{SAMPLE_STOCK.length} Items</span>
+    <div className="stock-page">
+      <div className="stock-meta">
+        <form className="stock-search" onSubmit={handleSearch}>
+          <input
+            type="text"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Search product, tag, counter…"
+          />
+          <button type="submit" disabled={loading}>Search</button>
+        </form>
+        {pagination && (
+          <span className="stock-meta__badge">
+            {pagination.totalRecords.toLocaleString('en-IN')} item{pagination.totalRecords === 1 ? '' : 's'}
+          </span>
+        )}
       </div>
 
-      <div className="panel-card">
-        <div className="panel-card__head">
-          <div>
-            <h2>Product List</h2>
-            <p>Sample stock data for demo — will load from backend later.</p>
-          </div>
+      <div className="stock-panel">
+        <div className="stock-panel__head">
+          <h2 className="stock-panel__title">Stock List</h2>
+          {pagination && (
+            <span className="stock-panel__count">
+              Page {pagination.page} of {pagination.totalPages || 1}
+              {' · '}
+              Showing {rows.length} of {pagination.totalRecords}
+            </span>
+          )}
         </div>
-        <div className="panel-card__body">
-          <div className="table-wrap">
-            <table className="placeholder-table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Product</th>
-                  <th>Category</th>
-                  <th>Weight</th>
-                  <th>Qty</th>
-                </tr>
-              </thead>
-              <tbody>
-                {SAMPLE_STOCK.map((item) => (
-                  <tr key={item.id}>
-                    <td>{item.id}</td>
-                    <td>{item.name}</td>
-                    <td><span className={categoryBadge(item.category)}>{item.category}</span></td>
-                    <td>{item.weight}</td>
-                    <td>{item.qty}</td>
+
+        {error && (
+          <p className="stock-alert stock-alert--error" role="alert">{error}</p>
+        )}
+
+        {loading ? (
+          <p className="stock-loading">Loading stock…</p>
+        ) : rows.length === 0 ? (
+          <p className="stock-empty">
+            {search ? 'No products found for your search.' : 'No stock records found.'}
+            {search && (
+              <>
+                {' '}
+                <button type="button" className="stock-btn" onClick={handleClearSearch}>
+                  Clear search
+                </button>
+              </>
+            )}
+          </p>
+        ) : (
+          <>
+            <div className="stock-table-wrap">
+              <table className="stock-table">
+                <thead>
+                  <tr>
+                    <th>S.No</th>
+                    <th>Tran No</th>
+                    <th>Tran Date</th>
+                    <th>Product</th>
+                    <th>Sub Product</th>
+                    <th>Tag / Packet No</th>
+                    <th>Pieces</th>
+                    <th>Gross Wt</th>
+                    <th>Net Wt</th>
+                    <th>Counter</th>
+                    <th>Size</th>
+                    <th>Tag Type</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                </thead>
+                <tbody>
+                  {rows.map((row, index) => (
+                    <tr key={row.id}>
+                      <td className="stock-cell--sno">{(page - 1) * PAGE_LIMIT + index + 1}</td>
+                      <td>{formatValue(row.tranNo)}</td>
+                      <td>{formatValue(row.tranDate)}</td>
+                      <td>{formatValue(row.product)}</td>
+                      <td>{formatValue(row.subProduct)}</td>
+                      <td>{formatValue(row.tagPacketNo)}</td>
+                      <td>{formatValue(row.pieces)}</td>
+                      <td>{formatValue(row.grossWt)}</td>
+                      <td>{formatValue(row.netWt)}</td>
+                      <td>{formatValue(row.counterName)}</td>
+                      <td>{formatValue(row.size)}</td>
+                      <td>{formatValue(row.tagType)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {pagination && pagination.totalPages > 1 && (
+              <div className="stock-pagination">
+                <button
+                  type="button"
+                  className="stock-btn"
+                  onClick={() => loadStock(page - 1, search)}
+                  disabled={loading || page <= 1}
+                >
+                  Previous
+                </button>
+                <span className="stock-pagination__info">
+                  Page {pagination.page} of {pagination.totalPages}
+                </span>
+                <button
+                  type="button"
+                  className="stock-btn"
+                  onClick={() => loadStock(page + 1, search)}
+                  disabled={loading || page >= pagination.totalPages}
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   )

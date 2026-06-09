@@ -1,57 +1,44 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import {
-  clearTodayImports,
-  formatCurrency,
-  getImportSummary,
-  getTodayImports,
-  saveDailyImport,
-  setTodayImports,
-} from '../services/stockImport.js'
-import { parseStockExcel } from '../utils/parseStockExcel.js'
+import { useEffect, useRef, useState } from 'react'
+import { uploadStockExcel } from '../services/import.js'
 import './Import.css'
-
-function categoryBadge(cat) {
-  const key = cat.toLowerCase()
-  if (key === 'gold') return 'badge badge--gold'
-  if (key === 'silver') return 'badge badge--silver'
-  return 'badge badge--diamond'
-}
 
 const ACCEPTED_TYPES = [
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.ms-excel',
 ]
 
-const PREVIEW_LIMIT = 100
+function formatFileSize(bytes) {
+  if (!bytes) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function StepItem({ number, label, state }) {
+  return (
+    <div className={`import-step import-step--${state}`}>
+      <span className="import-step__dot">{state === 'done' ? '✓' : number}</span>
+      <span className="import-step__label">{label}</span>
+    </div>
+  )
+}
 
 export default function Import() {
   const fileInputRef = useRef(null)
-  const [items, setItems] = useState([])
-  const [savedAt, setSavedAt] = useState(null)
-  const [fileName, setFileName] = useState(null)
+  const [selectedFile, setSelectedFile] = useState(null)
+  const [result, setResult] = useState(null)
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
   const [isDragging, setIsDragging] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
 
-  const summary = useMemo(() => getImportSummary(items), [items])
-  const isTagFormat = useMemo(() => items.some((item) => item.format === 'tag'), [items])
-  const previewItems = useMemo(() => items.slice(0, PREVIEW_LIMIT), [items])
-
-  useEffect(() => {
-    const data = getTodayImports()
-    setItems(data.items)
-    setSavedAt(data.savedAt)
-    setFileName(data.fileName)
-  }, [])
-
   useEffect(() => {
     if (!toast) return undefined
-    const timer = setTimeout(() => setToast(''), 4000)
+    const timer = setTimeout(() => setToast(''), 5000)
     return () => clearTimeout(timer)
   }, [toast])
 
-  async function processFile(file) {
+  function selectFile(file) {
     if (!file) return
 
     const isExcel = ACCEPTED_TYPES.includes(file.type)
@@ -59,78 +46,74 @@ export default function Import() {
       || file.name.endsWith('.xls')
 
     if (!isExcel) {
-      setError('Please upload an Excel file (.xlsx or .xls).')
+      setError('Please choose an Excel file (.xlsx or .xls).')
+      setSelectedFile(null)
+      setResult(null)
       return
     }
+
+    setError('')
+    setResult(null)
+    setSelectedFile(file)
+  }
+
+  async function handleSend() {
+    if (!selectedFile || isUploading) return
 
     setError('')
     setIsUploading(true)
 
     try {
-      const { items: parsedItems, skipped } = await parseStockExcel(file)
-      let data
-      try {
-        data = setTodayImports(parsedItems, { fileName: file.name })
-      } catch (storageErr) {
-        setItems(parsedItems)
-        setFileName(file.name)
-        setSavedAt(null)
-        throw storageErr
-      }
-
-      setItems(data.items)
-      setSavedAt(data.savedAt)
-      setFileName(data.fileName)
-
-      const skipNote = skipped.length ? ` (${skipped.length} rows skipped)` : ''
-      setToast(`${parsedItems.length} products loaded${skipNote}.`)
+      const data = await uploadStockExcel(selectedFile)
+      setResult(data)
+      setToast(`${data.imported.toLocaleString('en-IN')} tags imported successfully.`)
     } catch (err) {
-      setError(err.message || 'Failed to read Excel file.')
+      setError(err.message || 'Failed to upload Excel file.')
     } finally {
       setIsUploading(false)
     }
   }
 
   function handleFileChange(e) {
-    processFile(e.target.files?.[0])
+    selectFile(e.target.files?.[0])
     e.target.value = ''
   }
 
   function handleDrop(e) {
     e.preventDefault()
     setIsDragging(false)
-    processFile(e.dataTransfer.files?.[0])
+    selectFile(e.dataTransfer.files?.[0])
   }
 
-  function handleClear() {
-    if (!items.length) return
-    if (!window.confirm('Remove uploaded stock data?')) return
-    const data = clearTodayImports()
-    setItems(data.items)
-    setSavedAt(data.savedAt)
-    setFileName(data.fileName)
-    setToast('Upload cleared.')
+  function handleReset() {
+    setSelectedFile(null)
+    setResult(null)
+    setError('')
   }
 
-  function handleSave() {
-    if (!items.length) {
-      setError('Upload an Excel file before saving.')
-      return
-    }
-    const data = saveDailyImport()
-    setSavedAt(data.savedAt)
-    setToast('Daily stock saved successfully.')
-  }
+  const step1State = selectedFile ? 'done' : 'active'
+  const step2State = result ? 'done' : selectedFile ? 'active' : 'pending'
+  const step3State = result ? 'active' : 'pending'
 
   return (
     <div className="import-page">
-      {toast && <p className="import-alert import-alert--success">{toast}</p>}
-      {error && <p className="import-alert import-alert--error">{error}</p>}
+      {toast && (
+        <div className="import-toast import-toast--success" role="status">{toast}</div>
+      )}
 
-      <div className="import-panel">
-        <div className="import-panel__upload">
+      <nav className="import-steps" aria-label="Upload progress">
+        <StepItem number="1" label="Choose file" state={step1State} />
+        <span className="import-steps__line" aria-hidden="true" />
+        <StepItem number="2" label="Send" state={step2State} />
+        <span className="import-steps__line" aria-hidden="true" />
+        <StepItem number="3" label="Done" state={step3State} />
+      </nav>
+
+      <section className="import-workspace">
+        <div className="import-workspace__col">
+          <p className="import-workspace__label">Choose Excel file</p>
           <div
-            className={`import-drop${isDragging ? ' import-drop--active' : ''}${isUploading ? ' import-drop--loading' : ''}`}
+            className={`import-drop${isDragging ? ' import-drop--active' : ''}${isUploading ? ' import-drop--locked' : ''}`}
             onDrop={handleDrop}
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
             onDragLeave={() => setIsDragging(false)}
@@ -146,131 +129,109 @@ export default function Import() {
               onChange={handleFileChange}
               hidden
             />
-            {isUploading ? (
-              <span className="import-drop__spinner" aria-hidden="true" />
-            ) : (
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <div className="import-drop__icon" aria-hidden="true">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
                 <path d="M12 3v12M8 11l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                 <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
               </svg>
-            )}
-            <p className="import-drop__title">
-              {isUploading ? 'Reading file...' : 'Drop Excel here or click to browse'}
-            </p>
-            <p className="import-drop__hint">.xlsx or .xls</p>
-          </div>
-
-          {fileName && (
-            <p className="import-file">
-              <strong>{fileName}</strong>
-              <span> · {items.length} products</span>
-            </p>
-          )}
-        </div>
-
-        <div className="import-panel__divider" />
-
-        <div className="import-panel__preview">
-          {items.length === 0 ? (
-            <div className="import-empty">
-              <p>No data yet</p>
-              <span>Upload Excel to preview today&apos;s stock</span>
             </div>
-          ) : (
-            <>
-              {items.length > PREVIEW_LIMIT && (
-                <p className="import-preview-note">
-                  Showing first {PREVIEW_LIMIT} of {items.length.toLocaleString('en-IN')} tags
-                </p>
-              )}
-              <div className="import-table-wrap">
-                <table className="import-table">
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      {isTagFormat ? (
-                        <>
-                          <th>Tag No</th>
-                          <th>Product</th>
-                          <th>Sub Product</th>
-                          <th>Pieces</th>
-                          <th>Net Wt</th>
-                          <th>Gross Wt</th>
-                          <th>Counter</th>
-                        </>
-                      ) : (
-                        <>
-                          <th>Product</th>
-                          <th>Category</th>
-                          <th>Purity</th>
-                          <th>Weight</th>
-                          <th>Qty</th>
-                          <th>Price</th>
-                          <th>Total</th>
-                        </>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {previewItems.map((item, index) => (
-                      <tr key={item.id || `${item.tagNo}-${index}`}>
-                        <td>{index + 1}</td>
-                        {isTagFormat ? (
-                          <>
-                            <td className="import-table__tag">{item.tagNo}</td>
-                            <td className="import-table__name">{item.name}</td>
-                            <td>{item.subProduct || '—'}</td>
-                            <td>{item.qty}</td>
-                            <td>{item.netWeight || item.weight}g</td>
-                            <td>{item.grossWeight ? `${item.grossWeight}g` : '—'}</td>
-                            <td>{item.counter || '—'}</td>
-                          </>
-                        ) : (
-                          <>
-                            <td className="import-table__name">{item.name}</td>
-                            <td><span className={categoryBadge(item.category)}>{item.category}</span></td>
-                            <td>{item.purity}</td>
-                            <td>{item.weight}g</td>
-                            <td>{item.qty}</td>
-                            <td>{formatCurrency(item.price)}</td>
-                            <td>{formatCurrency(item.price * item.qty)}</td>
-                          </>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="import-panel__footer">
-          <p className="import-panel__meta">
-            {items.length
-              ? `${summary.productCount.toLocaleString('en-IN')} tags · ${summary.totalItems.toLocaleString('en-IN')} pieces · ${summary.totalWeight.toFixed(1)}g${summary.hasPrice ? ` · ${formatCurrency(summary.totalValue)}` : ''}`
-              : savedAt ? 'Previously saved today' : 'Ready for upload'}
-          </p>
-          <div className="import-panel__actions">
-            <button
-              type="button"
-              className="import-btn import-btn--outline"
-              onClick={handleClear}
-              disabled={!items.length || isUploading}
-            >
-              Clear
-            </button>
-            <button
-              type="button"
-              className="import-btn import-btn--gold"
-              onClick={handleSave}
-              disabled={!items.length || isUploading}
-            >
-              Save import
-            </button>
+            <p className="import-drop__label">Drop file here or click to browse</p>
+            <p className="import-drop__hint">.xlsx or .xls only</p>
           </div>
         </div>
-      </div>
+
+        <div className="import-workspace__divider" aria-hidden="true" />
+
+        <div className="import-workspace__col">
+          <p className="import-workspace__label">Review &amp; send</p>
+
+          {!selectedFile && !result && (
+            <div className="import-placeholder">
+              <div className="import-placeholder__icon" aria-hidden="true">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.6" />
+                  <path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.6" />
+                </svg>
+              </div>
+              <p>No file selected</p>
+              <span>Choose an Excel file to continue</span>
+            </div>
+          )}
+
+          {selectedFile && !result && (
+            <div className="import-action">
+              <div className="import-file">
+                <div className="import-file__icon" aria-hidden="true">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" strokeWidth="1.8" />
+                    <path d="M14 2v6h6" stroke="currentColor" strokeWidth="1.8" />
+                  </svg>
+                </div>
+                <div className="import-file__body">
+                  <strong>{selectedFile.name}</strong>
+                  <span>{formatFileSize(selectedFile.size)}</span>
+                </div>
+                <button
+                  type="button"
+                  className="import-file__clear"
+                  onClick={handleReset}
+                  disabled={isUploading}
+                  aria-label="Remove file"
+                >
+                  ×
+                </button>
+              </div>
+
+              {error && <p className="import-msg import-msg--error" role="alert">{error}</p>}
+
+              <button
+                type="button"
+                className="import-send"
+                onClick={handleSend}
+                disabled={isUploading}
+              >
+                {isUploading ? (
+                  <>
+                    <span className="import-send__spin" aria-hidden="true" />
+                    Sending…
+                  </>
+                ) : (
+                  'Send'
+                )}
+              </button>
+            </div>
+          )}
+
+          {result && (
+            <div className="import-success">
+              <div className="import-success__head">
+                <span className="import-success__tick" aria-hidden="true">✓</span>
+                <div>
+                  <p className="import-success__title">Import complete</p>
+                  <p className="import-success__file">{selectedFile?.name}</p>
+                </div>
+              </div>
+              <div className="import-success__grid">
+                <div className="import-stat import-stat--highlight">
+                  <strong>{result.imported.toLocaleString('en-IN')}</strong>
+                  <span>Imported</span>
+                </div>
+                <div className="import-stat">
+                  <strong>{result.totalRowsInFile.toLocaleString('en-IN')}</strong>
+                  <span>Total rows</span>
+                </div>
+                <div className="import-stat">
+                  <strong>{result.skipped.toLocaleString('en-IN')}</strong>
+                  <span>Skipped</span>
+                </div>
+              </div>
+              <button type="button" className="import-send import-send--outline" onClick={handleReset}>
+                Upload another file
+              </button>
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   )
 }

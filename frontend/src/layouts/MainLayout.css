@@ -375,6 +375,8 @@
 .page-content {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 28px 32px 32px;
@@ -384,6 +386,14 @@
 .page-content__inner {
   width: 100%;
   max-width: 1280px;
+}
+
+.page-content__inner--fill {
+  max-width: none;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 @media (max-width: 1024px) {

@@ -14,9 +14,9 @@ const REPORTS_NAV_ITEMS = [
 
 const PAGE_META = {
   '/dashboard': { title: 'Dashboard', subtitle: 'Your showroom at a glance' },
-  '/import': { title: 'Bulk Stock Upload', subtitle: 'Tag Wise Stock Report — Excel import' },
+  '/import': { title: 'Import', subtitle: 'Upload tag-wise stock Excel file' },
   '/stock': { title: 'Stock', subtitle: 'All products in your showroom' },
-  '/reports': { title: 'Reports', subtitle: 'Sales, stock and gold rate insights' },
+  '/reports': { title: 'Reports', subtitle: 'Stock verification by product, counter and status' },
 }
 
 function NavIcon({ name }) {
@@ -75,6 +75,7 @@ export default function MainLayout() {
   const user = getUser()
   const displayName = user?.name || user?.username || 'User'
   const page = PAGE_META[location.pathname] || PAGE_META['/dashboard']
+  const isFillPage = location.pathname === '/import'
 
   function handleLogout() {
     logout()
@@ -170,7 +171,7 @@ export default function MainLayout() {
         </header>
 
         <main className="page-content">
-          <div className="page-content__inner">
+          <div className={`page-content__inner${isFillPage ? ' page-content__inner--fill' : ''}`}>
             <Outlet />
           </div>
         </main>
