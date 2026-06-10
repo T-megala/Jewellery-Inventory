@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { login } from '../services/auth.js'
 import './Login.css'
@@ -10,6 +10,24 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const formRef = useRef(null)
+  const passwordRef = useRef(null)
+  const submitRef = useRef(null)
+
+  function handleUsernameKeyDown(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      passwordRef.current?.focus()
+    }
+  }
+
+  function handlePasswordKeyDown(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      submitRef.current?.focus()
+      formRef.current?.requestSubmit()
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -71,7 +89,7 @@ export default function Login() {
             <p>Enter your username and password to continue</p>
           </div>
 
-          <form className="login-form" onSubmit={handleSubmit} noValidate>
+          <form ref={formRef} className="login-form" onSubmit={handleSubmit} noValidate>
             {error && (
               <div className="login-error" role="alert">
                 {error}
@@ -91,6 +109,7 @@ export default function Login() {
                   placeholder="Enter your username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
+                  onKeyDown={handleUsernameKeyDown}
                   autoComplete="username"
                   disabled={loading}
                 />
@@ -106,10 +125,12 @@ export default function Login() {
                 </svg>
                 <input
                   id="password"
+                  ref={passwordRef}
                   type={showPassword ? 'text' : 'password'}
                   placeholder="Enter your password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  onKeyDown={handlePasswordKeyDown}
                   autoComplete="current-password"
                   disabled={loading}
                 />
@@ -125,7 +146,7 @@ export default function Login() {
               </div>
             </div>
 
-            <button type="submit" className="login-btn" disabled={loading}>
+            <button ref={submitRef} type="submit" className="login-btn" disabled={loading}>
               {loading ? 'Logging in…' : 'Login'}
             </button>
           </form>
