@@ -7,7 +7,7 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from 'recharts'
-import { fetchDashboard } from '../services/dashboard.js'
+import { fetchDashboard, fetchTopSoldProducts } from '../services/dashboard.js'
 import './Module.css'
 import './Dashboard.css'
 
@@ -112,6 +112,83 @@ function DonutChart({ data, centerTitle, centerValue }) {
           </li>
         ))}
       </ul>
+    </div>
+  )
+}
+
+function CounterSplitIcon({ type }) {
+  if (type === 'safe') {
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M8 11V8a4 4 0 118 0v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    )
+  }
+
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M3 9h18M5 9V19a1 1 0 001 1h3v-6h6v6h3a1 1 0 001-1V9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function buildCounterSplitRows(byCounter) {
+  let showroomCount = 0
+  let safeCount = 0
+
+  byCounter.forEach((row) => {
+    const count = Number(row.tagCount ?? row.subProductCount ?? 0)
+    if (/safe/i.test(String(row.name || ''))) {
+      safeCount += count
+    } else {
+      showroomCount += count
+    }
+  })
+
+  return [
+    {
+      key: 'showroom',
+      label: 'Showroom stock',
+      count: showroomCount,
+      variant: 'showroom',
+    },
+    {
+      key: 'safe',
+      label: 'Safe stock',
+      count: safeCount,
+      variant: 'safe',
+    },
+  ]
+}
+
+function CounterSplitChart({ data }) {
+  if (!data.length) return <p className="analytics-empty">No counter data available.</p>
+
+  const total = Math.max(...data.map((row) => row.count), 1)
+
+  return (
+    <div className="counter-split">
+      {data.map((row) => {
+        const width = Math.max((row.count / total) * 100, row.count > 0 ? 2 : 0)
+        return (
+          <div key={row.key} className={`counter-split__row counter-split__row--${row.variant}`}>
+            <div className="counter-split__meta">
+              <span className={`counter-split__badge counter-split__badge--${row.variant}`}>
+                <CounterSplitIcon type={row.variant} />
+                {row.label}
+              </span>
+              <strong className="counter-split__value">{formatCount(row.count)}</strong>
+            </div>
+            <div className="counter-split__track" aria-hidden="true">
+              <span
+                className={`counter-split__fill counter-split__fill--${row.variant}`}
+                style={{ width: `${width}%` }}
+              />
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -274,7 +351,10 @@ function buildStats(totals) {
 
 export default function Dashboard() {
   const [summary, setSummary] = useState(null)
+  const [topSoldProducts, setTopSoldProducts] = useState([])
+  const [topSoldNotice, setTopSoldNotice] = useState('')
   const [loading, setLoading] = useState(true)
+  const [topSoldLoading, setTopSoldLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -304,6 +384,35 @@ export default function Dashboard() {
     return () => { cancelled = true }
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadTopSold() {
+      setTopSoldLoading(true)
+      setTopSoldNotice('')
+
+      try {
+        const products = await fetchTopSoldProducts()
+        if (!cancelled) {
+          setTopSoldProducts(products)
+          if (!products.length) {
+            setTopSoldNotice('No sold products found for the latest batch comparison.')
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setTopSoldProducts([])
+          setTopSoldNotice(err.message || 'Top sold products are not available yet.')
+        }
+      } finally {
+        if (!cancelled) setTopSoldLoading(false)
+      }
+    }
+
+    loadTopSold()
+    return () => { cancelled = true }
+  }, [])
+
   const totals = summary?.totals ?? {
     totalTags: 0,
     totalPieces: 0,
@@ -328,25 +437,19 @@ export default function Dashboard() {
     [byProduct],
   )
 
-  const productBarData = useMemo(
-    () => byProduct.slice(0, 8).map((row) => ({
-      name: truncate(row.name, 22),
-      fullName: row.name,
-      count: row.subProductCount ?? 0,
+  const topSoldBarData = useMemo(
+    () => topSoldProducts.slice(0, 10).map((row) => ({
+      name: truncate(row.productName, 22),
+      fullName: row.productName,
+      count: row.soldCount ?? 0,
     })),
-    [byProduct],
+    [topSoldProducts],
   )
 
-  const counterPieData = useMemo(
-    () => byCounter.map((row) => ({
-      name: truncate(row.name, 16),
-      fullName: row.name,
-      count: row.subProductCount ?? 0,
-      productCount: row.productCount ?? 0,
-    })),
+  const counterSplitData = useMemo(
+    () => buildCounterSplitRows(byCounter),
     [byCounter],
   )
-
 
   if (loading) {
     return (
@@ -458,16 +561,18 @@ export default function Dashboard() {
             />
           </AnalyticsTile>
 
-          <AnalyticsTile title="Counter Mix" subtitle="Sub-products across showroom counters">
-            <DonutChart
-              data={counterPieData}
-              centerTitle="counters"
-              centerValue={formatCount(byCounter.length || totals.counters)}
-            />
+          <AnalyticsTile title="Counter split" subtitle="Tag count in showroom vs safe storage">
+            <CounterSplitChart data={counterSplitData} />
           </AnalyticsTile>
 
-          <AnalyticsTile title="Top Products" subtitle="Ranked by sub-product count" wide>
-            <ProductBarChart data={productBarData} />
+          <AnalyticsTile title="Top Sold Products" subtitle="Sold quantity between previous and latest stock import" wide>
+            {topSoldLoading && <p className="analytics-empty">Loading sold products…</p>}
+            {!topSoldLoading && topSoldNotice && !topSoldBarData.length && (
+              <p className="analytics-empty">{topSoldNotice}</p>
+            )}
+            {!topSoldLoading && topSoldBarData.length > 0 && (
+              <ProductBarChart data={topSoldBarData} />
+            )}
           </AnalyticsTile>
         </div>
       </section>

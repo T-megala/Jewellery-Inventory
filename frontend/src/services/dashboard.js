@@ -27,3 +27,13 @@ export async function fetchDashboard() {
     verification: data.verification ?? { ...EMPTY_VERIFICATION },
   };
 }
+
+export async function fetchTopSoldProducts() {
+  const data = await apiFetch('/dashboard/top-sold-products');
+  return (data || []).map((row) => ({
+    productName: row.productName ?? row.name ?? '',
+    yesterdayCount: Number(row.yesterdayCount ?? 0),
+    todayCount: Number(row.todayCount ?? 0),
+    soldCount: Number(row.soldCount ?? 0),
+  }));
+}
