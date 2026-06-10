@@ -8,8 +8,6 @@ import {
 } from '../services/users.js'
 import './Users.css'
 
-const USERNAME_PATTERN = /^[a-zA-Z0-9_-]{1,50}$/
-
 function formatDate(value) {
   if (!value) return '—'
   const date = new Date(value)
@@ -118,11 +116,6 @@ export default function Users() {
 
     if (!trimmedUsername) {
       setError('Username is required.')
-      return false
-    }
-
-    if (!USERNAME_PATTERN.test(trimmedUsername)) {
-      setError('Username must be 1–50 characters and use only letters, numbers, underscores, or hyphens.')
       return false
     }
 
@@ -369,7 +362,7 @@ export default function Users() {
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder={isEdit ? 'Leave blank to keep current password' : 'Enter password'}
+                    placeholder="Enter password"
                     autoComplete="new-password"
                     disabled={saving}
                   />
@@ -393,6 +386,11 @@ export default function Users() {
                     )}
                   </button>
                 </div>
+                {isEdit && (
+                  <span className="users-field__hint">
+                    Leave blank to keep the current password (min. 6 characters if changing)
+                  </span>
+                )}
               </label>
 
               {error && (

@@ -169,6 +169,12 @@ body.users-modal-open {
   color: #b8860b;
 }
 
+.users-field__hint {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
 .users-field input {
   width: 100%;
   padding: 11px 14px;
