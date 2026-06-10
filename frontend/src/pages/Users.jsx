@@ -57,6 +57,12 @@ export default function Users() {
   }, [loadUsers])
 
   useEffect(() => {
+    if (!notice) return undefined
+    const timer = window.setTimeout(() => setNotice(''), 3000)
+    return () => window.clearTimeout(timer)
+  }, [notice])
+
+  useEffect(() => {
     if (!showForm) return undefined
 
     const pageContent = document.querySelector('.page-content')
