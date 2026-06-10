@@ -85,11 +85,19 @@ function formatStatValue(summary, field) {
   return Number(value ?? 0).toLocaleString('en-IN')
 }
 
+function getTodayDate() {
+  const date = new Date()
+  const pad = (value) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
 export default function Reports() {
   const [product, setProduct] = useState('')
   const [subProduct, setSubProduct] = useState('')
   const [counter, setCounter] = useState('')
   const [status, setStatus] = useState('')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState(getTodayDate)
 
   const [products, setProducts] = useState([])
   const [subProducts, setSubProducts] = useState([])
@@ -112,7 +120,9 @@ export default function Reports() {
     subProductName: subProduct || undefined,
     centerName: counter || undefined,
     status: status || undefined,
-  }), [product, subProduct, counter, status])
+    fromDate,
+    toDate,
+  }), [product, subProduct, counter, status, fromDate, toDate])
 
   useEffect(() => {
     let cancelled = false
@@ -194,7 +204,28 @@ export default function Reports() {
     return () => { cancelled = true }
   }, [product, subProduct])
 
+  function validateDates() {
+    if (!fromDate) {
+      setError('From Date is required.')
+      return false
+    }
+
+    if (!toDate) {
+      setError('To Date is required.')
+      return false
+    }
+
+    if (fromDate > toDate) {
+      setError('From Date cannot be later than To Date.')
+      return false
+    }
+
+    return true
+  }
+
   async function loadReport(nextPage = 1) {
+    if (!validateDates()) return
+
     setLoadingReport(true)
     setError('')
 
@@ -226,6 +257,8 @@ export default function Reports() {
     setSubProduct('')
     setCounter('')
     setStatus('')
+    setFromDate('')
+    setToDate(getTodayDate())
     setRows([])
     setSummary(null)
     setPagination(null)
@@ -235,7 +268,7 @@ export default function Reports() {
   }
 
   async function handleExport(exportFn, label) {
-    if (!hasSearched) return
+    if (!hasSearched || !validateDates()) return
 
     setExporting(true)
     setError('')
@@ -296,6 +329,27 @@ export default function Reports() {
       <section className="reports-filters-card">
         <form className="report-filters" onSubmit={handleGenerate}>
           <div className="report-filters__grid">
+            <label className="report-field">
+              <span>From Date</span>
+              <input
+                type="date"
+                value={fromDate}
+                max={toDate}
+                onChange={(e) => setFromDate(e.target.value)}
+              />
+            </label>
+
+            <label className="report-field">
+              <span>To Date</span>
+              <input
+                type="date"
+                value={toDate}
+                min={fromDate || undefined}
+                max={getTodayDate()}
+                onChange={(e) => setToDate(e.target.value)}
+              />
+            </label>
+
             <label className="report-field">
               <span>Product</span>
               <select

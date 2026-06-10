@@ -115,7 +115,7 @@
 
 .report-filters__grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 16px;
 }
 
@@ -165,6 +165,36 @@
   background: #f5f0ea;
   color: #a89888;
   cursor: not-allowed;
+}
+
+.report-field input[type='date'] {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #e8dfd3;
+  border-radius: 10px;
+  background: #fdfbf8;
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  color: var(--color-text);
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.report-field input[type='date']:hover:not(:read-only) {
+  border-color: rgba(184, 134, 11, 0.35);
+  background: #fff;
+}
+
+.report-field input[type='date']:focus {
+  outline: none;
+  border-color: rgba(184, 134, 11, 0.55);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(184, 134, 11, 0.12);
+}
+
+.report-field input[type='date']:read-only {
+  background: #f5f0ea;
+  color: #6b5a45;
+  cursor: default;
 }
 
 .report-filters__actions {
