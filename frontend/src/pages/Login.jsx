@@ -1,10 +1,12 @@
-import { useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { login } from '../services/auth.js'
+import { useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { login, logout } from '../services/auth.js'
 import './Login.css'
 
 export default function Login() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const redirectTo = location.state?.from?.pathname || '/dashboard'
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -13,6 +15,10 @@ export default function Login() {
   const formRef = useRef(null)
   const passwordRef = useRef(null)
   const submitRef = useRef(null)
+
+  useEffect(() => {
+    logout()
+  }, [])
 
   function handleUsernameKeyDown(e) {
     if (e.key === 'Enter') {
@@ -45,7 +51,7 @@ export default function Login() {
     setLoading(true)
     try {
       await login(username.trim(), password)
-      navigate('/dashboard', { replace: true })
+      navigate(redirectTo, { replace: true })
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.')
     } finally {
