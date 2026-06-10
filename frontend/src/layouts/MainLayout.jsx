@@ -12,11 +12,16 @@ const REPORTS_NAV_ITEMS = [
   { to: '/reports', label: 'Reports', icon: 'reports' },
 ]
 
+const ADMIN_NAV_ITEMS = [
+  { to: '/users', label: 'Users', icon: 'users' },
+]
+
 const PAGE_META = {
   '/dashboard': { title: 'Dashboard', subtitle: 'Your showroom at a glance' },
   '/import': { title: 'Import', subtitle: 'Upload tag-wise stock Excel file' },
   '/stock': { title: 'Stock', subtitle: 'All products in your showroom' },
   '/reports': { title: 'Reports', subtitle: 'Stock verification by product, counter and status' },
+  '/users': { title: 'Users', subtitle: 'Add, edit and manage user accounts' },
 }
 
 function NavIcon({ name }) {
@@ -43,6 +48,15 @@ function NavIcon({ name }) {
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M4 7l8-4 8 4-8 4-8-4z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
         <path d="M4 12l8 4 8-4M4 17l8 4 8-4" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      </svg>
+    )
+  }
+  if (name === 'users') {
+    return (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       </svg>
     )
   }
@@ -122,6 +136,25 @@ export default function MainLayout() {
           <p className="sidebar-menu-label sidebar-menu-label--reports">Reports</p>
           <nav className="sidebar-nav sidebar-nav--reports">
             {REPORTS_NAV_ITEMS.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) =>
+                  `sidebar-link${isActive ? ' sidebar-link--active' : ''}`
+                }
+              >
+                <span className="sidebar-link__icon">
+                  <NavIcon name={item.icon} />
+                </span>
+                <span className="sidebar-link__label">{item.label}</span>
+                <span className="sidebar-link__indicator" aria-hidden="true" />
+              </NavLink>
+            ))}
+          </nav>
+
+          <p className="sidebar-menu-label sidebar-menu-label--reports">Admin</p>
+          <nav className="sidebar-nav sidebar-nav--reports">
+            {ADMIN_NAV_ITEMS.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
