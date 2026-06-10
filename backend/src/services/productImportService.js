@@ -7,12 +7,12 @@ import importJobStore from './importJobStore.js';
 
 const BATCH_SIZE = Math.max(
   500,
-  Number.parseInt(process.env.IMPORT_BATCH_SIZE ?? '3000', 10) || 3000
+  Number.parseInt(process.env.IMPORT_BATCH_SIZE ?? '5000', 10) || 5000
 );
 
 const FAST_REIMPORT_THRESHOLD = Math.max(
   1000,
-  Number.parseInt(process.env.IMPORT_FAST_REIMPORT_THRESHOLD ?? '3000', 10) || 3000
+  Number.parseInt(process.env.IMPORT_FAST_REIMPORT_THRESHOLD ?? '5000', 10) || 5000
 );
 
 const COMPARE_FIELDS = [
@@ -140,24 +140,54 @@ const bulkUpsert = async (connection, batchId, rows) => {
   );
 };
 
-const loadExistingProducts = async (connection, batchId) => {
-  const [rows] = await connection.query(
+// Database-side deduplication: Compare rows efficiently without loading all products into memory
+const classifyRowsViaDatabase = async (connection, batchId, rows) => {
+  const toInsert = [];
+  const toUpsert = [];
+  let unchanged = 0;
+
+  // Build list of unique tags from incoming rows
+  const tags = rows
+    .map((r) => String(r.tag_packet_no ?? '').trim())
+    .filter(Boolean);
+
+  if (tags.length === 0) {
+    return { toInsert: rows, toUpsert: [], unchanged };
+  }
+
+  // Get only the tags that already exist in the database
+  const placeholders = tags.map(() => '?').join(', ');
+  const [existingRows] = await connection.query(
     `SELECT ${COMPARE_FIELDS.join(', ')}
      FROM products
-     WHERE batch_id = ?`,
-    [batchId]
+     WHERE batch_id = ? AND tag_packet_no IN (${placeholders})`,
+    [batchId, ...tags]
   );
 
-  const map = new Map();
-
-  for (const row of rows) {
+  // Create a map of existing products for comparison
+  const existingMap = new Map();
+  for (const row of existingRows) {
     const tag = String(row.tag_packet_no ?? '').trim();
     if (tag) {
-      map.set(tag, row);
+      existingMap.set(tag, row);
     }
   }
 
-  return map;
+  // Classify incoming rows
+  for (const row of rows) {
+    const tag = String(row.tag_packet_no).trim();
+    const existing = existingMap.get(tag);
+
+    if (!existing) {
+      toInsert.push(row);
+    } else if (hasProductChanged(existing, row)) {
+      toUpsert.push(row);
+    } else {
+      unchanged += 1;
+    }
+  }
+
+  return { toInsert, toUpsert, unchanged };
 };
 
 const loadExistingTags = async (connection, batchId) => {
@@ -173,30 +203,6 @@ const loadExistingTags = async (connection, batchId) => {
   return new Set(
     rows.map((row) => String(row.tag_packet_no).trim()).filter(Boolean)
   );
-};
-
-const classifyRows = (validRows, existingMap) => {
-  const toInsert = [];
-  const toUpsert = [];
-  let unchanged = 0;
-
-  for (const row of validRows) {
-    const tag = String(row.tag_packet_no).trim();
-    const existing = existingMap.get(tag);
-
-    if (!existing) {
-      toInsert.push(row);
-      continue;
-    }
-
-    if (hasProductChanged(existing, row)) {
-      toUpsert.push(row);
-    } else {
-      unchanged += 1;
-    }
-  }
-
-  return { toInsert, toUpsert, unchanged };
 };
 
 const countInsertVsExisting = (validRows, existingTags) => {
@@ -365,8 +371,8 @@ const importProductsFromExcel = async (
       inserted = counts.inserted;
       updated = counts.updated;
     } else {
-      const existingMap = await loadExistingProducts(connection, batchId);
-      const classified = classifyRows(validRows, existingMap);
+      // Use database-side deduplication for efficient comparison
+      const classified = await classifyRowsViaDatabase(connection, batchId, validRows);
       const { toInsert, toUpsert } = classified;
       unchanged = classified.unchanged;
       inserted = toInsert.length;

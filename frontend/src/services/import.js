@@ -1,4 +1,5 @@
 import { API_BASE } from './api.js';
+import { getToken } from './auth.js';
 
 /** Bulk stock import — POST multipart/form-data with field name "file" */
 export const BULK_STOCK_IMPORT_URL = `${API_BASE}/products/import`;
@@ -48,8 +49,13 @@ export async function startAsyncImport(file) {
   const formData = new FormData();
   formData.append('file', file);
 
+  const token = getToken();
+
   const res = await fetch(`${API_BASE}/products/import?async=true`, {
     method: 'POST',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: formData,
   });
 
@@ -63,7 +69,13 @@ export async function startAsyncImport(file) {
 }
 
 export async function getImportStatus(jobId) {
-  const res = await fetch(`${API_BASE}/products/import/status/${jobId}`);
+  const token = getToken();
+
+  const res = await fetch(`${API_BASE}/products/import/status/${jobId}`, {
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
   const json = await parseJsonResponse(res);
 
   if (!res.ok) {

@@ -6,6 +6,9 @@ import stockVerificationReportRoutes from "./src/routes/stockVerificationReportR
 import dropdownRoutes from "./src/routes/dropdownRoutes.js";
 import productBatchRoutes from "./src/routes/productBatchRoutes.js";
 import dashboardRoutes from "./src/routes/dashboardRoutes.js";
+import authRoutes from "./src/routes/authRoutes.js";
+import userRoutes from "./src/routes/userRoutes.js";
+import { authenticateApi } from "./src/middleware/authMiddleware.js";
 import { errorHandler } from "./src/middleware/errorHandler.js";
 
 const app = express();
@@ -42,12 +45,15 @@ app.get('/', (req, res) => {
   res.send('Hello World');
 });
 
+app.use("/api/v1", authRoutes);
+app.use("/api/v1", authenticateApi);
 app.use("/api/v1", productRoutes);
 app.use("/api/v1", stockVerificationRoutes);
 app.use("/api/v1", stockVerificationReportRoutes);
 app.use("/api/v1", dropdownRoutes);
 app.use("/api/v1", productBatchRoutes);
 app.use("/api/v1", dashboardRoutes);
+app.use("/api/v1", userRoutes);
 
 app.use(errorHandler);
 

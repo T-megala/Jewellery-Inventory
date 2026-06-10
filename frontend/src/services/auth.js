@@ -1,3 +1,5 @@
+import { API_BASE } from './api.js'
+
 const TOKEN_KEY = 'auth_token'
 const USER_KEY = 'auth_user'
 
@@ -8,30 +10,31 @@ const USER_KEY = 'auth_user'
  * Response: { token, user: { id, name, username, role } }
  */
 export async function login(username, password) {
-  // TODO: Replace with real API call when backend is merged
-  // const res = await fetch('/api/auth/login', {
-  //   method: 'POST',
-  //   headers: { 'Content-Type': 'application/json' },
-  //   body: JSON.stringify({ username, password }),
-  // })
-  // if (!res.ok) {
-  //   const err = await res.json()
-  //   throw new Error(err.message || 'Login failed')
-  // }
-  // const data = await res.json()
-  // setSession(data.token, data.user)
-  // return data
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  })
 
-  await new Promise((resolve) => setTimeout(resolve, 800))
-
-  if (username === 'admin' && password === 'admin123') {
-    const user = { id: 1, name: 'Jeyachandran Admin', username, role: 'superadmin' }
-    const token = 'mock-jwt-token'
-    setSession(token, user)
-    return { token, user }
+  let json
+  try {
+    json = await res.json()
+  } catch {
+    throw new Error('Unexpected server response')
   }
 
-  throw new Error('Invalid username or password')
+  if (!res.ok || json?.success === false) {
+    throw new Error(json?.message || 'Login failed')
+  }
+
+  const data = json.data || json
+
+  if (!data.token || !data.user) {
+    throw new Error('Login response is missing token data')
+  }
+
+  setSession(data.token, data.user)
+  return data
 }
 
 export function setSession(token, user) {

@@ -7,6 +7,15 @@ const errorHandler = (err, req, res, next) => {
     });
   }
 
+  // Body-parser JSON syntax errors (empty or malformed JSON body)
+  if (err.type === 'entity.parse.failed') {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid JSON in request body',
+      data: null,
+    });
+  }
+
   const statusCode = err.statusCode || 500;
   const message =
     err.isOperational ? err.message : 'Internal server error';

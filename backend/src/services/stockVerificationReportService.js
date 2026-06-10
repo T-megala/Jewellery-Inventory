@@ -1,48 +1,47 @@
-import pool from '../config/database.js';
-import ApiError from '../utils/ApiError.js';
+import pool from "../config/database.js";
+import ApiError from "../utils/ApiError.js";
 import {
   buildExcelBuffer,
   buildPdfBuffer,
   getExportFileName,
-} from '../utils/reportExport.js';
+} from "../utils/reportExport.js";
 
-const VALID_STATUSES = ['FOUND', 'MISSING', 'NEW'];
+const VALID_STATUSES = ["FOUND", "MISSING", "NEW"];
 const MAX_EXPORT_ROWS = 50000;
 
 const formatDateTime = (value) => {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
-  const pad = (n) => String(n).padStart(2, '0');
+  const pad = (n) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 };
 
 const buildFilterClause = (filters) => {
-  const conditions = ['1 = 1'];
+  const conditions = ["1 = 1"];
   const params = [];
-
   if (filters.productName) {
-    conditions.push('AND svd.product_name = ?');
+    conditions.push("AND svd.product_name = ?");
     params.push(filters.productName);
   }
   if (filters.subProductName) {
-    conditions.push('AND svd.sub_product_name = ?');
+    conditions.push("AND svd.sub_product_name = ?");
     params.push(filters.subProductName);
   }
   if (filters.centerName) {
-    conditions.push('AND svd.center_name = ?');
+    conditions.push("AND svd.center_name = ?");
     params.push(filters.centerName);
   }
   if (filters.status) {
-    conditions.push('AND svd.status = ?');
+    conditions.push("AND svd.status = ?");
     params.push(filters.status);
   }
   if (filters.fromDate && filters.toDate) {
-    conditions.push('AND DATE(sv.verification_date) BETWEEN ? AND ?');
+    conditions.push("AND DATE(sv.verification_date) BETWEEN ? AND ?");
     params.push(filters.fromDate, filters.toDate);
   }
 
-  return { whereClause: conditions.join(' '), params };
+  return { whereClause: conditions.join(" "), params };
 };
 
 const getBaseFrom = (whereClause) => `
@@ -71,7 +70,7 @@ const getSummary = async (baseFrom, params) => {
        SUM(CASE WHEN svd.status = 'NEW' THEN 1 ELSE 0 END) AS newCount,
        COUNT(*) AS totalRecords
      ${baseFrom}`,
-    params
+    params,
   );
 
   return {
@@ -98,7 +97,7 @@ const getReport = async (filters, pagination) => {
      ${baseFrom}
      ORDER BY sv.verification_date DESC, svd.id DESC
      LIMIT ${limit} OFFSET ${offset}`,
-    params
+    params,
   );
 
   return {
@@ -125,7 +124,7 @@ const getAllReportRows = async (filters) => {
   if (summary.totalRecords > MAX_EXPORT_ROWS) {
     throw new ApiError(
       400,
-      `Export limit exceeded. Narrow filters to ${MAX_EXPORT_ROWS} records or fewer.`
+      `Export limit exceeded. Narrow filters to ${MAX_EXPORT_ROWS} records or fewer.`,
     );
   }
 
@@ -135,7 +134,7 @@ const getAllReportRows = async (filters) => {
             svd.tag_no, svd.status, svd.created_at
      ${baseFrom}
      ORDER BY sv.verification_date DESC, svd.id DESC`,
-    params
+    params,
   );
 
   return {
@@ -151,19 +150,19 @@ const getAllReportRows = async (filters) => {
 const exportReport = async (filters, exportType) => {
   const { summary, data } = await getAllReportRows(filters);
 
-  if (exportType === 'pdf') {
+  if (exportType === "pdf") {
     return {
       buffer: await buildPdfBuffer(data, summary, filters),
-      contentType: 'application/pdf',
-      fileName: getExportFileName('pdf'),
+      contentType: "application/pdf",
+      fileName: getExportFileName("pdf"),
     };
   }
 
   return {
     buffer: buildExcelBuffer(data, summary, filters),
     contentType:
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    fileName: getExportFileName('excel'),
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    fileName: getExportFileName("excel"),
   };
 };
 

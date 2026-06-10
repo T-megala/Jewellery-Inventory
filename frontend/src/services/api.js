@@ -1,4 +1,7 @@
-export const API_BASE = 'https://devjeweltrack.2cqr.in/api/v1';
+const LOCAL_API = 'http://localhost:5005/api/v1';
+const TOKEN_KEY = 'auth_token';
+
+export const API_BASE = import.meta.env.VITE_API_BASE_URL || LOCAL_API;
 
 export function buildQueryString(params) {
   return Object.entries(params)
@@ -38,11 +41,17 @@ async function parseResponse(res) {
   return json;
 }
 
+function getAuthHeaders() {
+  const token = localStorage.getItem(TOKEN_KEY);
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export async function apiFetch(path, options = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...getAuthHeaders(),
       ...options.headers,
     },
   });
@@ -54,6 +63,9 @@ export async function apiFetch(path, options = {}) {
 export async function apiUpload(path, formData) {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
+    headers: {
+      ...getAuthHeaders(),
+    },
     body: formData,
   });
 
@@ -66,6 +78,7 @@ export async function apiFetchPaged(path, options = {}) {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...getAuthHeaders(),
       ...options.headers,
     },
   });
@@ -86,6 +99,7 @@ export async function apiFetchReport(path, params = {}) {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
+      ...getAuthHeaders(),
     },
   });
 

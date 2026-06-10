@@ -1,11 +1,11 @@
-import pool from '../config/database.js';
-import { getActiveBatchId } from './productBatchService.js';
+import pool from "../config/database.js";
+import { getActiveBatchId } from "./productBatchService.js";
 
 const formatDateTime = (value) => {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
-  const pad = (n) => String(n).padStart(2, '0');
+  const pad = (n) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 };
 
@@ -31,7 +31,7 @@ const getBatchInfo = async (batchId) => {
     `SELECT id, batch_date, uploaded_at, uploaded_by, is_active
      FROM product_upload_batches
      WHERE id = ?`,
-    [batchId]
+    [batchId],
   );
 
   if (!rows.length) {
@@ -81,7 +81,7 @@ const getInventorySummary = async () => {
        COUNT(DISTINCT ${counterNameExpr}) AS counters
      FROM products
      WHERE ${baseWhere}`,
-    [batchId]
+    [batchId],
   );
 
   const [byProductRows] = await pool.execute(
@@ -93,7 +93,7 @@ const getInventorySummary = async () => {
      WHERE ${baseWhere}
      GROUP BY product
      ORDER BY subProductCount DESC, product ASC`,
-    [batchId]
+    [batchId],
   );
 
   const [byCounterRows] = await pool.execute(
@@ -106,7 +106,7 @@ const getInventorySummary = async () => {
      WHERE ${baseWhere}
      GROUP BY ${counterNameExpr}
      ORDER BY subProductCount DESC, name ASC`,
-    [batchId]
+    [batchId],
   );
 
   const [recentRows] = await pool.execute(
@@ -120,7 +120,7 @@ const getInventorySummary = async () => {
      WHERE batch_id = ?
      ORDER BY id DESC
      LIMIT 10`,
-    [batchId]
+    [batchId],
   );
 
   return {
@@ -162,7 +162,7 @@ const getVerificationSummary = async () => {
        SUM(CASE WHEN status = 'MISSING' THEN 1 ELSE 0 END) AS missingCount,
        SUM(CASE WHEN status = 'NEW' THEN 1 ELSE 0 END) AS newCount,
        COUNT(*) AS totalRecords
-     FROM stock_verification_details`
+     FROM stock_verification_details`,
   );
 
   const row = rows[0] ?? {};

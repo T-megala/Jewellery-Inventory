@@ -1,12 +1,12 @@
-import ApiError from '../utils/ApiError.js';
-import stockVerificationReportService from '../services/stockVerificationReportService.js';
-import { getRequestParam } from '../utils/requestParams.js';
+import ApiError from "../utils/ApiError.js";
+import stockVerificationReportService from "../services/stockVerificationReportService.js";
+import { getRequestParam } from "../utils/requestParams.js";
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-const VALID_EXPORT_TYPES = ['excel', 'pdf'];
+const VALID_EXPORT_TYPES = ["excel", "pdf"];
 
 const parsePositiveInt = (value, fieldName, defaultValue) => {
-  if (value === undefined || value === null || value === '') {
+  if (value === undefined || value === null || value === "") {
     return defaultValue;
   }
 
@@ -36,51 +36,62 @@ const validateDate = (value, fieldName) => {
 const getRequestValue = (req, ...keys) => getRequestParam(req, ...keys);
 
 const validateFilters = (req, { isExport = false } = {}) => {
-  const page = parsePositiveInt(getRequestParam(req, 'page'), 'page', 1);
-  const limit = parsePositiveInt(getRequestParam(req, 'limit'), 'limit', 20);
+  const page = parsePositiveInt(getRequestParam(req, "page"), "page", 1);
+  const limit = parsePositiveInt(getRequestParam(req, "limit"), "limit", 20);
 
   if (!isExport && limit > 100) {
-    throw new ApiError(400, 'limit cannot exceed 100');
+    throw new ApiError(400, "limit cannot exceed 100");
   }
 
-  const fromDate = validateDate(getRequestValue(req, 'fromDate'), 'fromDate');
-  const toDate = validateDate(getRequestValue(req, 'toDate'), 'toDate');
+  const fromDate = validateDate(
+    getRequestValue(req, "fromDate", "fromdate"),
+    "fromDate",
+  );
+  const toDate = validateDate(
+    getRequestValue(req, "toDate", "todate"),
+    "toDate",
+  );
 
   if ((fromDate && !toDate) || (!fromDate && toDate)) {
     throw new ApiError(
       400,
-      'Both fromDate and toDate are required for date range filtering'
+      "Both fromDate and toDate are required for date range filtering",
     );
   }
 
   if (fromDate && toDate && fromDate > toDate) {
-    throw new ApiError(400, 'fromDate cannot be greater than toDate');
+    throw new ApiError(400, "fromDate cannot be greater than toDate");
   }
 
-  const requestStatus = getRequestValue(req, 'status');
-  const status = requestStatus ? String(requestStatus).trim().toUpperCase() : null;
+  const requestStatus = getRequestValue(req, "status");
+  const status = requestStatus
+    ? String(requestStatus).trim().toUpperCase()
+    : null;
 
-  if (status && !stockVerificationReportService.VALID_STATUSES.includes(status)) {
-    throw new ApiError(400, 'status must be one of FOUND, MISSING, or NEW');
+  if (
+    status &&
+    !stockVerificationReportService.VALID_STATUSES.includes(status)
+  ) {
+    throw new ApiError(400, "status must be one of FOUND, MISSING, or NEW");
   }
 
-  const productName = getRequestValue(req, 'productName', 'product');
-  const subProductName = getRequestValue(req, 'subProductName', 'subProduct');
+  const productName = getRequestValue(req, "productName", "product");
+  const subProductName = getRequestValue(req, "subProductName", "subProduct");
   const centerName = getRequestValue(
     req,
-    'centerName',
-    'counterName',
-    'center',
-    'counter'
+    "centerName",
+    "counterName",
+    "center",
+    "counter",
   );
 
-  const exportTypeRaw = getRequestValue(req, 'export_type', 'exportType');
+  const exportTypeRaw = getRequestValue(req, "export_type", "exportType");
   const exportType = exportTypeRaw
     ? String(exportTypeRaw).trim().toLowerCase()
     : null;
 
   if (exportType && !VALID_EXPORT_TYPES.includes(exportType)) {
-    throw new ApiError(400, 'export_type must be excel or pdf');
+    throw new ApiError(400, "export_type must be excel or pdf");
   }
 
   return {
@@ -103,33 +114,31 @@ const validateFilters = (req, { isExport = false } = {}) => {
 
 export const getStockVerificationReport = async (req, res) => {
   const { filters, pagination, exportType } = validateFilters(req, {
-    isExport: Boolean(
-      getRequestValue(req, 'export_type', 'exportType')
-    ),
+    isExport: Boolean(getRequestValue(req, "export_type", "exportType")),
   });
 
   if (exportType) {
     const file = await stockVerificationReportService.exportReport(
       filters,
-      exportType
+      exportType,
     );
 
-    res.setHeader('Content-Type', file.contentType);
+    res.setHeader("Content-Type", file.contentType);
     res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${file.fileName}"`
+      "Content-Disposition",
+      `attachment; filename="${file.fileName}"`,
     );
     return res.status(200).send(file.buffer);
   }
 
   const result = await stockVerificationReportService.getReport(
     filters,
-    pagination
+    pagination,
   );
 
   res.status(200).json({
     success: true,
-    message: 'Report fetched successfully',
+    message: "Report fetched successfully",
     pagination: result.pagination,
     summary: result.summary,
     data: result.data,
