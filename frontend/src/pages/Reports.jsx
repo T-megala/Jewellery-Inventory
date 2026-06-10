@@ -97,7 +97,7 @@ export default function Reports() {
   const [counter, setCounter] = useState('')
   const [status, setStatus] = useState('')
   const [fromDate, setFromDate] = useState('')
-  const [toDate, setToDate] = useState(getTodayDate)
+  const [toDate, setToDate] = useState('')
 
   const [products, setProducts] = useState([])
   const [subProducts, setSubProducts] = useState([])
@@ -258,7 +258,7 @@ export default function Reports() {
     setCounter('')
     setStatus('')
     setFromDate('')
-    setToDate(getTodayDate())
+    setToDate('')
     setRows([])
     setSummary(null)
     setPagination(null)
@@ -334,7 +334,7 @@ export default function Reports() {
               <input
                 type="date"
                 value={fromDate}
-                max={toDate}
+                max={toDate || getTodayDate()}
                 onChange={(e) => setFromDate(e.target.value)}
               />
             </label>
