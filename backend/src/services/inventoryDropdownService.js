@@ -18,11 +18,13 @@ const activeBatchFilter = async () => {
   return batchId ? { clause: 'AND batch_id = ?', params: [batchId] } : null;
 };
 
-const getProducts = async () => {
+const getProducts = async ({ includeAllProductsOption = true } = {}) => {
   const batchFilter = await activeBatchFilter();
 
   if (!batchFilter) {
-    return [{ id: ALL_SCOPE_ID, name: SCOPE_NAMES.ALL_PRODUCTS }];
+    return includeAllProductsOption
+      ? [{ id: ALL_SCOPE_ID, name: SCOPE_NAMES.ALL_PRODUCTS }]
+      : [];
   }
 
   const [rows] = await pool.execute(
@@ -34,21 +36,31 @@ const getProducts = async () => {
     batchFilter.params
   );
 
-  return [
-    { id: ALL_SCOPE_ID, name: SCOPE_NAMES.ALL_PRODUCTS },
-    ...mapRowsToNamedList(rows, 'product'),
-  ];
+  const products = mapRowsToNamedList(rows, 'product');
+
+  if (!includeAllProductsOption) {
+    return products;
+  }
+
+  return [{ id: ALL_SCOPE_ID, name: SCOPE_NAMES.ALL_PRODUCTS }, ...products];
 };
 
-const getSubProducts = async (productName) => {
+const getSubProducts = async (
+  productName,
+  { includeAllSubProductsOption = true } = {},
+) => {
   if (isAllProductsByName(productName)) {
-    return [{ id: ALL_SCOPE_ID, name: SCOPE_NAMES.ALL_SUB_PRODUCTS }];
+    return includeAllSubProductsOption
+      ? [{ id: ALL_SCOPE_ID, name: SCOPE_NAMES.ALL_SUB_PRODUCTS }]
+      : [];
   }
 
   const batchFilter = await activeBatchFilter();
 
   if (!batchFilter) {
-    return [{ id: ALL_SCOPE_ID, name: SCOPE_NAMES.ALL_SUB_PRODUCTS }];
+    return includeAllSubProductsOption
+      ? [{ id: ALL_SCOPE_ID, name: SCOPE_NAMES.ALL_SUB_PRODUCTS }]
+      : [];
   }
 
   const [rows] = await pool.execute(
@@ -62,27 +74,45 @@ const getSubProducts = async (productName) => {
     [productName, ...batchFilter.params]
   );
 
+  const subProducts = mapRowsToNamedList(rows, 'sub_product');
+
+  if (!includeAllSubProductsOption) {
+    return subProducts;
+  }
+
   return [
     { id: ALL_SCOPE_ID, name: SCOPE_NAMES.ALL_SUB_PRODUCTS },
-    ...mapRowsToNamedList(rows, 'sub_product'),
+    ...subProducts,
   ];
 };
 
-const getCenters = async (productName, subProductName) => {
+const getCenters = async (
+  productName,
+  subProductName,
+  { includeAllCentersOption = true } = {},
+) => {
   if (isAllProductsByName(productName)) {
-    return [{ id: ALL_SCOPE_ID, name: SCOPE_NAMES.ALL_CENTERS }];
+    return includeAllCentersOption
+      ? [{ id: ALL_SCOPE_ID, name: SCOPE_NAMES.ALL_CENTERS }]
+      : [];
   }
 
   const batchFilter = await activeBatchFilter();
 
   if (!batchFilter) {
-    return [{ id: ALL_SCOPE_ID, name: SCOPE_NAMES.ALL_CENTERS }];
+    return includeAllCentersOption
+      ? [{ id: ALL_SCOPE_ID, name: SCOPE_NAMES.ALL_CENTERS }]
+      : [];
   }
 
   const params = [productName, ...batchFilter.params];
   let subProductClause = 'AND sub_product = ?';
 
   if (isAllSubProductsByName(subProductName)) {
+    if (!includeAllCentersOption) {
+      return [];
+    }
+
     subProductClause = '';
   } else {
     params.splice(1, 0, subProductName);
@@ -100,10 +130,13 @@ const getCenters = async (productName, subProductName) => {
     params
   );
 
-  return [
-    { id: ALL_SCOPE_ID, name: SCOPE_NAMES.ALL_CENTERS },
-    ...mapRowsToNamedList(rows, 'counter_name'),
-  ];
+  const centers = mapRowsToNamedList(rows, 'counter_name');
+
+  if (!includeAllCentersOption) {
+    return centers;
+  }
+
+  return [{ id: ALL_SCOPE_ID, name: SCOPE_NAMES.ALL_CENTERS }, ...centers];
 };
 
 export default {

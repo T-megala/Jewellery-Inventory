@@ -11,7 +11,9 @@ const sendSuccess = (res, data) => {
 };
 
 export const getProducts = async (req, res) => {
-  const data = await dropdownService.getProducts();
+  const data = await dropdownService.getProducts({
+    includeAllProductsOption: false,
+  });
   sendSuccess(res, data);
 };
 
@@ -25,7 +27,9 @@ export const getSubProducts = async (req, res) => {
     );
   }
 
-  const data = await dropdownService.getSubProducts(productName);
+  const data = await dropdownService.getSubProducts(productName, {
+    includeAllSubProductsOption: false,
+  });
   sendSuccess(res, data);
 };
 
@@ -51,6 +55,8 @@ export const getCenters = async (req, res) => {
     );
   }
 
-  const data = await dropdownService.getCenters(productName, subProductName);
+  const data = await dropdownService.getCenters(productName, subProductName, {
+    includeAllCentersOption: false,
+  });
   sendSuccess(res, data);
 };
