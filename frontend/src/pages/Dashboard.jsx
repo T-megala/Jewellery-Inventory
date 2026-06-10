@@ -279,9 +279,7 @@ function StatIcon({ type }) {
   )
 }
 
-function buildStats(totals, verification) {
-  const hasVerification = verification.totalFound + verification.totalMissing + verification.totalNew > 0
-
+function buildStats(totals) {
   return [
     {
       label: 'Total Products',
@@ -301,22 +299,11 @@ function buildStats(totals, verification) {
       hint: 'Tag / packet rows in active batch',
       icon: <StatIcon type="tags" />,
     },
-    {
-      label: hasVerification ? 'Verification Issues' : 'Total Pieces',
-      value: hasVerification
-        ? formatCount(verification.totalMissing + verification.totalNew)
-        : formatCount(totals.totalPieces),
-      hint: hasVerification
-        ? `${formatCount(verification.totalMissing)} missing, ${formatCount(verification.totalNew)} new`
-        : `${formatCount(totals.counters)} showroom counters`,
-      icon: hasVerification ? <StatIcon type="groups" /> : <StatIcon type="pieces" />,
-    },
   ]
 }
 
 export default function Dashboard() {
   const [summary, setSummary] = useState(null)
-  const [verification, setVerification] = useState({ totalFound: 0, totalMissing: 0, totalNew: 0, totalTags: 0 })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -328,11 +315,10 @@ export default function Dashboard() {
       setError('')
 
       try {
-        const { inventory, verification: verify } = await fetchDashboard()
+        const { inventory } = await fetchDashboard()
 
         if (!cancelled) {
           setSummary(inventory)
-          setVerification(verify)
         }
       } catch (err) {
         if (!cancelled) {
@@ -358,7 +344,7 @@ export default function Dashboard() {
     counters: 0,
   }
 
-  const stats = buildStats(totals, verification)
+  const stats = buildStats(totals)
   const byProduct = summary?.byProduct ?? []
   const byCounter = summary?.byCounter ?? []
   const recentTags = summary?.recentTags ?? []
