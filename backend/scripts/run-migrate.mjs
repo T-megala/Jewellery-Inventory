@@ -1,16 +1,11 @@
-import pool from '../src/config/database.js';
-import runMigration from '../src/database/migrate.js';
+import runMigration from "../src/database/migrate.js";
+import pool from "../src/config/database.js";
 
 try {
   await runMigration();
-  const [batches] = await pool.execute(
-    'SELECT id, batch_date, is_active FROM product_upload_batches ORDER BY id DESC LIMIT 3'
-  );
-  const [counts] = await pool.execute(
-    'SELECT batch_id, COUNT(*) AS c FROM products GROUP BY batch_id'
-  );
-  console.log('Batches:', batches);
-  console.log('Product counts by batch:', counts);
+} catch (error) {
+  console.error("migration failed:", error.message);
+  process.exitCode = 1;
 } finally {
   await pool.end();
 }
