@@ -1,4 +1,4 @@
-import { API_BASE, apiFetchReport, buildQueryString } from './api.js';
+import { apiFetchRaw, apiFetchReport, buildQueryString } from './api.js';
 
 function buildReportParams(filters = {}) {
   return {
@@ -51,7 +51,7 @@ export async function downloadReportExport(filters = {}, exportType) {
     export_type: exportType,
   });
 
-  const res = await fetch(`${API_BASE}/stock-verification/report?${query}`);
+  const res = await apiFetchRaw(`/stock-verification/report?${query}`);
 
   if (!res.ok) {
     let message = 'Export failed';

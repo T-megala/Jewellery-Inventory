@@ -1,7 +1,14 @@
+import { getToken } from './auth.js';
+
 const LOCAL_API = 'http://localhost:5005/api/v1';
-const TOKEN_KEY = 'auth_token';
 
 export const API_BASE = import.meta.env.VITE_API_BASE_URL || LOCAL_API;
+
+/** Bearer token for all API calls except login. */
+export function getAuthHeaders() {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 export function buildQueryString(params) {
   return Object.entries(params)
@@ -41,19 +48,18 @@ async function parseResponse(res) {
   return json;
 }
 
-function getAuthHeaders() {
-  const token = localStorage.getItem(TOKEN_KEY);
-  return token ? { Authorization: `Bearer ${token}` } : {};
+function buildJsonHeaders(options = {}) {
+  return {
+    'Content-Type': 'application/json',
+    ...getAuthHeaders(),
+    ...options.headers,
+  };
 }
 
 export async function apiFetch(path, options = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeaders(),
-      ...options.headers,
-    },
+    headers: buildJsonHeaders(options),
   });
 
   const json = await parseResponse(res);
@@ -76,11 +82,7 @@ export async function apiUpload(path, formData) {
 export async function apiFetchPaged(path, options = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeaders(),
-      ...options.headers,
-    },
+    headers: buildJsonHeaders(options),
   });
 
   const json = await parseResponse(res);
@@ -97,10 +99,7 @@ export async function apiFetchReport(path, params = {}) {
 
   const res = await fetch(`${API_BASE}${url}`, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeaders(),
-    },
+    headers: buildJsonHeaders(),
   });
 
   const json = await parseResponse(res);
@@ -115,6 +114,17 @@ export async function apiFetchReport(path, params = {}) {
       totalNew: json.summary?.newCount ?? 0,
     },
   };
+}
+
+/** Authenticated fetch for non-JSON responses (e.g. file downloads). */
+export async function apiFetchRaw(path, options = {}) {
+  return fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      ...getAuthHeaders(),
+      ...options.headers,
+    },
+  });
 }
 
 function normalizeReportRow(row) {

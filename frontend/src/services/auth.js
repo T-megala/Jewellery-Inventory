@@ -3,12 +3,7 @@ import { API_BASE } from './api.js'
 const TOKEN_KEY = 'auth_token'
 const USER_KEY = 'auth_user'
 
-/**
- * Placeholder auth service — swap login() with a real API call when backend is ready.
- * Expected backend endpoint: POST /api/auth/login
- * Body: { username, password }
- * Response: { token, user: { id, name, username, role } }
- */
+/** Login only — no access token sent (token is received from this response). */
 export async function login(username, password) {
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
