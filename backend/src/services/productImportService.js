@@ -15,6 +15,15 @@ const FAST_REIMPORT_THRESHOLD = Math.max(
   Number.parseInt(process.env.IMPORT_FAST_REIMPORT_THRESHOLD ?? '5000', 10) || 5000
 );
 
+const logImport = (message, meta = undefined) => {
+  if (meta === undefined) {
+    console.info(`[product-import] ${message}`);
+    return;
+  }
+
+  console.info(`[product-import] ${message}`, meta);
+};
+
 const COMPARE_FIELDS = [
   'tran_no',
   'tran_date',
@@ -259,16 +268,33 @@ const importProductsFromExcel = async (
 
   reportProgress({ phase: 'parsing', progress: 5, message: 'Parsing Excel file' });
 
+  const parseStartedAt = Date.now();
+  logImport('excel parse started', {
+    bufferBytes: Buffer.isBuffer(buffer) ? buffer.length : null,
+  });
+
   let parsed;
 
   try {
-    parsed = parseStockExcel(buffer);
+    parsed = await parseStockExcel(buffer);
   } catch (error) {
+    logImport('excel parse failed', {
+      durationMs: Date.now() - parseStartedAt,
+      error: error.message,
+      stack: error.stack,
+    });
     throw new ApiError(400, error.message);
   }
 
   const validRows = dedupeRowsByTag(parsed.validRows);
   const { totalRowsInFile, skipped } = parsed;
+
+  logImport('excel parse completed', {
+    durationMs: Date.now() - parseStartedAt,
+    totalRowsInFile,
+    validRows: validRows.length,
+    skipped,
+  });
 
   if (validRows.length === 0) {
     return {
@@ -325,6 +351,13 @@ const importProductsFromExcel = async (
         processed: 0,
       });
 
+      const insertStartedAt = Date.now();
+      logImport('bulk insert started', {
+        batchId,
+        rows: validRows.length,
+        batchSize: BATCH_SIZE,
+      });
+
       await runChunked(
         validRows,
         (chunk) => bulkInsert(connection, batchId, chunk),
@@ -341,6 +374,11 @@ const importProductsFromExcel = async (
       );
 
       inserted = validRows.length;
+      logImport('bulk insert completed', {
+        batchId,
+        inserted,
+        durationMs: Date.now() - insertStartedAt,
+      });
     } else if (useFastReimport) {
       fastReimport = true;
 
@@ -350,6 +388,13 @@ const importProductsFromExcel = async (
         message: 'Fast bulk upserting products',
         total: validRows.length,
         processed: 0,
+      });
+
+      const upsertStartedAt = Date.now();
+      logImport('fast bulk upsert started', {
+        batchId,
+        rows: validRows.length,
+        batchSize: BATCH_SIZE,
       });
 
       await runChunked(
@@ -370,6 +415,12 @@ const importProductsFromExcel = async (
       const counts = countInsertVsExisting(validRows, existingTags);
       inserted = counts.inserted;
       updated = counts.updated;
+      logImport('fast bulk upsert completed', {
+        batchId,
+        inserted,
+        updated,
+        durationMs: Date.now() - upsertStartedAt,
+      });
     } else {
       // Use database-side deduplication for efficient comparison
       const classified = await classifyRowsViaDatabase(connection, batchId, validRows);
@@ -389,6 +440,16 @@ const importProductsFromExcel = async (
       });
 
       if (writeRows.length > 0) {
+        const upsertStartedAt = Date.now();
+        logImport('bulk upsert started', {
+          batchId,
+          rows: writeRows.length,
+          inserted,
+          updated,
+          unchanged,
+          batchSize: BATCH_SIZE,
+        });
+
         await runChunked(
           writeRows,
           (chunk) => bulkUpsert(connection, batchId, chunk),
@@ -403,7 +464,20 @@ const importProductsFromExcel = async (
           0,
           100
         );
+
+        logImport('bulk upsert completed', {
+          batchId,
+          inserted,
+          updated,
+          unchanged,
+          durationMs: Date.now() - upsertStartedAt,
+        });
       } else {
+        logImport('bulk upsert skipped', {
+          batchId,
+          unchanged,
+        });
+
         reportProgress({
           phase: 'complete',
           progress: 100,
@@ -423,6 +497,18 @@ const importProductsFromExcel = async (
       message: 'Import completed',
       processed: validRows.length,
       total: validRows.length,
+    });
+
+    logImport('import completed', {
+      batchId,
+      isNewBatch,
+      fastPath,
+      fastReimport,
+      totalRowsInFile,
+      skipped,
+      inserted,
+      updated,
+      unchanged,
     });
 
     return {
@@ -446,8 +532,16 @@ const importProductsFromExcel = async (
   }
 };
 
-const startAsyncImport = (buffer, uploadedBy = null) => {
+const startAsyncImport = (buffer, uploadedBy = null, meta = {}) => {
   const job = importJobStore.createJob();
+  const fileBuffer = Buffer.isBuffer(buffer) ? Buffer.from(buffer) : buffer;
+
+  logImport('async import queued', {
+    jobId: job.id,
+    uploadedBy,
+    fileName: meta.fileName ?? null,
+    fileSize: meta.fileSize ?? (Buffer.isBuffer(fileBuffer) ? fileBuffer.length : null),
+  });
 
   setImmediate(async () => {
     importJobStore.updateJob(job.id, {
@@ -458,7 +552,7 @@ const startAsyncImport = (buffer, uploadedBy = null) => {
     });
 
     try {
-      const result = await importProductsFromExcel(buffer, uploadedBy, {
+      const result = await importProductsFromExcel(fileBuffer, uploadedBy, {
         onProgress: ({
           phase,
           progress,
@@ -487,12 +581,20 @@ const startAsyncImport = (buffer, uploadedBy = null) => {
         result,
       });
     } catch (error) {
+      const failureMessage = error?.message || 'Import failed';
+
+      console.error('[product-import] async import failed', {
+        jobId: job.id,
+        error: failureMessage,
+        stack: error?.stack,
+      });
+
       importJobStore.updateJob(job.id, {
         status: 'failed',
         phase: 'failed',
         progress: 100,
-        message: error.isOperational ? error.message : 'Import failed',
-        error: error.isOperational ? error.message : 'Import failed',
+        message: failureMessage,
+        error: failureMessage,
       });
     }
   });

@@ -22,3 +22,8 @@ export const getDashboard = async (req, res) => {
   const data = await dashboardService.getDashboard();
   sendSuccess(res, data, 'Dashboard data fetched successfully');
 };
+
+export const getTopSoldProducts = async (req, res) => {
+  const result = await dashboardService.getTopSoldProducts();
+  sendSuccess(res, result.products, 'Top sold products fetched successfully');
+};

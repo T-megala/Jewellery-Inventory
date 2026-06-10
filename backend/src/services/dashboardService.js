@@ -1,5 +1,13 @@
 import pool from "../config/database.js";
+import ApiError from "../utils/ApiError.js";
 import { getActiveBatchId } from "./productBatchService.js";
+
+const PRODUCT_TAG_FILTER = `
+  tag_packet_no IS NOT NULL
+  AND TRIM(tag_packet_no) != ''
+  AND product IS NOT NULL
+  AND TRIM(product) != ''
+`;
 
 const formatDateTime = (value) => {
   if (!value) return null;
@@ -187,8 +195,83 @@ const getDashboard = async () => {
   };
 };
 
+const getLatestTwoBatchIds = async () => {
+  const [rows] = await pool.execute(
+    `SELECT id, batch_date, uploaded_at
+     FROM product_upload_batches
+     ORDER BY id DESC
+     LIMIT 2`,
+  );
+
+  return rows;
+};
+
+const getTopSoldProducts = async () => {
+  const batches = await getLatestTwoBatchIds();
+
+  if (batches.length < 2) {
+    throw new ApiError(
+      400,
+      "At least two imported batches are required to generate sales comparison.",
+    );
+  }
+
+  const [latestBatch, previousBatch] = batches;
+  const latestBatchId = latestBatch.id;
+  const previousBatchId = previousBatch.id;
+
+  const [rows] = await pool.execute(
+    `SELECT
+       productName,
+       yesterdayCount,
+       todayCount,
+       soldCount
+     FROM (
+       SELECT
+         old_data.product AS productName,
+         old_data.total_count AS yesterdayCount,
+         COALESCE(new_data.total_count, 0) AS todayCount,
+         CASE
+           WHEN old_data.total_count > COALESCE(new_data.total_count, 0)
+           THEN old_data.total_count - COALESCE(new_data.total_count, 0)
+           ELSE 0
+         END AS soldCount
+       FROM (
+         SELECT product, COUNT(*) AS total_count
+         FROM products
+         WHERE batch_id = ?
+           AND ${PRODUCT_TAG_FILTER}
+         GROUP BY product
+       ) old_data
+       LEFT JOIN (
+         SELECT product, COUNT(*) AS total_count
+         FROM products
+         WHERE batch_id = ?
+           AND ${PRODUCT_TAG_FILTER}
+         GROUP BY product
+       ) new_data ON old_data.product = new_data.product
+     ) sales
+     WHERE soldCount > 0
+     ORDER BY soldCount DESC, productName ASC
+     LIMIT 10`,
+    [previousBatchId, latestBatchId],
+  );
+
+  return {
+    latestBatch: await getBatchInfo(latestBatchId),
+    previousBatch: await getBatchInfo(previousBatchId),
+    products: rows.map((row) => ({
+      productName: row.productName,
+      yesterdayCount: Number(row.yesterdayCount ?? 0),
+      todayCount: Number(row.todayCount ?? 0),
+      soldCount: Number(row.soldCount ?? 0),
+    })),
+  };
+};
+
 export default {
   getInventorySummary,
   getVerificationSummary,
   getDashboard,
+  getTopSoldProducts,
 };

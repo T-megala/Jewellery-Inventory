@@ -159,7 +159,7 @@ const exportReport = async (filters, exportType) => {
   }
 
   return {
-    buffer: buildExcelBuffer(data, summary, filters),
+    buffer: await buildExcelBuffer(data, summary, filters),
     contentType:
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     fileName: getExportFileName("excel"),

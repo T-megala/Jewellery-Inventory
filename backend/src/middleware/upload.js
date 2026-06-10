@@ -6,10 +6,9 @@ const storage = multer.memoryStorage();
 const fileFilter = (req, file, cb) => {
   const allowedMimeTypes = [
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'application/vnd.ms-excel',
   ];
 
-  const allowedExtensions = ['.xlsx', '.xls'];
+  const allowedExtensions = ['.xlsx'];
   const extension = file.originalname.toLowerCase().slice(file.originalname.lastIndexOf('.'));
 
   if (
@@ -20,7 +19,7 @@ const fileFilter = (req, file, cb) => {
     return;
   }
 
-  cb(new ApiError(400, 'Only Excel files (.xlsx, .xls) are allowed'), false);
+  cb(new ApiError(400, 'Only Excel files (.xlsx) are allowed'), false);
 };
 
 const upload = multer({

@@ -37,9 +37,20 @@ export const importProducts = async (req, res) => {
     : null;
 
   if (isAsyncImport(req)) {
+    console.info('[product-import] upload received', {
+      fileName: req.file.originalname,
+      fileSize: req.file.size,
+      mimeType: req.file.mimetype,
+      uploadedBy,
+    });
+
     const job = productImportService.startAsyncImport(
       req.file.buffer,
-      uploadedBy
+      uploadedBy,
+      {
+        fileName: req.file.originalname,
+        fileSize: req.file.size,
+      },
     );
 
     return res.status(202).json({

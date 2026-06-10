@@ -48,6 +48,14 @@ export async function startAsyncImport(file) {
   const formData = new FormData();
   formData.append('file', file);
 
+  const token = getToken();
+
+  console.info('[import] starting upload', {
+    fileName: file?.name,
+    fileSize: file?.size,
+    fileType: file?.type,
+  });
+
   const res = await fetch(`${API_BASE}/products/import?async=true`, {
     method: 'POST',
     headers: {
@@ -59,9 +67,11 @@ export async function startAsyncImport(file) {
   const json = await parseJsonResponse(res);
 
   if (!res.ok || res.status !== 202) {
+    console.error('[import] upload failed', json);
     throw new Error(json.message || json.error || 'Failed to start import');
   }
 
+  console.info('[import] upload accepted', json.data);
   return json.data;
 }
 
@@ -105,15 +115,27 @@ export async function uploadStockExcel(file, { onProgress } = {}) {
 
     const status = await getImportStatus(jobId);
 
+    console.info('[import] status', {
+      jobId,
+      status: status.status,
+      phase: status.phase,
+      progress: status.progress,
+      message: status.message,
+      processed: status.processed,
+      total: status.total,
+    });
+
     if (onProgress) {
       onProgress(status);
     }
 
     if (status.status === 'completed') {
+      console.info('[import] completed', status.result);
       return normalizeImportResult(status.result);
     }
 
     if (status.status === 'failed') {
+      console.error('[import] failed', status);
       throw new Error(status.error || status.message || 'Import failed');
     }
   }

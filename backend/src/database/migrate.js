@@ -1,83 +1,68 @@
-import { fileURLToPath } from "node:url";
+import "dotenv/config";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import pool from "../config/database.js";
 
-const columnExists = async (connection, tableName, columnName) => {
-  const [rows] = await connection.execute(
-    `SELECT COUNT(*) AS count
-     FROM information_schema.COLUMNS
-     WHERE TABLE_SCHEMA = DATABASE()
-       AND TABLE_NAME = ?
-       AND COLUMN_NAME = ?`,
-    [tableName, columnName],
-  );
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-  return Number(rows[0].count) > 0;
-};
+const files = [
+  "001_product_upload_batches.sql",
+  "002_create_users_table.sql",
+  "003_create_stock_verification.sql",
+  "004_alter_products_batch.sql",
+  "005_indexes_products.sql",
+  "006_indexes_stock_verification.sql",
+];
 
-const runMigration = async () => {
-  const connection = await pool.getConnection();
+const SKIPPABLE_ERROR_CODES = new Set([
+  "ER_TABLE_EXISTS_ERR",
+  "ER_DUP_FIELDNAME",
+  "ER_DUP_KEYNAME",
+  "ER_FK_DUP_NAME",
+  "ER_CANT_CREATE_TABLE",
+]);
 
-  try {
-    console.log("running database migration...");
+async function runSqlFile(file) {
+  const sqlPath = path.join(__dirname, "migrations", file);
+  const sql = fs.readFileSync(sqlPath, "utf8");
+  const statements = sql
+    .split(";")
+    .map((s) => s.replace(/--.*$/gm, "").trim())
+    .filter((s) => s.length > 0);
 
-    await connection.execute(`
-      CREATE TABLE IF NOT EXISTS product_upload_batches (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        batch_date DATE NOT NULL,
-        uploaded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        uploaded_by VARCHAR(100) NULL,
-        is_active TINYINT(1) NOT NULL DEFAULT 1,
-        INDEX idx_batch_date (batch_date),
-        INDEX idx_is_active (is_active)
-      )
-    `);
-    console.log("ok: product_upload_batches");
+  for (const statement of statements) {
+    const preview = statement.replace(/\s+/g, " ").slice(0, 100);
+    process.stdout.write(`  running: ${preview}...\n`);
 
-    if (!(await columnExists(connection, "products", "batch_id"))) {
-      await connection.execute(`
-        ALTER TABLE products
-        ADD COLUMN batch_id INT NULL
-      `);
-
-      await connection.execute(`
-        ALTER TABLE products
-        ADD CONSTRAINT fk_products_batch
-          FOREIGN KEY (batch_id) REFERENCES product_upload_batches(id)
-      `);
-      console.log("ok: products.batch_id");
+    try {
+      await pool.query(statement);
+      process.stdout.write(`  done\n`);
+    } catch (error) {
+      if (SKIPPABLE_ERROR_CODES.has(error.code)) {
+        process.stdout.write(`  skip (${error.code})\n`);
+        continue;
+      }
+      throw error;
     }
-
-    await connection.execute(`
-      CREATE TABLE IF NOT EXISTS users (
-        id         INT AUTO_INCREMENT PRIMARY KEY,
-        username   VARCHAR(100) NOT NULL UNIQUE,
-        password   VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    console.log("ok: users");
-
-    console.log("database migration completed");
-  } finally {
-    connection.release();
-  }
-};
-
-const isMainModule = process.argv[1] === fileURLToPath(import.meta.url);
-
-if (isMainModule) {
-  try {
-    await runMigration();
-    process.exitCode = 0;
-  } catch (error) {
-    console.error("migration failed:", error.message);
-    if (error.sql) {
-      console.error(error.sql);
-    }
-    process.exitCode = 1;
-  } finally {
-    await pool.end();
   }
 }
 
-export default runMigration;
+async function main() {
+  for (const file of files) {
+    try {
+      await runSqlFile(file);
+      process.stdout.write(`OK: ${file}\n`);
+    } catch (error) {
+      process.stderr.write(`FAIL: ${file} ${error.message}\n`);
+      throw error;
+    }
+  }
+
+  await pool.end();
+}
+
+main().catch((error) => {
+  process.stderr.write(`${error.message}\n`);
+  process.exit(1);
+});

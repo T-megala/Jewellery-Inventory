@@ -51,7 +51,7 @@ export default function Import() {
       || file.name.endsWith('.xls')
 
     if (!isExcel) {
-      setError('Please choose an Excel file (.xlsx or .xls).')
+      setError('Please choose a valid .xlsx Excel file.')
       setSelectedFile(null)
       setResult(null)
       setImportStatus(null)
@@ -150,7 +150,7 @@ export default function Import() {
               </svg>
             </div>
             <p className="import-drop__label">Drop file here or click to browse</p>
-            <p className="import-drop__hint">.xlsx or .xls only</p>
+            <p className="import-drop__hint">.xlsx only</p>
           </div>
         </div>
 
