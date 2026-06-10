@@ -17,11 +17,6 @@ function formatCount(value) {
   return Number(value || 0).toLocaleString('en-IN')
 }
 
-function formatValue(value) {
-  if (value === null || value === undefined || value === '') return '—'
-  return value
-}
-
 function truncate(text, max = 18) {
   const str = String(text || '')
   return str.length > max ? `${str.slice(0, max)}…` : str
@@ -147,31 +142,6 @@ function ProductBarChart({ data }) {
           </li>
         )
       })}
-    </ul>
-  )
-}
-
-function RecentStockList({ rows }) {
-  if (!rows.length) {
-    return <p className="analytics-empty">No recent stock rows yet.</p>
-  }
-
-  return (
-    <ul className="recent-stock">
-      {rows.map((row) => (
-        <li key={row.id} className="recent-stock__row">
-          <div className="recent-stock__info">
-            <p className="recent-stock__product" title={formatValue(row.product)}>
-              {formatValue(row.product)}
-            </p>
-            <p className="recent-stock__sub" title={formatValue(row.subProduct)}>
-              {formatValue(row.subProduct)}
-            </p>
-          </div>
-          <span className="recent-stock__counter">{formatValue(row.counterName)}</span>
-          <span className="recent-stock__tag">{formatValue(row.tagPacketNo)}</span>
-        </li>
-      ))}
     </ul>
   )
 }
@@ -347,7 +317,6 @@ export default function Dashboard() {
   const stats = buildStats(totals)
   const byProduct = summary?.byProduct ?? []
   const byCounter = summary?.byCounter ?? []
-  const recentTags = summary?.recentTags ?? []
   const batch = summary?.batch
   const productPieData = useMemo(
     () => buildPieSlices(
@@ -501,23 +470,6 @@ export default function Dashboard() {
             <ProductBarChart data={productBarData} />
           </AnalyticsTile>
         </div>
-      </section>
-
-      {/* Recent Stock */}
-      <section className="recent-stock-card">
-        <header className="recent-stock-card__head">
-          <div>
-            <h2>Recent Stock</h2>
-            <p>Latest entries — product, sub-product and counter</p>
-          </div>
-        </header>
-        <div className="recent-stock-card__cols">
-          <span>Product</span>
-          <span>Sub Product</span>
-          <span>Counter</span>
-          <span>Tag No</span>
-        </div>
-        <RecentStockList rows={recentTags} />
       </section>
 
       {/* Quick navigation */}
