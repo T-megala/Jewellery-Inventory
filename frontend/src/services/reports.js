@@ -17,26 +17,6 @@ export function fetchStockVerificationReport(filters = {}) {
   return apiFetchReport('/stock-verification/report', buildReportParams(filters));
 }
 
-export async function fetchAllReportRows(filters = {}) {
-  const rows = [];
-  let page = 1;
-  let totalPages = 1;
-
-  while (page <= totalPages) {
-    const result = await fetchStockVerificationReport({
-      ...filters,
-      page,
-      limit: 100,
-    });
-
-    rows.push(...result.rows);
-    totalPages = result.pagination?.totalPages ?? 1;
-    page += 1;
-  }
-
-  return { rows };
-}
-
 function parseFilename(res, fallback) {
   const disposition = res.headers.get('Content-Disposition') || '';
   const match = disposition.match(/filename="?([^"]+)"?/i);
@@ -75,6 +55,8 @@ export async function downloadReportExport(filters = {}, exportType) {
   const link = document.createElement('a');
   link.href = url;
   link.download = filename;
+  document.body.appendChild(link);
   link.click();
+  link.remove();
   URL.revokeObjectURL(url);
 }

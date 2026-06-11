@@ -268,22 +268,10 @@
   color: var(--color-text-muted);
 }
 
-.stock-pagination {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 16px 24px 20px;
-  border-top: 1px solid #f0ebe3;
+.stock-table-pagination {
+  padding: 0 24px 20px;
+  border-top: none;
   background: #fffefb;
-}
-
-.stock-pagination__info {
-  min-width: 120px;
-  text-align: center;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--color-text-muted);
 }
 
 .stock-btn {

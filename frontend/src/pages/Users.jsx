@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
+import TablePagination from '../components/TablePagination.jsx'
 import {
   createUser,
   deleteUser,
@@ -7,6 +8,8 @@ import {
   updateUser,
 } from '../services/users.js'
 import './Users.css'
+
+const DEFAULT_PAGE_SIZE = 10
 
 function formatDate(value) {
   if (!value) return '—'
@@ -24,6 +27,8 @@ function formatDate(value) {
 export default function Users() {
   const [users, setUsers] = useState([])
   const [searchInput, setSearchInput] = useState('')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
 
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -88,6 +93,23 @@ export default function Users() {
     if (!term) return users
     return users.filter((user) => user.username.toLowerCase().includes(term))
   }, [users, searchInput])
+
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize))
+
+  const paginatedUsers = useMemo(() => {
+    const start = (page - 1) * pageSize
+    return filteredUsers.slice(start, start + pageSize)
+  }, [filteredUsers, page, pageSize])
+
+  useEffect(() => {
+    setPage(1)
+  }, [searchInput, pageSize])
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages)
+    }
+  }, [page, totalPages])
 
   function resetForm() {
     setUsername('')
@@ -275,9 +297,9 @@ export default function Users() {
                 </tr>
               )}
 
-              {!loading && filteredUsers.map((user, index) => (
+              {!loading && paginatedUsers.map((user, index) => (
                 <tr key={user.id} className={editingId === user.id ? 'users-table__row--active' : ''}>
-                  <td>{index + 1}</td>
+                  <td>{(page - 1) * pageSize + index + 1}</td>
                   <td>{user.username}</td>
                   <td>{formatDate(user.createdAt)}</td>
                   <td>
@@ -305,6 +327,20 @@ export default function Users() {
             </tbody>
           </table>
         </div>
+
+        {!loading && filteredUsers.length > 0 && (
+          <TablePagination
+            className="users-table-pagination"
+            page={page}
+            pageSize={pageSize}
+            totalPages={totalPages}
+            totalRecords={filteredUsers.length}
+            rowCount={paginatedUsers.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            disabled={loading || saving || Boolean(deletingId)}
+          />
+        )}
       </section>
 
       {showForm && createPortal(

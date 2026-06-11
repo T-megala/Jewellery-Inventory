@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
+import TablePagination from '../components/TablePagination.jsx'
 import { fetchProductList } from '../services/stock.js'
 import './Stock.css'
 
-const PAGE_LIMIT = 10
+const DEFAULT_PAGE_SIZE = 10
 const SEARCH_DEBOUNCE_MS = 400
 
 function formatValue(value) {
@@ -16,19 +17,20 @@ export default function Stock() {
   const [rows, setRows] = useState([])
   const [pagination, setPagination] = useState(null)
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  const loadStock = useCallback(async (pageNum, searchTerm) => {
+  const loadStock = useCallback(async (pageNum, searchTerm, limit = pageSize) => {
     setLoading(true)
     setError('')
 
     try {
       const result = await fetchProductList({
         page: pageNum,
-        limit: PAGE_LIMIT,
+        limit,
         search: searchTerm || undefined,
       })
       setRows(result.rows)
@@ -41,7 +43,7 @@ export default function Stock() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [pageSize])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -57,6 +59,11 @@ export default function Stock() {
 
   function handleClearSearch() {
     setSearchInput('')
+  }
+
+  function handlePageSizeChange(nextSize) {
+    setPageSize(nextSize)
+    loadStock(1, search, nextSize)
   }
 
   return (
@@ -151,7 +158,7 @@ export default function Stock() {
                 <tbody>
                   {rows.map((row, index) => (
                     <tr key={row.id}>
-                      <td className="stock-cell--sno">{(page - 1) * PAGE_LIMIT + index + 1}</td>
+                      <td className="stock-cell--sno">{(page - 1) * pageSize + index + 1}</td>
                       <td>{formatValue(row.tranNo)}</td>
                       <td>{formatValue(row.tranDate)}</td>
                       <td>{formatValue(row.product)}</td>
@@ -169,28 +176,18 @@ export default function Stock() {
               </table>
             </div>
 
-            {pagination && pagination.totalPages > 1 && (
-              <div className="stock-pagination">
-                <button
-                  type="button"
-                  className="stock-btn"
-                  onClick={() => loadStock(page - 1, search)}
-                  disabled={loading || page <= 1}
-                >
-                  Previous
-                </button>
-                <span className="stock-pagination__info">
-                  Page {pagination.page} of {pagination.totalPages}
-                </span>
-                <button
-                  type="button"
-                  className="stock-btn"
-                  onClick={() => loadStock(page + 1, search)}
-                  disabled={loading || page >= pagination.totalPages}
-                >
-                  Next
-                </button>
-              </div>
+            {pagination && (
+              <TablePagination
+                className="stock-table-pagination"
+                page={page}
+                pageSize={pageSize}
+                totalPages={pagination.totalPages}
+                totalRecords={pagination.totalRecords}
+                rowCount={rows.length}
+                onPageChange={(nextPage) => loadStock(nextPage, search)}
+                onPageSizeChange={handlePageSizeChange}
+                disabled={loading}
+              />
             )}
           </>
         )}

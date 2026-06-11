@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fetchCenters, fetchProducts, fetchSubProducts } from '../services/products.js'
 import {
-  fetchAllReportRows,
+  downloadReportExport,
   fetchStockVerificationReport,
 } from '../services/reports.js'
-import { exportReportToExcel, exportReportToPdf } from '../utils/exportReport.js'
+import TablePagination from '../components/TablePagination.jsx'
 import './Reports.css'
 
-const PAGE_LIMIT = 20
+const DEFAULT_PAGE_SIZE = 20
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All Statuses' },
@@ -107,6 +107,7 @@ export default function Reports() {
   const [summary, setSummary] = useState(null)
   const [pagination, setPagination] = useState(null)
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [hasSearched, setHasSearched] = useState(false)
 
   const [loadingFilters, setLoadingFilters] = useState(true)
@@ -227,7 +228,7 @@ export default function Reports() {
     return true
   }
 
-  async function loadReport(nextPage = 1) {
+  async function loadReport(nextPage = 1, limit = pageSize) {
     if (!validateDates()) return
 
     setLoadingReport(true)
@@ -237,7 +238,7 @@ export default function Reports() {
       const result = await fetchStockVerificationReport({
         ...filterParams,
         page: nextPage,
-        limit: PAGE_LIMIT,
+        limit,
       })
       setRows(result.rows)
       setSummary(result.summary)
@@ -249,6 +250,11 @@ export default function Reports() {
     } finally {
       setLoadingReport(false)
     }
+  }
+
+  function handlePageSizeChange(nextSize) {
+    setPageSize(nextSize)
+    loadReport(1, nextSize)
   }
 
   async function handleGenerate(e) {
@@ -267,25 +273,19 @@ export default function Reports() {
     setSummary(null)
     setPagination(null)
     setPage(1)
+    setPageSize(DEFAULT_PAGE_SIZE)
     setHasSearched(false)
     setError('')
   }
 
-  async function handleExport(exportFn, label) {
+  async function handleExport(exportType, label) {
     if (!hasSearched || !validateDates()) return
 
     setExporting(true)
     setError('')
 
     try {
-      const { rows } = await fetchAllReportRows(filterParams)
-
-      if (!rows.length) {
-        setError('No records to export for the selected filters.')
-        return
-      }
-
-      exportFn(rows)
+      await downloadReportExport(filterParams, exportType)
     } catch (err) {
       setError(err.message || `Failed to export ${label}`)
     } finally {
@@ -294,20 +294,12 @@ export default function Reports() {
   }
 
   async function handleExportExcel() {
-    await handleExport(exportReportToExcel, 'Excel')
+    await handleExport('excel', 'Excel')
   }
 
   async function handleExportPdf() {
-    await handleExport(exportReportToPdf, 'PDF')
+    await handleExport('pdf', 'PDF')
   }
-
-  const rowRange = pagination && rows.length
-    ? {
-        start: (page - 1) * PAGE_LIMIT + 1,
-        end: (page - 1) * PAGE_LIMIT + rows.length,
-        total: pagination.totalRecords,
-      }
-    : null
 
   return (
     <div className="reports-page">
@@ -499,30 +491,18 @@ export default function Reports() {
                 </table>
               </div>
 
-              {pagination && rowRange && pagination.totalPages > 1 && (
-                <div className="reports-pagination">
-                  <button
-                    type="button"
-                    className="report-btn report-btn--ghost"
-                    onClick={() => loadReport(page - 1)}
-                    disabled={loadingReport || page <= 1}
-                  >
-                    Previous
-                  </button>
-                  <span className="reports-pagination__info">
-                    {rowRange.start.toLocaleString('en-IN')}–{rowRange.end.toLocaleString('en-IN')}
-                    {' of '}
-                    {rowRange.total.toLocaleString('en-IN')}
-                  </span>
-                  <button
-                    type="button"
-                    className="report-btn report-btn--ghost"
-                    onClick={() => loadReport(page + 1)}
-                    disabled={loadingReport || page >= pagination.totalPages}
-                  >
-                    Next
-                  </button>
-                </div>
+              {pagination && (
+                <TablePagination
+                  className="reports-table-pagination"
+                  page={page}
+                  pageSize={pageSize}
+                  totalPages={pagination.totalPages}
+                  totalRecords={pagination.totalRecords}
+                  rowCount={rows.length}
+                  onPageChange={(nextPage) => loadReport(nextPage)}
+                  onPageSizeChange={handlePageSizeChange}
+                  disabled={loadingReport}
+                />
               )}
             </>
           )}
