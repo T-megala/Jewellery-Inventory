@@ -4,6 +4,7 @@ import { parseStockExcel } from '../utils/excelParser.js';
 import { hasProductChanged } from '../utils/productBatchHelper.js';
 import { resolveActiveBatch } from '../services/productBatchService.js';
 import importJobStore from './importJobStore.js';
+import { refreshDailySalesSummary } from './dailySalesSummaryService.js';
 
 const BATCH_SIZE = Math.max(
   500,
@@ -510,6 +511,15 @@ const importProductsFromExcel = async (
       updated,
       unchanged,
     });
+
+    try {
+      await refreshDailySalesSummary(batchId);
+    } catch (summaryError) {
+      console.error('[product-import] daily sales summary refresh failed', {
+        batchId,
+        error: summaryError.message,
+      });
+    }
 
     return {
       batchId,

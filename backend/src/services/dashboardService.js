@@ -1,6 +1,7 @@
 import pool from "../config/database.js";
 import ApiError from "../utils/ApiError.js";
 import { getActiveBatchId } from "./productBatchService.js";
+import dailySalesSummaryService from "./dailySalesSummaryService.js";
 
 const PRODUCT_TAG_FILTER = `
   tag_packet_no IS NOT NULL
@@ -269,9 +270,79 @@ const getTopSoldProducts = async () => {
   };
 };
 
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+const toDateKey = (value) => {
+  if (value instanceof Date) {
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+  }
+
+  return String(value).slice(0, 10);
+};
+
+const formatDayLabel = (batchDate) => {
+  const dateKey = toDateKey(batchDate);
+  const todayKey = toDateKey(new Date());
+
+  if (dateKey === todayKey) {
+    return "Today";
+  }
+
+  const date = new Date(`${dateKey}T00:00:00`);
+
+  if (Number.isNaN(date.getTime())) {
+    return dateKey;
+  }
+
+  return DAY_LABELS[date.getDay()];
+};
+
+const getDayWiseSales = async ({ period = "week", counter = "all" } = {}) => {
+  const validatedPeriod = dailySalesSummaryService.validatePeriod(period);
+
+  if (!validatedPeriod) {
+    throw new ApiError(400, 'period must be "week" or "month"');
+  }
+
+  const counterName = dailySalesSummaryService.resolveCounterFilter(counter);
+  const intervalDays = validatedPeriod === "month" ? 30 : 7;
+
+  const [rows] = await pool.execute(
+    `SELECT
+       batch_date,
+       SUM(estimated_sold) AS estimated_sold
+     FROM daily_sales_summary
+     WHERE counter_name = ?
+       AND batch_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+     GROUP BY batch_date
+     ORDER BY batch_date ASC`,
+    [counterName, intervalDays],
+  );
+
+  const data = rows.map((row) => ({
+    date: toDateKey(row.batch_date),
+    day: formatDayLabel(row.batch_date),
+    soldPieces: Number(row.estimated_sold ?? 0),
+  }));
+
+  const totalSoldPieces = data.reduce(
+    (sum, row) => sum + row.soldPieces,
+    0,
+  );
+
+  return {
+    period: validatedPeriod,
+    counter: counterName === dailySalesSummaryService.ALL_COUNTER ? "all" : counterName,
+    totalSoldPieces,
+    data,
+  };
+};
+
 export default {
   getInventorySummary,
   getVerificationSummary,
   getDashboard,
   getTopSoldProducts,
+  getDayWiseSales,
 };

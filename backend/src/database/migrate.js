@@ -13,6 +13,7 @@ const files = [
   "004_alter_products_batch.sql",
   "005_indexes_products.sql",
   "006_indexes_stock_verification.sql",
+  "007_create_daily_sales_summary.sql",
 ];
 
 const SKIPPABLE_ERROR_CODES = new Set([
