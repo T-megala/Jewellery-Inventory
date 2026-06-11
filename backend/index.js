@@ -16,39 +16,41 @@ const app = express();
 app.use(express.json());
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
+  ? process.env.ALLOWED_ORIGINS.split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean)
   : [];
 
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (allowedOrigins.length === 0) {
-    res.header('Access-Control-Allow-Origin', '*');
+    res.header("Access-Control-Allow-Origin", "*");
   } else if (origin && allowedOrigins.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin);
+    res.header("Access-Control-Allow-Origin", origin);
   }
 
   res.header(
-    'Access-Control-Allow-Headers',
-    'Origin, X-Requested-With, Content-Type, Accept, Authorization',
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization",
   );
   res.header(
-    'Access-Control-Allow-Methods',
-    'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, PATCH, DELETE, OPTIONS",
   );
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     return res.sendStatus(204);
   }
   next();
 });
 
-app.get('/', (req, res) => {
-  res.send('Hello World');
+app.get("/", (req, res) => {
+  res.send("Hello World");
 });
 
 app.use("/api/v1", authRoutes);
-app.use("/api/v1", authenticateApi);
 app.use("/api/v1", productRoutes);
 app.use("/api/v1", stockVerificationRoutes);
+app.use("/api/v1", authenticateApi);
 app.use("/api/v1", stockVerificationReportRoutes);
 app.use("/api/v1", dropdownRoutes);
 app.use("/api/v1", productBatchRoutes);

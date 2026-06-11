@@ -95,7 +95,9 @@ const getReport = async (filters, pagination) => {
             svd.product_name, svd.sub_product_name, svd.center_name,
             svd.tag_no, svd.status, svd.created_at
      ${baseFrom}
-     ORDER BY sv.verification_date DESC, svd.id DESC
+     ORDER BY
+     FIELD(svd.status, 'FOUND', 'NEW', 'MISSING'),
+     sv.verification_date DESC, svd.id DESC
      LIMIT ${limit} OFFSET ${offset}`,
     params,
   );
