@@ -998,6 +998,59 @@ function buildStats(totals) {
   ]
 }
 
+function DashboardSkeleton() {
+  return (
+    <div className="dashboard">
+      {/* Hero skeleton */}
+      <section className="skeleton-hero" aria-hidden="true">
+        <div className="skeleton-hero__content">
+          <span className="skeleton skeleton-hero__badge" />
+          <span className="skeleton skeleton-hero__title-line skeleton-hero__title-line--short" />
+          <span className="skeleton skeleton-hero__title-line skeleton-hero__title-line--long" />
+          <span className="skeleton skeleton-hero__subtitle" />
+        </div>
+        <div className="skeleton-hero__rates">
+          <span className="skeleton skeleton-hero__rate-label" />
+          <div className="skeleton-hero__rate-card">
+            <span className="skeleton skeleton-hero__rate-icon" />
+            <div className="skeleton-hero__rate-info">
+              <span className="skeleton skeleton-hero__rate-value" />
+              <span className="skeleton skeleton-hero__rate-sub" />
+            </div>
+          </div>
+          <div className="skeleton-hero__rate-card">
+            <span className="skeleton skeleton-hero__rate-icon" />
+            <div className="skeleton-hero__rate-info">
+              <span className="skeleton skeleton-hero__rate-value" />
+              <span className="skeleton skeleton-hero__rate-sub" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Section header skeleton */}
+      <div className="skeleton-section-header" aria-hidden="true">
+        <span className="skeleton skeleton-section-header__title" />
+        <span className="skeleton skeleton-section-header__badge" />
+      </div>
+
+      {/* Stat cards skeleton */}
+      <div className="skeleton-stats" aria-hidden="true">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="skeleton-stat">
+            <div className="skeleton-stat__top">
+              <span className="skeleton skeleton-stat__icon" />
+              <span className="skeleton skeleton-stat__label" />
+            </div>
+            <span className="skeleton skeleton-stat__value" />
+            <span className="skeleton skeleton-stat__hint" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const [summary, setSummary] = useState(null)
   const [topSoldProducts, setTopSoldProducts] = useState([])
@@ -1167,11 +1220,7 @@ export default function Dashboard() {
   )
 
   if (loading) {
-    return (
-      <div className="dashboard">
-        <p className="dashboard-status">Loading inventory data…</p>
-      </div>
-    )
+    return <DashboardSkeleton />
   }
 
   if (error) {
