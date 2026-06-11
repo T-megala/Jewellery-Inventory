@@ -225,10 +225,36 @@ export const validatePeriod = (periodParam) => {
   return period;
 };
 
+const DAILY_IMPORT_COUNTERS = new Set([
+  ALL_COUNTER,
+  "SHOWROOM STOCK",
+  "SAFE STOCK",
+  "Unassigned",
+]);
+
+export const validateDailyImportCounter = (counterParam) => {
+  const raw = String(counterParam ?? ALL_COUNTER).trim();
+
+  if (!raw) {
+    return ALL_COUNTER;
+  }
+
+  if (raw.toLowerCase() === "all") {
+    return ALL_COUNTER;
+  }
+
+  if (DAILY_IMPORT_COUNTERS.has(raw)) {
+    return raw;
+  }
+
+  return null;
+};
+
 export default {
   refreshDailySalesSummary,
   backfillAllDailySalesSummaries,
   resolveCounterFilter,
   validatePeriod,
+  validateDailyImportCounter,
   ALL_COUNTER,
 };

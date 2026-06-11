@@ -341,10 +341,117 @@ const getDayWiseSales = async ({ period = "week", counter = "all" } = {}) => {
   };
 };
 
+const DAILY_IMPORT_PERIOD_LIMITS = {
+  week: 7,
+  month: 30,
+};
+
+const buildDailyImportQuery = ({
+  counterName,
+  limit,
+  fromDate,
+  toDate,
+  batchFrom,
+  batchTo,
+}) => {
+  const conditions = ["counter_name = ?"];
+  const params = [counterName];
+
+  if (fromDate) {
+    conditions.push("batch_date >= ?");
+    params.push(fromDate);
+  }
+
+  if (toDate) {
+    conditions.push("batch_date <= ?");
+    params.push(toDate);
+  }
+
+  if (batchFrom) {
+    conditions.push("batch_id >= ?");
+    params.push(batchFrom);
+  }
+
+  if (batchTo) {
+    conditions.push("batch_id <= ?");
+    params.push(batchTo);
+  }
+
+  return {
+    sql: `SELECT
+            batch_id,
+            batch_date,
+            total_stock,
+            estimated_sold
+          FROM daily_sales_summary
+          WHERE ${conditions.join(" AND ")}
+          ORDER BY batch_id DESC
+          LIMIT ${limit}`,
+    params,
+  };
+};
+
+const getDailyImports = async ({
+  period = "week",
+  counter = dailySalesSummaryService.ALL_COUNTER,
+  fromDate,
+  toDate,
+  batchFrom,
+  batchTo,
+} = {}) => {
+  const validatedPeriod = dailySalesSummaryService.validatePeriod(period);
+
+  if (!validatedPeriod) {
+    throw new ApiError(
+      400,
+      "Invalid period. Allowed values are week or month.",
+    );
+  }
+
+  const counterName = dailySalesSummaryService.validateDailyImportCounter(counter);
+
+  if (!counterName) {
+    throw new ApiError(
+      400,
+      "Invalid counter. Allowed values are ALL, SHOWROOM STOCK, SAFE STOCK, or Unassigned.",
+    );
+  }
+
+  const limit = DAILY_IMPORT_PERIOD_LIMITS[validatedPeriod];
+  const { sql, params } = buildDailyImportQuery({
+    counterName,
+    limit,
+    fromDate,
+    toDate,
+    batchFrom,
+    batchTo,
+  });
+
+  const [rows] = await pool.execute(sql, params);
+
+  const data = rows
+    .slice()
+    .reverse()
+    .map((row) => ({
+      batchId: Number(row.batch_id),
+      date: toDateKey(row.batch_date),
+      day: formatDayLabel(row.batch_date),
+      totalStock: Number(row.total_stock ?? 0),
+      estimatedSold: Number(row.estimated_sold ?? 0),
+    }));
+
+  return {
+    period: validatedPeriod,
+    counter: counterName,
+    data,
+  };
+};
+
 export default {
   getInventorySummary,
   getVerificationSummary,
   getDashboard,
   getTopSoldProducts,
   getDayWiseSales,
+  getDailyImports,
 };

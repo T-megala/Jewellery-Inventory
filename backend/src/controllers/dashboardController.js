@@ -44,3 +44,18 @@ export const getDayWiseSales = async (req, res) => {
     data: result.data,
   });
 };
+
+export const getDailyImports = async (req, res) => {
+  const period = getRequestParam(req, 'period') ?? 'week';
+  const counter = getRequestParam(req, 'counter') ?? 'ALL';
+
+  const result = await dashboardService.getDailyImports({ period, counter });
+
+  res.status(200).json({
+    success: true,
+    message: 'Daily import trend fetched successfully',
+    period: result.period,
+    counter: result.counter,
+    data: result.data,
+  });
+};
