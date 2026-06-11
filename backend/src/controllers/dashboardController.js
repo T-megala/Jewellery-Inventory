@@ -25,8 +25,15 @@ export const getDashboard = async (req, res) => {
 };
 
 export const getTopSoldProducts = async (req, res) => {
-  const result = await dashboardService.getTopSoldProducts();
-  sendSuccess(res, result.products, 'Top sold products fetched successfully');
+  const period = getRequestParam(req, 'period') ?? 'all';
+  const result = await dashboardService.getTopSoldProducts({ period });
+
+  res.status(200).json({
+    success: true,
+    message: 'Top sold products fetched successfully',
+    period: result.period,
+    data: result.products,
+  });
 };
 
 export const getDayWiseSales = async (req, res) => {

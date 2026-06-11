@@ -1206,7 +1206,7 @@ export default function Dashboard() {
         if (!cancelled) {
           setTopSoldProducts(products)
           if (!products.length) {
-            setTopSoldNotice('No sold products found for the latest batch comparison.')
+            setTopSoldNotice('No sold products recorded yet across import batches.')
           }
         }
       } catch (err) {
@@ -1447,7 +1447,7 @@ export default function Dashboard() {
             data={dailyImports.data}
           />
 
-          <AnalyticsTile title="Top Sold Products" subtitle="Sold quantity between previous and latest stock import" wide>
+          <AnalyticsTile title="Top Sold Products" subtitle="Overall sold pieces across all stock import batches" wide>
             {topSoldLoading && <p className="analytics-empty">Loading sold products…</p>}
             {!topSoldLoading && topSoldNotice && !topSoldBarData.length && (
               <p className="analytics-empty">{topSoldNotice}</p>

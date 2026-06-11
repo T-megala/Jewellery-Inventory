@@ -209,64 +209,56 @@ const getLatestTwoBatchIds = async () => {
   return rows;
 };
 
-const getTopSoldProducts = async () => {
-  const batches = await getLatestTwoBatchIds();
+const TOP_SOLD_PERIOD_LIMITS = {
+  week: 7,
+  month: 30,
+};
 
-  if (batches.length < 2) {
-    throw new ApiError(
-      400,
-      "At least two imported batches are required to generate sales comparison.",
-    );
+const getTopSoldProducts = async ({ period = "all" } = {}) => {
+  const normalizedPeriod = String(period ?? "all").trim().toLowerCase();
+  const intervalDays = TOP_SOLD_PERIOD_LIMITS[normalizedPeriod];
+
+  if (normalizedPeriod !== "all" && !intervalDays) {
+    throw new ApiError(400, 'period must be "all", "week", or "month"');
   }
 
-  const [latestBatch, previousBatch] = batches;
-  const latestBatchId = latestBatch.id;
-  const previousBatchId = previousBatch.id;
+  const conditions = [
+    "isa.product IS NOT NULL",
+    "TRIM(isa.product) != ''",
+  ];
+  const params = [];
+
+  if (intervalDays) {
+    conditions.push("b.batch_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)");
+    params.push(intervalDays);
+  }
 
   const [rows] = await pool.execute(
     `SELECT
-       productName,
-       yesterdayCount,
-       todayCount,
-       soldCount
-     FROM (
-       SELECT
-         old_data.product AS productName,
-         old_data.total_count AS yesterdayCount,
-         COALESCE(new_data.total_count, 0) AS todayCount,
-         CASE
-           WHEN old_data.total_count > COALESCE(new_data.total_count, 0)
-           THEN old_data.total_count - COALESCE(new_data.total_count, 0)
-           ELSE 0
-         END AS soldCount
-       FROM (
-         SELECT product, COUNT(*) AS total_count
-         FROM products
-         WHERE batch_id = ?
-           AND ${PRODUCT_TAG_FILTER}
-         GROUP BY product
-       ) old_data
-       LEFT JOIN (
-         SELECT product, COUNT(*) AS total_count
-         FROM products
-         WHERE batch_id = ?
-           AND ${PRODUCT_TAG_FILTER}
-         GROUP BY product
-       ) new_data ON old_data.product = new_data.product
-     ) sales
-     WHERE soldCount > 0
-     ORDER BY soldCount DESC, productName ASC
+       isa.product AS productName,
+       COALESCE(SUM(isa.sold_tags), 0) AS soldTags,
+       COALESCE(SUM(isa.sold_pieces), 0) AS soldCount
+     FROM inventory_sales_audit isa
+     INNER JOIN product_upload_batches b ON b.id = isa.batch_id
+     WHERE ${conditions.join(" AND ")}
+     GROUP BY isa.product
+     HAVING soldCount > 0 OR soldTags > 0
+     ORDER BY soldCount DESC, soldTags DESC, isa.product ASC
      LIMIT 10`,
-    [previousBatchId, latestBatchId],
+    params,
   );
 
+  const batches = await getLatestTwoBatchIds();
+  const latestBatchId = batches[0]?.id ?? null;
+  const previousBatchId = batches[1]?.id ?? null;
+
   return {
-    latestBatch: await getBatchInfo(latestBatchId),
-    previousBatch: await getBatchInfo(previousBatchId),
+    period: normalizedPeriod,
+    latestBatch: latestBatchId ? await getBatchInfo(latestBatchId) : null,
+    previousBatch: previousBatchId ? await getBatchInfo(previousBatchId) : null,
     products: rows.map((row) => ({
       productName: row.productName,
-      yesterdayCount: Number(row.yesterdayCount ?? 0),
-      todayCount: Number(row.todayCount ?? 0),
+      soldTags: Number(row.soldTags ?? 0),
       soldCount: Number(row.soldCount ?? 0),
     })),
   };
@@ -313,7 +305,8 @@ const getDayWiseSales = async ({ period = "week", counter = "all" } = {}) => {
   const [rows] = await pool.execute(
     `SELECT
        batch_date,
-       SUM(estimated_sold) AS estimated_sold
+       SUM(sold_pieces) AS sold_pieces,
+       SUM(sold_tags) AS sold_tags
      FROM daily_sales_summary
      WHERE counter_name = ?
        AND batch_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
@@ -325,17 +318,18 @@ const getDayWiseSales = async ({ period = "week", counter = "all" } = {}) => {
   const data = rows.map((row) => ({
     date: toDateKey(row.batch_date),
     day: formatDayLabel(row.batch_date),
-    soldPieces: Number(row.estimated_sold ?? 0),
+    soldPieces: Number(row.sold_pieces ?? 0),
+    soldTags: Number(row.sold_tags ?? 0),
   }));
 
-  const totalSoldPieces = data.reduce(
-    (sum, row) => sum + row.soldPieces,
-    0,
-  );
+  const totalSoldPieces = data.reduce((sum, row) => sum + row.soldPieces, 0);
 
   return {
     period: validatedPeriod,
-    counter: counterName === dailySalesSummaryService.ALL_COUNTER ? "all" : counterName,
+    counter:
+      counterName === dailySalesSummaryService.ALL_COUNTER
+        ? "all"
+        : counterName,
     totalSoldPieces,
     data,
   };
@@ -382,6 +376,9 @@ const buildDailyImportQuery = ({
             batch_id,
             batch_date,
             total_stock,
+            total_stock_pieces,
+            sold_tags,
+            sold_pieces,
             estimated_sold
           FROM daily_sales_summary
           WHERE ${conditions.join(" AND ")}
@@ -408,7 +405,8 @@ const getDailyImports = async ({
     );
   }
 
-  const counterName = dailySalesSummaryService.validateDailyImportCounter(counter);
+  const counterName =
+    dailySalesSummaryService.validateDailyImportCounter(counter);
 
   if (!counterName) {
     throw new ApiError(
@@ -437,7 +435,10 @@ const getDailyImports = async ({
       date: toDateKey(row.batch_date),
       day: formatDayLabel(row.batch_date),
       totalStock: Number(row.total_stock ?? 0),
-      estimatedSold: Number(row.estimated_sold ?? 0),
+      totalStockPieces: Number(row.total_stock_pieces ?? 0),
+      soldTags: Number(row.sold_tags ?? 0),
+      soldPieces: Number(row.sold_pieces ?? row.estimated_sold ?? 0),
+      estimatedSold: Number(row.sold_pieces ?? row.estimated_sold ?? 0),
     }));
 
   return {

@@ -1,18 +1,18 @@
-import pool from '../config/database.js';
-import { getActiveBatchId } from '../services/productBatchService.js';
-import ApiError from '../utils/ApiError.js';
+import pool from "../config/database.js";
+import { getActiveBatchId } from "../services/productBatchService.js";
+import ApiError from "../utils/ApiError.js";
 import {
   TAG_EXPR,
   buildInventoryScopeFilter,
   isAllProducts,
   normalizeTag,
   resolveStoredScope,
-} from '../utils/verificationScope.js';
+} from "../utils/verificationScope.js";
 
 const DETAIL_BATCH_SIZE = 500;
 const TAG_LOOKUP_CHUNK_SIZE = 500;
 const MAX_CLIENT_CLOCK_DRIFT_SECONDS = 7 * 24 * 60 * 60;
-const DEBUG = process.env.STOCK_VERIFICATION_DEBUG === 'true';
+const DEBUG = process.env.STOCK_VERIFICATION_DEBUG === "true";
 
 const resolveVerificationEpochSeconds = (datetimeMillis) => {
   const clientSeconds = Math.floor(Number(datetimeMillis) / 1000);
@@ -37,11 +37,7 @@ const logVerificationDebug = (label, payload) => {
 };
 
 const normalizeScannedTags = (tagData) => [
-  ...new Set(
-    tagData
-      .map((tag) => normalizeTag(tag))
-      .filter(Boolean)
-  ),
+  ...new Set(tagData.map((tag) => normalizeTag(tag)).filter(Boolean)),
 ];
 
 const toDetailRecord = (tag, productInfo, scopeLabels) => ({
@@ -52,9 +48,9 @@ const toDetailRecord = (tag, productInfo, scopeLabels) => ({
 });
 
 const mapRowToProductInfo = (row) => ({
-  productName: String(row.product ?? '').trim(),
-  subProductName: String(row.sub_product ?? '').trim(),
-  centerName: String(row.counter_name ?? '').trim() || 'Unassigned',
+  productName: String(row.product ?? "").trim(),
+  subProductName: String(row.sub_product ?? "").trim(),
+  centerName: String(row.counter_name ?? "").trim() || "Unassigned",
 });
 
 const fetchProductDetailsByTags = async (connection, tags, activeBatchId) => {
@@ -68,7 +64,7 @@ const fetchProductDetailsByTags = async (connection, tags, activeBatchId) => {
 
   for (let index = 0; index < tags.length; index += TAG_LOOKUP_CHUNK_SIZE) {
     const chunk = tags.slice(index, index + TAG_LOOKUP_CHUNK_SIZE);
-    const placeholders = chunk.map(() => '?').join(', ');
+    const placeholders = chunk.map(() => "?").join(", ");
 
     const [rows] = await connection.execute(
       `SELECT ${TAG_EXPR} AS tag, product, sub_product, counter_name, batch_id
@@ -83,7 +79,7 @@ const fetchProductDetailsByTags = async (connection, tags, activeBatchId) => {
            ELSE 2
          END,
          id DESC`,
-      [...chunk, batchOrderParam]
+      [...chunk, batchOrderParam],
     );
 
     for (const row of rows) {
@@ -98,12 +94,17 @@ const fetchProductDetailsByTags = async (connection, tags, activeBatchId) => {
   return map;
 };
 
-const insertDetailRecords = async (connection, verificationId, records, status) => {
+const insertDetailRecords = async (
+  connection,
+  verificationId,
+  records,
+  status,
+) => {
   if (records.length === 0) {
     return;
   }
 
-  const placeholders = records.map(() => '(?, ?, ?, ?, ?, ?)').join(', ');
+  const placeholders = records.map(() => "(?, ?, ?, ?, ?, ?)").join(", ");
   const values = records.flatMap((record) => [
     verificationId,
     record.tag,
@@ -117,7 +118,7 @@ const insertDetailRecords = async (connection, verificationId, records, status) 
     `INSERT INTO stock_verification_details
       (verification_id, tag_no, status, product_name, sub_product_name, center_name)
      VALUES ${placeholders}`,
-    values
+    values,
   );
 };
 
@@ -125,7 +126,7 @@ const insertDetailRecordsBatched = async (
   connection,
   verificationId,
   records,
-  status
+  status,
 ) => {
   for (let index = 0; index < records.length; index += DETAIL_BATCH_SIZE) {
     const chunk = records.slice(index, index + DETAIL_BATCH_SIZE);
@@ -153,7 +154,7 @@ const sampleExpectedTags = async (scope, limit = 5) => {
      WHERE ${scope.whereClause}
      ORDER BY tag
      LIMIT ${limit}`,
-    scope.params
+    scope.params,
   );
 
   return rows.map((row) => row.tag);
@@ -164,7 +165,7 @@ const findScannedTagsInScope = async (scope, scannedTags) => {
     return [];
   }
 
-  const placeholders = scannedTags.map(() => '?').join(', ');
+  const placeholders = scannedTags.map(() => "?").join(", ");
   const sql = `SELECT DISTINCT ${TAG_EXPR} AS tag
      FROM products
      WHERE ${scope.whereClause}
@@ -177,7 +178,7 @@ const findScannedTagsInScope = async (scope, scannedTags) => {
 
 const buildInventoryDetailRecords = (tags, productDetailsMap, scopeLabels) =>
   tags.map((tag) =>
-    toDetailRecord(tag, productDetailsMap.get(tag), scopeLabels)
+    toDetailRecord(tag, productDetailsMap.get(tag), scopeLabels),
   );
 
 const buildNewDetailRecords = (tags, scopeLabels) =>
@@ -267,7 +268,7 @@ const upsertVerificationHeader = async (
       [existingId],
     );
 
-    logVerificationDebug('verification-reused', {
+    logVerificationDebug("verification-reused", {
       verificationId: existingId,
       verificationDay: verificationEpochSeconds,
       scope: scopeLabels,
@@ -287,7 +288,7 @@ const upsertVerificationHeader = async (
 
   const verificationId = headerResult.insertId;
 
-  logVerificationDebug('verification-created', {
+  logVerificationDebug("verification-created", {
     verificationId,
     verificationDay: verificationEpochSeconds,
     scope: scopeLabels,
@@ -307,20 +308,24 @@ const uploadStockVerification = async ({
   const activeBatchId = await getActiveBatchId();
 
   if (!allProductsScope && !activeBatchId) {
-    throw new ApiError(400, 'No active product batch found. Upload inventory first.');
+    throw new ApiError(
+      400,
+      "No active product batch found. Upload inventory first.",
+    );
   }
 
   const scope = buildInventoryScopeFilter(
     activeBatchId,
     product,
     subProduct,
-    center
+    center,
   );
 
-  const { total: totalExpected, sql: countSql } = await countExpectedTags(scope);
+  const { total: totalExpected, sql: countSql } =
+    await countExpectedTags(scope);
   const sampleTags = await sampleExpectedTags(scope);
 
-  logVerificationDebug('scope', {
+  logVerificationDebug("scope", {
     allProductsScope,
     activeBatchId,
     whereClause: scope.whereClause,
@@ -331,7 +336,7 @@ const uploadStockVerification = async ({
   });
 
   if (totalExpected === 0) {
-    throw new ApiError(400, 'No inventory tags found for the selected scope.');
+    throw new ApiError(400, "No inventory tags found for the selected scope.");
   }
 
   const scopeLabels = resolveStoredScope(product, subProduct, center);
@@ -343,7 +348,7 @@ const uploadStockVerification = async ({
   const newTags = scannedTags.filter((tag) => !foundSet.has(tag));
   const missingCount = totalExpected - found.length;
 
-  logVerificationDebug('classification', {
+  logVerificationDebug("classification", {
     scannedTags,
     found,
     newTags,
@@ -352,7 +357,8 @@ const uploadStockVerification = async ({
 
   const connection = await pool.getConnection();
 
-  const verificationEpochSeconds = resolveVerificationEpochSeconds(datetimeMillis);
+  const verificationEpochSeconds =
+    resolveVerificationEpochSeconds(datetimeMillis);
 
   try {
     await connection.beginTransaction();
@@ -374,10 +380,10 @@ const uploadStockVerification = async ({
     const foundProductDetails = await fetchProductDetailsByTags(
       connection,
       found,
-      activeBatchId
+      activeBatchId,
     );
 
-    logVerificationDebug('found-product-details', {
+    logVerificationDebug("found-product-details", {
       foundCount: found.length,
       resolvedCount: foundProductDetails.size,
       sample: found.slice(0, 3).map((tag) => ({
@@ -388,14 +394,14 @@ const uploadStockVerification = async ({
     const foundRecords = buildInventoryDetailRecords(
       found,
       foundProductDetails,
-      scopeLabels
+      scopeLabels,
     );
 
     await insertDetailRecordsBatched(
       connection,
       verificationId,
       foundRecords,
-      'FOUND'
+      "FOUND",
     );
 
     const newRecords = buildNewDetailRecords(newTags, scopeLabels);
@@ -404,7 +410,7 @@ const uploadStockVerification = async ({
       connection,
       verificationId,
       newRecords,
-      'NEW'
+      "NEW",
     );
 
     await connection.commit();
@@ -421,7 +427,7 @@ const uploadStockVerification = async ({
     };
   } catch (error) {
     await connection.rollback();
-    console.error('Stock verification upload failed:', error);
+    console.error("Stock verification upload failed:", error);
     throw error;
   } finally {
     connection.release();

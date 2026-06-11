@@ -28,12 +28,13 @@ export async function fetchDashboard() {
   };
 }
 
-export async function fetchTopSoldProducts() {
-  const data = await apiFetch('/dashboard/top-sold-products');
+export async function fetchTopSoldProducts({ period = 'all' } = {}) {
+  const query = buildQueryString({ period });
+  const data = await apiFetch(`/dashboard/top-sold-products?${query}`);
+
   return (data || []).map((row) => ({
     productName: row.productName ?? row.name ?? '',
-    yesterdayCount: Number(row.yesterdayCount ?? 0),
-    todayCount: Number(row.todayCount ?? 0),
+    soldTags: Number(row.soldTags ?? 0),
     soldCount: Number(row.soldCount ?? 0),
   }));
 }

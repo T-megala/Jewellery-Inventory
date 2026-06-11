@@ -1,4 +1,10 @@
 import pool from "../config/database.js";
+import {
+  rebuildBatchSalesAudit,
+  getBatchSalesTotalsByCounter,
+  countBatchStockPieces,
+  countBatchStockPiecesByCounter,
+} from "./batchSalesAuditService.js";
 
 const ALL_COUNTER = "ALL";
 
@@ -86,9 +92,6 @@ const countCounterStock = async (connection, batchId) => {
   }));
 };
 
-const computeEstimatedSold = (previousTotal, currentTotal) =>
-  previousTotal > currentTotal ? previousTotal - currentTotal : 0;
-
 const deleteBatchSummaries = async (connection, batchId) => {
   await connection.execute(
     `DELETE FROM daily_sales_summary WHERE batch_id = ?`,
@@ -98,13 +101,31 @@ const deleteBatchSummaries = async (connection, batchId) => {
 
 const insertSummaryRow = async (
   connection,
-  { batchId, batchDate, counterName, totalStock, estimatedSold },
+  {
+    batchId,
+    batchDate,
+    counterName,
+    totalStock,
+    totalStockPieces,
+    soldTags,
+    soldPieces,
+  },
 ) => {
   await connection.execute(
     `INSERT INTO daily_sales_summary
-      (batch_id, batch_date, counter_name, total_stock, estimated_sold)
-     VALUES (?, ?, ?, ?, ?)`,
-    [batchId, batchDate, counterName, totalStock, estimatedSold],
+      (batch_id, batch_date, counter_name, total_stock, total_stock_pieces,
+       estimated_sold, sold_tags, sold_pieces)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      batchId,
+      batchDate,
+      counterName,
+      totalStock,
+      totalStockPieces,
+      soldPieces,
+      soldTags,
+      soldPieces,
+    ],
   );
 };
 
@@ -118,21 +139,28 @@ export const refreshDailySalesSummary = async (batchId, connection = pool) => {
   const previousBatchId = await getPreviousBatchId(connection, batchId);
   const batchDate = formatLocalDateKey(batch.batch_date);
 
+  const auditSummary = await rebuildBatchSalesAudit(
+    connection,
+    batchId,
+    previousBatchId,
+  );
+
   const currentAllTotal = await countAllStock(connection, batchId);
-  const previousAllTotal = previousBatchId
-    ? await countAllStock(connection, previousBatchId)
-    : 0;
+  const currentAllPieces = await countBatchStockPieces(connection, batchId);
 
   const currentCounters = await countCounterStock(connection, batchId);
-  const previousCounterMap = new Map();
+  const currentPiecesByCounter = await countBatchStockPiecesByCounter(
+    connection,
+    batchId,
+  );
+  const salesByCounter = await getBatchSalesTotalsByCounter(connection, batchId);
 
-  if (previousBatchId) {
-    const previousCounters = await countCounterStock(connection, previousBatchId);
-
-    for (const row of previousCounters) {
-      previousCounterMap.set(row.counterName, row.total);
-    }
-  }
+  const piecesByCounterMap = new Map(
+    currentPiecesByCounter.map((row) => [row.counterName, row.totalPieces]),
+  );
+  const salesByCounterMap = new Map(
+    salesByCounter.map((row) => [row.counterName, row]),
+  );
 
   await deleteBatchSummaries(connection, batchId);
 
@@ -141,30 +169,39 @@ export const refreshDailySalesSummary = async (batchId, connection = pool) => {
     batchDate,
     counterName: ALL_COUNTER,
     totalStock: currentAllTotal,
-    estimatedSold: computeEstimatedSold(previousAllTotal, currentAllTotal),
+    totalStockPieces: currentAllPieces,
+    soldTags: auditSummary.soldTags,
+    soldPieces: auditSummary.soldPieces,
   });
 
   for (const counter of currentCounters) {
-    const previousTotal = previousCounterMap.get(counter.counterName) ?? 0;
+    const sales = salesByCounterMap.get(counter.counterName) ?? {
+      soldTags: 0,
+      soldPieces: 0,
+    };
 
     await insertSummaryRow(connection, {
       batchId,
       batchDate,
       counterName: counter.counterName,
       totalStock: counter.total,
-      estimatedSold: computeEstimatedSold(previousTotal, counter.total),
+      totalStockPieces: piecesByCounterMap.get(counter.counterName) ?? 0,
+      soldTags: sales.soldTags,
+      soldPieces: sales.soldPieces,
     });
 
-    previousCounterMap.delete(counter.counterName);
+    salesByCounterMap.delete(counter.counterName);
   }
 
-  for (const [counterName, previousTotal] of previousCounterMap.entries()) {
+  for (const [counterName, sales] of salesByCounterMap.entries()) {
     await insertSummaryRow(connection, {
       batchId,
       batchDate,
       counterName,
       totalStock: 0,
-      estimatedSold: computeEstimatedSold(previousTotal, 0),
+      totalStockPieces: 0,
+      soldTags: sales.soldTags,
+      soldPieces: sales.soldPieces,
     });
   }
 
@@ -173,7 +210,10 @@ export const refreshDailySalesSummary = async (batchId, connection = pool) => {
     batchDate,
     previousBatchId,
     allStock: currentAllTotal,
-    estimatedSoldAll: computeEstimatedSold(previousAllTotal, currentAllTotal),
+    allStockPieces: currentAllPieces,
+    soldTags: auditSummary.soldTags,
+    soldPieces: auditSummary.soldPieces,
+    auditDurationMs: auditSummary.durationMs,
   });
 };
 
