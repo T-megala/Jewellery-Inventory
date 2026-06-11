@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { getUser, logout } from '../services/auth.js'
 import './MainLayout.css'
@@ -83,23 +84,67 @@ function formatToday() {
   })
 }
 
+function renderNavLinks(items, onNavigate) {
+  return items.map((item) => (
+    <NavLink
+      key={item.to}
+      to={item.to}
+      className={({ isActive }) =>
+        `sidebar-link${isActive ? ' sidebar-link--active' : ''}`
+      }
+      onClick={onNavigate}
+    >
+      <span className="sidebar-link__icon">
+        <NavIcon name={item.icon} />
+      </span>
+      <span className="sidebar-link__label">{item.label}</span>
+      <span className="sidebar-link__indicator" aria-hidden="true" />
+    </NavLink>
+  ))
+}
+
 export default function MainLayout() {
   const navigate = useNavigate()
   const location = useLocation()
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const user = getUser()
   const displayName = user?.name || user?.username || 'User'
   const page = PAGE_META[location.pathname] || PAGE_META['/dashboard']
   const isFillPage = location.pathname === '/import'
   const isWidePage = location.pathname === '/dashboard'
 
+  useEffect(() => {
+    setMobileNavOpen(false)
+  }, [location.pathname])
+
+  useEffect(() => {
+    document.body.style.overflow = mobileNavOpen ? 'hidden' : ''
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [mobileNavOpen])
+
   function handleLogout() {
     logout()
     navigate('/login', { replace: true })
   }
 
+  function closeMobileNav() {
+    setMobileNavOpen(false)
+  }
+
   return (
     <div className="app-layout">
-      <aside className="sidebar">
+      {mobileNavOpen && (
+        <button
+          type="button"
+          className="sidebar-backdrop"
+          aria-label="Close menu"
+          onClick={closeMobileNav}
+        />
+      )}
+
+      <aside className={`sidebar${mobileNavOpen ? ' sidebar--open' : ''}`}>
         <div className="sidebar-glow" aria-hidden="true" />
 
         <div className="sidebar-brand">
@@ -111,64 +156,32 @@ export default function MainLayout() {
             <p className="sidebar-tagline">Gold House</p>
             <span className="sidebar-brand__line" aria-hidden="true" />
           </div>
+          <button
+            type="button"
+            className="sidebar-close"
+            aria-label="Close menu"
+            onClick={closeMobileNav}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          </button>
         </div>
 
         <div className="sidebar-nav-wrap">
           <p className="sidebar-menu-label">Main Menu</p>
           <nav className="sidebar-nav">
-            {MAIN_NAV_ITEMS.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) =>
-                  `sidebar-link${isActive ? ' sidebar-link--active' : ''}`
-                }
-              >
-                <span className="sidebar-link__icon">
-                  <NavIcon name={item.icon} />
-                </span>
-                <span className="sidebar-link__label">{item.label}</span>
-                <span className="sidebar-link__indicator" aria-hidden="true" />
-              </NavLink>
-            ))}
+            {renderNavLinks(MAIN_NAV_ITEMS, closeMobileNav)}
           </nav>
 
           <p className="sidebar-menu-label sidebar-menu-label--reports">Reports</p>
           <nav className="sidebar-nav sidebar-nav--reports">
-            {REPORTS_NAV_ITEMS.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) =>
-                  `sidebar-link${isActive ? ' sidebar-link--active' : ''}`
-                }
-              >
-                <span className="sidebar-link__icon">
-                  <NavIcon name={item.icon} />
-                </span>
-                <span className="sidebar-link__label">{item.label}</span>
-                <span className="sidebar-link__indicator" aria-hidden="true" />
-              </NavLink>
-            ))}
+            {renderNavLinks(REPORTS_NAV_ITEMS, closeMobileNav)}
           </nav>
 
           <p className="sidebar-menu-label sidebar-menu-label--reports">Admin</p>
           <nav className="sidebar-nav sidebar-nav--reports">
-            {ADMIN_NAV_ITEMS.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) =>
-                  `sidebar-link${isActive ? ' sidebar-link--active' : ''}`
-                }
-              >
-                <span className="sidebar-link__icon">
-                  <NavIcon name={item.icon} />
-                </span>
-                <span className="sidebar-link__label">{item.label}</span>
-                <span className="sidebar-link__indicator" aria-hidden="true" />
-              </NavLink>
-            ))}
+            {renderNavLinks(ADMIN_NAV_ITEMS, closeMobileNav)}
           </nav>
         </div>
 
@@ -185,8 +198,22 @@ export default function MainLayout() {
       <div className="main-area">
         <header className="topbar">
           <div className="topbar-left">
-            <h1 className="topbar-title">{page.title}</h1>
-            <p className="topbar-subtitle">{page.subtitle}</p>
+            <button
+              type="button"
+              className="topbar-menu-btn"
+              aria-label="Open menu"
+              aria-expanded={mobileNavOpen}
+              onClick={() => setMobileNavOpen(true)}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </button>
+
+            <div className="topbar-headings">
+              <h1 className="topbar-title">{page.title}</h1>
+              <p className="topbar-subtitle">{page.subtitle}</p>
+            </div>
           </div>
 
           <div className="topbar-right">
@@ -201,6 +228,18 @@ export default function MainLayout() {
                 <p className="topbar-user__role">{user?.role || 'Staff'}</p>
               </div>
             </div>
+
+            <button
+              type="button"
+              className="topbar-logout"
+              aria-label="Sign out"
+              onClick={handleLogout}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span>Sign out</span>
+            </button>
           </div>
         </header>
 

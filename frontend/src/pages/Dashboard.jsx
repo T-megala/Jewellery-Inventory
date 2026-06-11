@@ -1171,7 +1171,7 @@ export default function Dashboard() {
             label="Found, missing & new tags"
             icon="reports"
           />
-        </div>
+      </div>
       </section>
     </div>
   )

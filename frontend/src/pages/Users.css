@@ -442,6 +442,64 @@ body.users-modal-open {
   justify-content: flex-end;
 }
 
+@media (max-width: 768px) {
+  .users-list__toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .users-search {
+    flex: none;
+    max-width: none;
+    width: 100%;
+  }
+
+  .users-search__icon {
+    left: 10px;
+  }
+
+  .users-search__icon svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  .users-search input {
+    padding: 7px 10px 7px 34px;
+    font-size: 0.8125rem;
+    border-radius: 8px;
+  }
+
+  .users-list__actions {
+    width: 100%;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+
+  .users-list__count {
+    padding: 4px 10px;
+    font-size: 0.68rem;
+  }
+
+  .users-btn--add {
+    width: auto;
+    flex-shrink: 0;
+    padding: 7px 12px;
+    font-size: 0.75rem;
+    gap: 5px;
+    border-radius: 8px;
+    box-shadow: 0 1px 5px rgba(184, 134, 11, 0.2);
+  }
+
+  .users-btn--add svg {
+    width: 14px;
+    height: 14px;
+  }
+}
+
 @media (max-width: 520px) {
   .users-modal__footer {
     flex-direction: column-reverse;
