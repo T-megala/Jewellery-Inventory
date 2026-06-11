@@ -1,5 +1,15 @@
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
+import {
+  EXCEL_EXPORT_COLUMNS,
+  REPORT_EXPORT_COLUMNS,
+  getExcelStatusColumnIndex,
+  mapRowToExcelExportValues,
+  scaleColumnsToWidth,
+} from "./reportExportColumns.js";
+
+const EXCEL_ROW_STYLE_THRESHOLD = 1000;
+const EXCEL_WRITE_BATCH_SIZE = 2000;
 
 const logExport = (message, meta = undefined) => {
   if (meta === undefined) {
@@ -48,37 +58,7 @@ const getStatusStyle = (status) => {
 
 const toARGB = (hex) => "FF" + hex.replace("#", "").toUpperCase();
 
-const mapExportRow = (row) => [
-  row.verificationDate,
-  row.productName,
-  row.subProductName,
-  row.centerName,
-  row.tagNo,
-  row.status,
-  row.createdAt,
-];
-
-export const buildExcelBuffer = async (data, summary, filters, dbTime) => {
-  const startedAt = Date.now();
-  logExport("excel generation started", {
-    rowCount: data.length,
-    filters,
-    summary,
-  });
-
-  const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet("Report");
-
-  worksheet.columns = [
-    { header: "Verification Date", width: 20 },
-    { header: "Product", width: 25 },
-    { header: "Sub Product", width: 25 },
-    { header: "Center", width: 20 },
-    { header: "Tag No", width: 15 },
-    { header: "Status", width: 15 },
-    { header: "Created At", width: 20 },
-  ];
-
+const styleExcelHeaderRow = (worksheet) => {
   const headerRow = worksheet.getRow(1);
   headerRow.eachCell({ includeEmpty: true }, (cell) => {
     cell.fill = {
@@ -97,43 +77,88 @@ export const buildExcelBuffer = async (data, summary, filters, dbTime) => {
       right: { style: "thin", color: { argb: toARGB(PDF_THEME.goldBorder) } },
     };
   });
+};
 
-  data.forEach((item, index) => {
-    const rowValues = mapExportRow(item);
-    const row = worksheet.addRow(rowValues);
-    const isZebra = index % 2 === 1;
+const styleExcelDataRow = (row, item, statusColumnIndex, isZebra) => {
+  row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+    cell.border = {
+      top: { style: "thin", color: { argb: toARGB(PDF_THEME.goldBorder) } },
+      left: { style: "thin", color: { argb: toARGB(PDF_THEME.goldBorder) } },
+      bottom: { style: "thin", color: { argb: toARGB(PDF_THEME.goldBorder) } },
+      right: { style: "thin", color: { argb: toARGB(PDF_THEME.goldBorder) } },
+    };
 
-    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-      cell.border = {
-        top: { style: "thin", color: { argb: toARGB(PDF_THEME.goldBorder) } },
-        left: { style: "thin", color: { argb: toARGB(PDF_THEME.goldBorder) } },
-        bottom: {
-          style: "thin",
-          color: { argb: toARGB(PDF_THEME.goldBorder) },
-        },
-        right: { style: "thin", color: { argb: toARGB(PDF_THEME.goldBorder) } },
-      };
+    let cellFill = isZebra ? PDF_THEME.zebra : PDF_THEME.white;
+    let cellColor = PDF_THEME.text;
 
-      let cellFill = isZebra ? PDF_THEME.zebra : PDF_THEME.white;
-      let cellColor = PDF_THEME.text;
+    if (colNumber === statusColumnIndex) {
+      const statusStyle = getStatusStyle(item.status);
+      cellFill = statusStyle.fill;
+      cellColor = statusStyle.text;
+      cell.font = { color: { argb: toARGB(cellColor) }, bold: true };
+      cell.alignment = { horizontal: "center" };
+    } else {
+      cell.font = { color: { argb: toARGB(cellColor) } };
+    }
 
-      if (colNumber === 6) {
-        const statusStyle = getStatusStyle(item.status);
-        cellFill = statusStyle.fill;
-        cellColor = statusStyle.text;
-        cell.font = { color: { argb: toARGB(cellColor) }, bold: true };
-        cell.alignment = { horizontal: "center" };
-      } else {
-        cell.font = { color: { argb: toARGB(cellColor) } };
-      }
-
-      cell.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: toARGB(cellFill) },
-      };
-    });
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: toARGB(cellFill) },
+    };
   });
+};
+
+const styleExcelStatusCells = (worksheet, data, statusColumnIndex) => {
+  for (let index = 0; index < data.length; index += 1) {
+    const rowNumber = index + 2;
+    const cell = worksheet.getRow(rowNumber).getCell(statusColumnIndex);
+    const statusStyle = getStatusStyle(data[index].status);
+
+    cell.font = { color: { argb: toARGB(statusStyle.text) }, bold: true };
+    cell.alignment = { horizontal: "center" };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: toARGB(statusStyle.fill) },
+    };
+  }
+};
+
+export const buildExcelBuffer = async (data, summary, filters, dbTime) => {
+  const startedAt = Date.now();
+  logExport("excel generation started", {
+    rowCount: data.length,
+    filters,
+    summary,
+  });
+
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet("Report");
+
+  worksheet.columns = EXCEL_EXPORT_COLUMNS.map((column) => ({
+    header: column.label,
+    width: column.excelWidth,
+  }));
+
+  styleExcelHeaderRow(worksheet);
+
+  const statusColumnIndex = getExcelStatusColumnIndex();
+  const useLightweightRows = data.length > EXCEL_ROW_STYLE_THRESHOLD;
+
+  if (useLightweightRows) {
+    for (let index = 0; index < data.length; index += EXCEL_WRITE_BATCH_SIZE) {
+      const chunk = data.slice(index, index + EXCEL_WRITE_BATCH_SIZE);
+      worksheet.addRows(chunk.map(mapRowToExcelExportValues));
+    }
+
+    styleExcelStatusCells(worksheet, data, statusColumnIndex);
+  } else {
+    data.forEach((item, index) => {
+      const row = worksheet.addRow(mapRowToExcelExportValues(item));
+      styleExcelDataRow(row, item, statusColumnIndex, index % 2 === 1);
+    });
+  }
 
   const buffer = await workbook.xlsx.writeBuffer();
   const result = Buffer.from(buffer);
@@ -142,6 +167,7 @@ export const buildExcelBuffer = async (data, summary, filters, dbTime) => {
     rowCount: data.length,
     bufferBytes: result.length,
     durationMs: Date.now() - startedAt,
+    lightweightMode: useLightweightRows,
   });
 
   return result;
@@ -149,13 +175,13 @@ export const buildExcelBuffer = async (data, summary, filters, dbTime) => {
 
 const PDF_LAYOUT = {
   margin: 36,
-  rowHeight: 18,
+  rowHeight: 14,
   headerBandHeight: 58,
   headerGapAfter: 10,
   footerHeight: 24,
   footerOffsetFromBottom: 14,
-  fontSize: 7,
-  headerFontSize: 7.5,
+  fontSize: 5.5,
+  headerFontSize: 6,
   titleFontSize: 17,
 };
 
@@ -168,15 +194,6 @@ const logPdfDebug = (message, meta = undefined) => {
 
   logExport(`[pdf-debug] ${message}`, meta);
 };
-
-const PDF_COLUMNS = [
-  { key: "tagNo", label: "Tag No", width: 148, align: "left" },
-  { key: "productName", label: "Product", width: 167, align: "left" },
-  { key: "subProductName", label: "Sub Product", width: 167, align: "left" },
-  { key: "centerName", label: "Center", width: 106, align: "left" },
-  { key: "status", label: "Status", width: 70, align: "center" },
-  { key: "verificationDate", label: "Verified On", width: 110, align: "left" },
-];
 
 const truncateToWidth = (doc, text, maxWidth) => {
   const value = String(text ?? "");
@@ -306,6 +323,8 @@ const drawTableRow = (doc, columns, row, y, stripe) => {
     const padding = column.align === "right" ? 4 : 6;
     const cellWidth = column.width - padding * 2;
     const rawValue = row[column.key] ?? "";
+    const displayValue =
+      rawValue === null || rawValue === undefined ? "" : String(rawValue);
 
     if (column.key === "status") {
       const statusStyle = getStatusStyle(rawValue);
@@ -314,7 +333,7 @@ const drawTableRow = (doc, columns, row, y, stripe) => {
 
       doc.roundedRect(badgeX, y + 4, badgeWidth, 10, 3).fill(statusStyle.fill);
       doc.fillColor(statusStyle.text).font("Helvetica-Bold").fontSize(6.5);
-      doc.text(String(rawValue), badgeX, y + 5.5, {
+      doc.text(displayValue, badgeX, y + 5.5, {
         width: badgeWidth,
         align: "center",
         lineBreak: false,
@@ -324,7 +343,7 @@ const drawTableRow = (doc, columns, row, y, stripe) => {
         .fontSize(PDF_LAYOUT.fontSize)
         .fillColor(PDF_THEME.text);
     } else {
-      const value = truncateToWidth(doc, rawValue, cellWidth);
+      const value = truncateToWidth(doc, displayValue, cellWidth);
       doc.text(value, x + padding, y + 5, {
         width: cellWidth,
         align: column.align,
@@ -401,8 +420,19 @@ const drawPageFooters = (doc) => {
   resetDocCursor(doc, doc.page.margins.left, doc.page.margins.top);
 };
 
+const buildPdfColumns = (doc) =>
+  scaleColumnsToWidth(
+    REPORT_EXPORT_COLUMNS.map((column) => ({
+      key: column.key,
+      label: column.label,
+      width: column.width,
+      align: column.align ?? (column.isStatus ? "center" : "left"),
+    })),
+    getContentWidth(doc),
+  );
+
 const renderPdfReportBody = (doc, data, summary, filters, dbTime) => {
-  const columns = PDF_COLUMNS;
+  const columns = buildPdfColumns(doc);
   const tableBottomLimit = () => getTableBottomLimit(doc);
   const continuationStartY = () => doc.page.margins.top;
 
