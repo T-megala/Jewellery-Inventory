@@ -65,21 +65,19 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 42px;
   flex-shrink: 0;
-  background: #fff;
-  border: 1px solid #ebe3d6;
-  border-radius: 12px;
-  box-shadow:
-    0 4px 14px rgba(120, 90, 30, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
 .sidebar-logo {
-  width: 28px;
-  height: 28px;
+  width: 44px;
+  height: 44px;
   object-fit: contain;
+  display: block;
+  mix-blend-mode: multiply;
 }
 
 .sidebar-brand__text {
