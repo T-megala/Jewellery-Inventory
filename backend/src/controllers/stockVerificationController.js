@@ -97,8 +97,11 @@ export const uploadStockVerification = async (req, res) => {
 
   res.status(200).json({
     success: true,
-    message: 'Stock verification data uploaded successfully',
+    message: result.reused
+      ? 'Stock verification updated successfully'
+      : 'Stock verification data uploaded successfully',
     verificationId: result.verificationId,
+    reused: result.reused,
     totalExpected: result.totalExpected,
     totalScanned: result.totalScanned,
     foundCount: result.foundCount,

@@ -169,11 +169,11 @@ const getInventorySummary = async () => {
 const getVerificationSummary = async () => {
   const [rows] = await pool.execute(
     `SELECT
-       SUM(CASE WHEN status = 'FOUND' THEN 1 ELSE 0 END) AS foundCount,
-       SUM(CASE WHEN status = 'MISSING' THEN 1 ELSE 0 END) AS missingCount,
-       SUM(CASE WHEN status = 'NEW' THEN 1 ELSE 0 END) AS newCount,
-       COUNT(*) AS totalRecords
-     FROM stock_verification_details`,
+       COALESCE(SUM(found_count), 0) AS foundCount,
+       COALESCE(SUM(missing_count), 0) AS missingCount,
+       COALESCE(SUM(new_count), 0) AS newCount,
+       COALESCE(SUM(found_count + missing_count + new_count), 0) AS totalRecords
+     FROM stock_verification`,
   );
 
   const row = rows[0] ?? {};

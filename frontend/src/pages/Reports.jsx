@@ -92,6 +92,21 @@ function formatPieces(value) {
   return numeric.toLocaleString('en-IN')
 }
 
+const ALL_SCOPE_LABELS = new Set([
+  'all products',
+  'all sub products',
+  'all centers',
+])
+
+function formatScopeDisplay(value, rowStatus) {
+  const label = String(value ?? '').trim()
+  if (!label) return '—'
+  if (rowStatus === 'NEW' && ALL_SCOPE_LABELS.has(label.toLowerCase())) {
+    return '—'
+  }
+  return label
+}
+
 function ReportLoader() {
   return (
     <div className="report-loader" role="status" aria-live="polite" aria-label="Loading report">
@@ -504,9 +519,11 @@ export default function Reports() {
                     {rows.map((row) => (
                       <tr key={row.id}>
                         <td>{formatDate(row.verificationDate)}</td>
-                        <td className="reports-table__product">{row.product}</td>
-                        <td>{row.subProduct}</td>
-                        <td>{row.counter}</td>
+                        <td className="reports-table__product">
+                          {formatScopeDisplay(row.product, row.status)}
+                        </td>
+                        <td>{formatScopeDisplay(row.subProduct, row.status)}</td>
+                        <td>{formatScopeDisplay(row.counter, row.status)}</td>
                         <td className="reports-table__tag">{row.tagNo}</td>
                         <td className="reports-table__pieces">{formatPieces(row.pieces)}</td>
                         <td>

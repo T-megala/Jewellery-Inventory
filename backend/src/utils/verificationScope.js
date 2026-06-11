@@ -58,6 +58,22 @@ export const isAllSubProductsByName = (name) =>
 export const isAllCentersByName = (name) =>
   matchesScopeName(name, SCOPE_NAMES.ALL_CENTERS);
 
+const scopeItemFromStoredName = (name, isAllFn) =>
+  isAllFn(name) ? { id: ALL_SCOPE_ID, name } : { name };
+
+export const buildInventoryScopeFilterFromStoredLabels = (
+  activeBatchId,
+  productName,
+  subProductName,
+  centerName,
+) =>
+  buildInventoryScopeFilter(
+    activeBatchId,
+    scopeItemFromStoredName(productName, isAllProductsByName),
+    scopeItemFromStoredName(subProductName, isAllSubProductsByName),
+    scopeItemFromStoredName(centerName, isAllCentersByName),
+  );
+
 export const resolveStoredScope = (product, subProduct, center) => ({
   productName: isAllProducts(product)
     ? SCOPE_NAMES.ALL_PRODUCTS
