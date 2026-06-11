@@ -97,11 +97,12 @@ const getInventorySummary = async () => {
     `SELECT
        product AS name,
        COUNT(DISTINCT sub_product) AS subProductCount,
-       COUNT(*) AS tagCount
+       COUNT(*) AS tagCount,
+       COALESCE(SUM(pieces), 0) AS pieceCount
      FROM products
      WHERE ${baseWhere}
      GROUP BY product
-     ORDER BY subProductCount DESC, product ASC`,
+     ORDER BY pieceCount DESC, product ASC`,
     [batchId],
   );
 
@@ -147,6 +148,7 @@ const getInventorySummary = async () => {
       name: row.name,
       subProductCount: Number(row.subProductCount ?? 0),
       tagCount: Number(row.tagCount ?? 0),
+      pieceCount: Number(row.pieceCount ?? 0),
     })),
     byCounter: byCounterRows.map((row) => ({
       name: row.name,
