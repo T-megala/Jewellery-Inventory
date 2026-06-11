@@ -419,6 +419,10 @@
   max-width: 1440px;
 }
 
+.page-content--table {
+  padding: 14px 24px 16px;
+}
+
 @media (max-width: 1024px) {
   .topbar-date {
     display: none;

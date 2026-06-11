@@ -274,73 +274,75 @@ export default function Users() {
           <p className="users-alert users-alert--error users-list__notice" role="alert">{error}</p>
         )}
 
-        <div className="users-table-wrap">
-          <table className="users-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Username</th>
-                <th>Created</th>
-                <th aria-label="Actions" />
-              </tr>
-            </thead>
-            <tbody>
-              {loading && (
+        <div className="users-list__body">
+          <div className="users-table-scroll">
+            <table className="users-table">
+              <thead>
                 <tr>
-                  <td colSpan={4} className="users-table__empty">Loading users…</td>
+                  <th>#</th>
+                  <th>Username</th>
+                  <th>Created</th>
+                  <th aria-label="Actions" />
                 </tr>
-              )}
+              </thead>
+              <tbody>
+                {loading && (
+                  <tr>
+                    <td colSpan={4} className="users-table__empty">Loading users…</td>
+                  </tr>
+                )}
 
-              {!loading && filteredUsers.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="users-table__empty">No users found.</td>
-                </tr>
-              )}
+                {!loading && filteredUsers.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="users-table__empty">No users found.</td>
+                  </tr>
+                )}
 
-              {!loading && paginatedUsers.map((user, index) => (
-                <tr key={user.id} className={editingId === user.id ? 'users-table__row--active' : ''}>
-                  <td>{(page - 1) * pageSize + index + 1}</td>
-                  <td>{user.username}</td>
-                  <td>{formatDate(user.createdAt)}</td>
-                  <td>
-                    <div className="users-table__actions">
-                      <button
-                        type="button"
-                        className="users-btn users-btn--ghost users-btn--sm"
-                        onClick={() => handleEdit(user)}
-                        disabled={saving || deletingId === user.id}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="users-btn users-btn--danger users-btn--sm"
-                        onClick={() => handleDelete(user)}
-                        disabled={saving || deletingId === user.id}
-                      >
-                        {deletingId === user.id ? 'Deleting…' : 'Delete'}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                {!loading && paginatedUsers.map((user, index) => (
+                  <tr key={user.id} className={editingId === user.id ? 'users-table__row--active' : ''}>
+                    <td>{(page - 1) * pageSize + index + 1}</td>
+                    <td>{user.username}</td>
+                    <td>{formatDate(user.createdAt)}</td>
+                    <td>
+                      <div className="users-table__actions">
+                        <button
+                          type="button"
+                          className="users-btn users-btn--ghost users-btn--sm"
+                          onClick={() => handleEdit(user)}
+                          disabled={saving || deletingId === user.id}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="users-btn users-btn--danger users-btn--sm"
+                          onClick={() => handleDelete(user)}
+                          disabled={saving || deletingId === user.id}
+                        >
+                          {deletingId === user.id ? 'Deleting…' : 'Delete'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {!loading && filteredUsers.length > 0 && (
+            <TablePagination
+              className="users-table-pagination"
+              page={page}
+              pageSize={pageSize}
+              totalPages={totalPages}
+              totalRecords={filteredUsers.length}
+              rowCount={paginatedUsers.length}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              disabled={loading || saving || Boolean(deletingId)}
+            />
+          )}
         </div>
-
-        {!loading && filteredUsers.length > 0 && (
-          <TablePagination
-            className="users-table-pagination"
-            page={page}
-            pageSize={pageSize}
-            totalPages={totalPages}
-            totalRecords={filteredUsers.length}
-            rowCount={paginatedUsers.length}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-            disabled={loading || saving || Boolean(deletingId)}
-          />
-        )}
       </section>
 
       {showForm && createPortal(

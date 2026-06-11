@@ -106,17 +106,6 @@ export default function Stock() {
       </div>
 
       <div className="stock-panel">
-        <div className="stock-panel__head">
-          <h2 className="stock-panel__title">Stock List</h2>
-          {pagination && (
-            <span className="stock-panel__count">
-              Page {pagination.page} of {pagination.totalPages || 1}
-              {' · '}
-              Showing {rows.length} of {pagination.totalRecords}
-            </span>
-          )}
-        </div>
-
         {error && (
           <p className="stock-alert stock-alert--error" role="alert">{error}</p>
         )}
@@ -136,8 +125,8 @@ export default function Stock() {
             )}
           </p>
         ) : (
-          <>
-            <div className="stock-table-wrap">
+          <div className="stock-panel__body">
+            <div className="stock-table-scroll">
               <table className="stock-table">
                 <thead>
                   <tr>
@@ -189,7 +178,7 @@ export default function Stock() {
                 disabled={loading}
               />
             )}
-          </>
+          </div>
         )}
       </div>
     </div>
