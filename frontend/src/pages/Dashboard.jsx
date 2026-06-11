@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
+  Area,
   Bar,
   BarChart,
-  CartesianGrid,
   Cell,
+  ComposedChart,
   LabelList,
+  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -84,7 +86,8 @@ function buildWeekChartRows(apiData) {
     return {
       date: dateKey,
       day: isToday ? 'Today' : `${weekday} ${dayNum} ${month}`,
-      daySub: isToday ? `${dayNum} ${month}` : null,
+      dayShort: isToday ? 'Today' : weekday,
+      dayMedium: isToday ? 'Today' : `${dayNum} ${month}`,
       soldPieces: byDate[dateKey] ?? 0,
       dayType,
       isToday,
@@ -233,29 +236,175 @@ function CounterSplitChart({ data }) {
   )
 }
 
-function DaySalesXTick({ x, y, payload, chartData }) {
-  const item = chartData?.find((row) => row.day === payload?.value)
-  if (!item) return null
+function TrendLineXTick({ x, y, payload, chartData, labelKey = 'dayShort', index }) {
+  const item = chartData?.[index] ?? chartData?.find((row) => row[labelKey] === payload?.value)
+  const isToday = item?.isToday
+  const isMonth = labelKey === 'dayMedium' && chartData?.length > 10
+  const isLast = index === chartData.length - 1
+  const isFirst = index === 0
+
+  let textAnchor = 'middle'
+  let dx = 0
+  if (isMonth) {
+    textAnchor = 'end'
+  } else if (isLast) {
+    textAnchor = 'end'
+    dx = -2
+  } else if (isFirst) {
+    textAnchor = 'start'
+    dx = 2
+  }
 
   return (
-    <g transform={`translate(${x},${y})`}>
-      <text
-        x={0}
-        y={0}
-        dy={14}
-        textAnchor="middle"
-        fill={item.isToday ? '#2d9f5f' : '#6b5a45'}
-        fontSize={11}
-        fontWeight={item.isToday ? 700 : 500}
-      >
-        {item.day}
-      </text>
-      {item.daySub && (
-        <text x={0} y={0} dy={28} textAnchor="middle" fill="#2d9f5f" fontSize={11} fontWeight={600}>
-          {item.daySub}
-        </text>
-      )}
-    </g>
+    <text
+      x={x}
+      y={y}
+      dx={dx}
+      dy={14}
+      textAnchor={textAnchor}
+      fill={isToday ? '#2d9f5f' : '#6b5a45'}
+      fontSize={11}
+      fontWeight={isToday ? 700 : 500}
+    >
+      {payload?.value}
+    </text>
+  )
+}
+
+function TrendLineDot({ cx, cy, payload, dotOnImportOnly = false }) {
+  if (cx == null || cy == null || !payload) return null
+  if (dotOnImportOnly && !payload.hasImport) return null
+  const color = DAY_SALES_BAR_COLORS[payload.dayType] || DAY_SALES_BAR_COLORS.weekday
+  const radius = payload.isToday ? 7 : 6
+  return <circle cx={cx} cy={cy} r={radius} fill={color} stroke="#fff" strokeWidth={2.5} />
+}
+
+function TrendLineValueLabel({ x, y, value, index, chartData, dataKey, dotOnImportOnly }) {
+  const row = chartData[index]
+  const numericValue = Number(value ?? row?.[dataKey] ?? 0)
+  if (!numericValue) return null
+  if (dotOnImportOnly && !row?.hasImport) return null
+
+  const isLast = index === chartData.length - 1
+  const isFirst = index === 0
+
+  return (
+    <text
+      x={x}
+      y={y}
+      dx={isLast ? -6 : isFirst ? 6 : 0}
+      dy={-10}
+      textAnchor={isLast ? 'end' : isFirst ? 'start' : 'middle'}
+      fill="#8b6914"
+      fontSize={11}
+      fontWeight={700}
+      fontFamily="var(--font-numeric)"
+    >
+      {formatCount(numericValue)}
+    </text>
+  )
+}
+
+function JewelleryTrendLineChart({
+  chartData,
+  period = 'week',
+  dataKey,
+  tooltip: TooltipComponent,
+  legendPrimaryLabel,
+  showValueLabels,
+  showArea = false,
+  dotOnImportOnly = false,
+}) {
+  const isMonth = period === 'month'
+  const xLabelKey = isMonth ? 'dayMedium' : 'dayShort'
+  const showLabels = showValueLabels ?? !isMonth
+  const xTickInterval = isMonth ? Math.max(0, Math.floor(chartData.length / 6) - 1) : 0
+  const gradientId = `trend-fill-${dataKey}`
+
+  return (
+    <div className="trend-line-chart">
+      <ResponsiveContainer width="100%" height={280}>
+        <ComposedChart
+          data={chartData}
+          margin={{ top: 36, right: isMonth ? 16 : 28, left: 8, bottom: isMonth ? 28 : 14 }}
+        >
+          {showArea && (
+            <defs>
+              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#d4af37" stopOpacity={0.16} />
+                <stop offset="100%" stopColor="#d4af37" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+          )}
+          <XAxis
+            dataKey={xLabelKey}
+            tick={(props) => <TrendLineXTick {...props} chartData={chartData} labelKey={xLabelKey} />}
+            axisLine={false}
+            tickLine={false}
+            interval={xTickInterval}
+            height={36}
+            angle={isMonth ? -32 : 0}
+            textAnchor={isMonth ? 'end' : 'middle'}
+          />
+          <YAxis
+            tick={{ fontSize: 11, fill: '#9a8b78' }}
+            axisLine={false}
+            tickLine={false}
+            allowDecimals={false}
+            width={52}
+          />
+          <Tooltip
+            content={TooltipComponent}
+            cursor={{ stroke: 'rgba(184, 134, 11, 0.18)', strokeWidth: 1, strokeDasharray: '4 4' }}
+          />
+          {showArea && (
+            <Area
+              type="monotone"
+              dataKey={dataKey}
+              fill={`url(#${gradientId})`}
+              stroke="none"
+              isAnimationActive={false}
+            />
+          )}
+          <Line
+            type="monotone"
+            dataKey={dataKey}
+            stroke="#c9a227"
+            strokeWidth={2}
+            dot={<TrendLineDot dotOnImportOnly={dotOnImportOnly} />}
+            activeDot={{ r: 8, stroke: '#fff', strokeWidth: 2.5, fill: '#b8860b' }}
+          >
+            {showLabels && (
+              <LabelList
+                content={(props) => (
+                  <TrendLineValueLabel
+                    {...props}
+                    chartData={chartData}
+                    dataKey={dataKey}
+                    dotOnImportOnly={dotOnImportOnly}
+                  />
+                )}
+              />
+            )}
+          </Line>
+        </ComposedChart>
+      </ResponsiveContainer>
+
+      <div className="trend-line-legend">
+        <span className="trend-line-legend__item">
+          <i className="trend-line-legend__swatch trend-line-legend__swatch--primary" />
+          {legendPrimaryLabel}
+        </span>
+        <span className="trend-line-legend__item">
+          <i className="trend-line-legend__swatch trend-line-legend__swatch--saturday" />
+          Saturday
+        </span>
+        <span className="trend-line-legend__item">
+          <i className="trend-line-legend__swatch trend-line-legend__swatch--today" />
+          Today
+        </span>
+      </div>
+    </div>
   )
 }
 
@@ -282,33 +431,33 @@ function DayWiseSalesBarChart({ data }) {
   if (!hasSales) return <p className="analytics-empty">No sales data for this period.</p>
 
   return (
-    <div className="day-sales-chart">
+    <div className="day-sales-bar-chart">
       <ResponsiveContainer width="100%" height={280}>
-        <BarChart data={chartData} margin={{ top: 28, right: 8, left: 0, bottom: itemHasSubLabel(chartData) ? 18 : 4 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#ebe3d6" vertical={false} />
+        <BarChart data={chartData} margin={{ top: 28, right: 8, left: 0, bottom: 8 }}>
           <XAxis
-            dataKey="day"
-            tick={(props) => <DaySalesXTick {...props} chartData={chartData} />}
-            axisLine={{ stroke: '#e8dfd3' }}
+            dataKey="dayShort"
+            tick={(props) => <TrendLineXTick {...props} chartData={chartData} labelKey="dayShort" />}
+            axisLine={false}
             tickLine={false}
             interval={0}
-            height={itemHasSubLabel(chartData) ? 52 : 36}
+            height={36}
           />
           <YAxis
-            tick={{ fontSize: 12, fill: '#6b5a45' }}
+            tick={{ fontSize: 11, fill: '#9a8b78' }}
             axisLine={false}
             tickLine={false}
             allowDecimals={false}
+            width={44}
           />
           <Tooltip content={<DaySalesTooltip />} cursor={{ fill: 'rgba(184, 134, 11, 0.08)' }} />
-          <Bar dataKey="soldPieces" radius={[10, 10, 0, 0]} maxBarSize={52}>
+          <Bar dataKey="soldPieces" radius={[10, 10, 0, 0]} maxBarSize={48}>
             {chartData.map((entry) => (
               <Cell key={entry.date} fill={DAY_SALES_BAR_COLORS[entry.dayType]} />
             ))}
             <LabelList
               dataKey="soldPieces"
               position="top"
-              formatter={(value) => (value > 0 ? value : '')}
+              formatter={(value) => (value > 0 ? formatCount(value) : '')}
               fill="#8b6914"
               fontSize={11}
               fontWeight={700}
@@ -320,11 +469,11 @@ function DayWiseSalesBarChart({ data }) {
       <div className="day-sales-legend">
         <span className="day-sales-legend__item">
           <i className="day-sales-legend__swatch day-sales-legend__swatch--weekday" />
-          Weekday
+          Sold (pieces)
         </span>
         <span className="day-sales-legend__item">
           <i className="day-sales-legend__swatch day-sales-legend__swatch--saturday" />
-          Saturday (peak)
+          Saturday
         </span>
         <span className="day-sales-legend__item">
           <i className="day-sales-legend__swatch day-sales-legend__swatch--today" />
@@ -333,10 +482,6 @@ function DayWiseSalesBarChart({ data }) {
       </div>
     </div>
   )
-}
-
-function itemHasSubLabel(chartData) {
-  return chartData.some((row) => row.daySub)
 }
 
 function DayWiseSalesHeatmap({ data }) {
@@ -387,29 +532,72 @@ function DayWiseSalesHeatmap({ data }) {
   )
 }
 
-function buildDailyImportChartRows(apiData) {
+function groupBatchesByDate(apiData) {
+  const byDate = {}
+
+  for (const row of apiData || []) {
+    const dateKey = row.date
+    if (!byDate[dateKey]) {
+      byDate[dateKey] = { latest: row, count: 1 }
+      continue
+    }
+
+    byDate[dateKey].count += 1
+    if (Number(row.batchId) > Number(byDate[dateKey].latest.batchId)) {
+      byDate[dateKey].latest = row
+    }
+  }
+
+  return byDate
+}
+
+function buildDailyImportDayRows(apiData, dayCount) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const todayKey = toDateKey(today)
+  const byDate = groupBatchesByDate(apiData)
 
-  return (apiData || []).map((row) => {
-    const dateKey = row.date
-    const isToday = dateKey === todayKey || row.day === 'Today'
+  let lastStock = 0
+
+  return Array.from({ length: dayCount }, (_, index) => {
+    const date = new Date(today)
+    date.setDate(today.getDate() - (dayCount - 1 - index))
+    const dateKey = toDateKey(date)
     const dayType = getDayType(dateKey, todayKey)
-    const date = new Date(`${dateKey}T00:00:00`)
+    const isToday = dateKey === todayKey
     const weekday = WEEKDAY_HEADERS[date.getDay()]
     const dayNum = date.getDate()
     const month = MONTH_NAMES_SHORT[date.getMonth()]
-    const day = isToday ? 'Today' : `${weekday} ${dayNum} ${month}`
+    const dayGroup = byDate[dateKey]
+    const batchRow = dayGroup?.latest
+    const hasImport = Boolean(batchRow)
+
+    if (hasImport) {
+      lastStock = Number(batchRow.totalStock ?? 0)
+    }
 
     return {
-      ...row,
-      day,
-      daySub: isToday ? `${dayNum} ${month}` : null,
-      isToday,
+      date: dateKey,
+      day: isToday ? 'Today' : `${weekday} ${dayNum} ${month}`,
+      dayShort: isToday ? 'Today' : weekday,
+      dayMedium: isToday ? 'Today' : `${dayNum} ${month}`,
+      totalStock: lastStock,
+      estimatedSold: hasImport ? Number(batchRow.estimatedSold ?? 0) : 0,
+      batchId: hasImport ? batchRow.batchId : null,
+      importCount: dayGroup?.count ?? 0,
+      hasImport,
       dayType,
+      isToday,
     }
   })
+}
+
+function buildDailyImportWeekRows(apiData) {
+  return buildDailyImportDayRows(apiData, 7)
+}
+
+function buildDailyImportMonthRows(apiData) {
+  return buildDailyImportDayRows(apiData, 30)
 }
 
 function DailyImportTooltip({ active, payload }) {
@@ -417,80 +605,59 @@ function DailyImportTooltip({ active, payload }) {
   const item = payload[0].payload
   return (
     <div className="chart-tip">
-      <p className="chart-tip__title">Batch #{item?.batchId}</p>
+      <p className="chart-tip__title">{item?.day || item?.date}</p>
       {item?.date && <p className="chart-tip__meta">{item.date}</p>}
+      {item?.hasImport && item?.importCount > 1 && (
+        <p className="chart-tip__meta">
+          {item.importCount}
+          {' '}
+          imports this day
+        </p>
+      )}
+      {item?.hasImport && item?.batchId != null && (
+        <p className="chart-tip__meta">
+          Latest batch #
+          {item.batchId}
+        </p>
+      )}
+      {!item?.hasImport && item?.totalStock > 0 && (
+        <p className="chart-tip__meta">No new import — carried stock</p>
+      )}
       <p className="chart-tip__value">
         {formatCount(item?.totalStock ?? 0)}
         {' '}
         total stock
       </p>
-      <p className="chart-tip__meta">
-        Est. sold:
-        {' '}
-        {formatCount(item?.estimatedSold ?? 0)}
-      </p>
+      {item?.hasImport && (
+        <p className="chart-tip__meta">
+          Est. sold:
+          {' '}
+          {formatCount(item?.estimatedSold ?? 0)}
+        </p>
+      )}
     </div>
   )
 }
 
-function DailyImportsBarChart({ data }) {
-  const chartData = buildDailyImportChartRows(data)
+function DailyImportsLineChart({ data, period }) {
+  const chartData = period === 'month'
+    ? buildDailyImportMonthRows(data)
+    : buildDailyImportWeekRows(data)
+  const hasImports = (data || []).length > 0
 
-  if (!chartData.length) {
+  if (!hasImports) {
     return <p className="analytics-empty">No import data for this period.</p>
   }
 
   return (
-    <div className="day-sales-chart daily-imports-chart">
-      <ResponsiveContainer width="100%" height={280}>
-        <BarChart data={chartData} margin={{ top: 28, right: 8, left: 0, bottom: itemHasSubLabel(chartData) ? 18 : 4 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#ebe3d6" vertical={false} />
-          <XAxis
-            dataKey="day"
-            tick={(props) => <DaySalesXTick {...props} chartData={chartData} />}
-            axisLine={{ stroke: '#e8dfd3' }}
-            tickLine={false}
-            interval={0}
-            height={itemHasSubLabel(chartData) ? 52 : 36}
-          />
-          <YAxis
-            tick={{ fontSize: 12, fill: '#6b5a45' }}
-            axisLine={false}
-            tickLine={false}
-            allowDecimals={false}
-          />
-          <Tooltip content={<DailyImportTooltip />} cursor={{ fill: 'rgba(184, 134, 11, 0.08)' }} />
-          <Bar dataKey="totalStock" radius={[10, 10, 0, 0]} maxBarSize={52}>
-            {chartData.map((entry) => (
-              <Cell key={`${entry.batchId}-${entry.date}`} fill={DAY_SALES_BAR_COLORS[entry.dayType]} />
-            ))}
-            <LabelList
-              dataKey="totalStock"
-              position="top"
-              formatter={(value) => (value > 0 ? formatCount(value) : '')}
-              fill="#8b6914"
-              fontSize={11}
-              fontWeight={700}
-            />
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-
-      <div className="day-sales-legend">
-        <span className="day-sales-legend__item">
-          <i className="day-sales-legend__swatch day-sales-legend__swatch--weekday" />
-          Weekday import
-        </span>
-        <span className="day-sales-legend__item">
-          <i className="day-sales-legend__swatch day-sales-legend__swatch--saturday" />
-          Saturday import
-        </span>
-        <span className="day-sales-legend__item">
-          <i className="day-sales-legend__swatch day-sales-legend__swatch--today" />
-          Today
-        </span>
-      </div>
-    </div>
+    <JewelleryTrendLineChart
+      chartData={chartData}
+      period={period}
+      dataKey="totalStock"
+      tooltip={DailyImportTooltip}
+      legendPrimaryLabel="Stock per batch"
+      dotOnImportOnly
+    />
   )
 }
 
@@ -555,7 +722,7 @@ function DailyImportsCard({
       <div className="analytics-tile__body day-sales-card__body">
         {loading && <p className="analytics-empty">Loading daily imports…</p>}
         {!loading && error && <p className="analytics-empty">{error}</p>}
-        {!loading && !error && <DailyImportsBarChart data={data} />}
+        {!loading && !error && <DailyImportsLineChart data={data} period={period} />}
       </div>
     </article>
   )
