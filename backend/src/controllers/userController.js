@@ -1,8 +1,10 @@
 import ApiError from '../utils/ApiError.js';
 import * as userService from '../services/userService.js';
 
-const USERNAME_REGEX = /^[a-zA-Z0-9_-]{1,50}$/;
+const MAX_USERNAME_LENGTH = 100;
 const MAX_PASSWORD_BYTES = 72;
+
+const normalizeUsername = (value) => String(value ?? '').trim();
 
 /** Validate that :id is a positive integer. */
 const parseId = (raw) => {
@@ -29,11 +31,12 @@ export const getUser = async (req, res) => {
 
 // POST /api/v1/users
 export const createUser = async (req, res) => {
-  const { username, password } = req.body ?? {};
+  const username = normalizeUsername(req.body?.username);
+  const { password } = req.body ?? {};
 
   if (!username) throw new ApiError(400, 'Username is required');
-  if (!USERNAME_REGEX.test(username)) {
-    throw new ApiError(400, 'Username must be 1–50 characters and contain only letters, numbers, underscores, or hyphens');
+  if (username.length > MAX_USERNAME_LENGTH) {
+    throw new ApiError(400, `Username must be at most ${MAX_USERNAME_LENGTH} characters`);
   }
   if (!password) throw new ApiError(400, 'Password is required');
   if (password.length < 6) throw new ApiError(400, 'Password must be at least 6 characters');
@@ -48,9 +51,10 @@ export const createUser = async (req, res) => {
 // PUT /api/v1/users/:id
 export const updateUser = async (req, res) => {
   const id = parseId(req.params.id);
-  const { username, password } = req.body ?? {};
+  const rawUsername = req.body?.username;
+  const { password } = req.body ?? {};
 
-  const hasUsername = username !== undefined && username !== '';
+  const hasUsername = rawUsername !== undefined && rawUsername !== '';
   const hasPassword = password !== undefined && password !== '';
 
   if (!hasUsername && !hasPassword) {
@@ -60,9 +64,16 @@ export const updateUser = async (req, res) => {
   const fields = {};
 
   if (hasUsername) {
-    if (!USERNAME_REGEX.test(username)) {
-      throw new ApiError(400, 'Username must be 1–50 characters and contain only letters, numbers, underscores, or hyphens');
+    const username = normalizeUsername(rawUsername);
+
+    if (!username) {
+      throw new ApiError(400, 'Username is required');
     }
+
+    if (username.length > MAX_USERNAME_LENGTH) {
+      throw new ApiError(400, `Username must be at most ${MAX_USERNAME_LENGTH} characters`);
+    }
+
     fields.username = username;
   }
 
