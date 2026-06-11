@@ -1,17 +1,133 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
+  Bar,
+  BarChart,
+  CartesianGrid,
   Cell,
-  Pie,
-  PieChart,
+  LabelList,
   ResponsiveContainer,
   Tooltip,
+  XAxis,
+  YAxis,
 } from 'recharts'
-import { fetchDashboard, fetchTopSoldProducts } from '../services/dashboard.js'
+import { fetchDashboard, fetchDayWiseSales, fetchTopSoldProducts } from '../services/dashboard.js'
 import './Module.css'
 import './Dashboard.css'
 
 const CHART_COLORS = ['#b8860b', '#d4af37', '#c9a227', '#a67c00', '#e8c547', '#9a7209', '#f0c75e', '#8b6914']
+
+const DAY_SALES_PERIODS = [
+  { value: 'week', label: 'Week' },
+  { value: 'month', label: 'Month' },
+]
+
+const DAY_SALES_COUNTERS = [
+  { value: 'all', label: 'All counters' },
+  { value: 'showroom', label: 'Showroom' },
+  { value: 'safe', label: 'Safe' },
+]
+
+const WEEKDAY_HEADERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const MONTH_NAMES_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+const DAY_SALES_BAR_COLORS = {
+  weekday: '#b8860b',
+  saturday: '#d97706',
+  today: '#2d9f5f',
+}
+
+function toDateKey(date) {
+  const d = date instanceof Date ? date : new Date(`${date}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return String(date).slice(0, 10)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function getDayType(dateKey, todayKey) {
+  if (dateKey === todayKey) return 'today'
+  const date = new Date(`${dateKey}T00:00:00`)
+  if (date.getDay() === 6) return 'saturday'
+  return 'weekday'
+}
+
+function buildWeekChartRows(apiData) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const todayKey = toDateKey(today)
+  const byDate = Object.fromEntries((apiData || []).map((row) => [row.date, row.soldPieces]))
+
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(today)
+    date.setDate(today.getDate() - (6 - index))
+    const dateKey = toDateKey(date)
+    const dayType = getDayType(dateKey, todayKey)
+    const isToday = dateKey === todayKey
+    const weekday = WEEKDAY_HEADERS[date.getDay()]
+    const dayNum = date.getDate()
+    const month = MONTH_NAMES_SHORT[date.getMonth()]
+
+    return {
+      date: dateKey,
+      day: isToday ? 'Today' : `${weekday} ${dayNum} ${month}`,
+      daySub: isToday ? `${dayNum} ${month}` : null,
+      soldPieces: byDate[dateKey] ?? 0,
+      dayType,
+      isToday,
+    }
+  })
+}
+
+function getHeatLevel(soldPieces, max) {
+  if (!soldPieces) return 0
+  if (!max) return 1
+  const ratio = soldPieces / max
+  if (ratio >= 0.8) return 5
+  if (ratio >= 0.6) return 4
+  if (ratio >= 0.4) return 3
+  if (ratio >= 0.2) return 2
+  return 1
+}
+
+function buildMonthHeatmapRows(apiData) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const todayKey = toDateKey(today)
+  const byDate = Object.fromEntries((apiData || []).map((row) => [row.date, row.soldPieces]))
+
+  const days = Array.from({ length: 30 }, (_, index) => {
+    const date = new Date(today)
+    date.setDate(today.getDate() - (29 - index))
+    const dateKey = toDateKey(date)
+    const soldPieces = byDate[dateKey] ?? 0
+
+    return {
+      date: dateKey,
+      dayNum: date.getDate(),
+      weekday: date.getDay(),
+      soldPieces,
+      isToday: dateKey === todayKey,
+      empty: false,
+    }
+  })
+
+  const maxSold = Math.max(...days.map((row) => row.soldPieces), 0)
+  const enrichedDays = days.map((row) => ({
+    ...row,
+    heatLevel: getHeatLevel(row.soldPieces, maxSold),
+  }))
+
+  const leading = Array.from({ length: enrichedDays[0].weekday }, () => ({ empty: true }))
+  const cells = [...leading, ...enrichedDays]
+
+  while (cells.length % 7 !== 0) {
+    cells.push({ empty: true })
+  }
+
+  return { cells, maxSold }
+}
 
 function formatCount(value) {
   return Number(value || 0).toLocaleString('en-IN')
@@ -26,94 +142,6 @@ function pct(part, whole) {
   const total = Number(whole)
   if (!total) return '0'
   return ((Number(part) / total) * 100).toFixed(1)
-}
-
-function buildPieSlices(rows, valueKey, topN = 6, nameKey = 'name') {
-  const sorted = [...rows].sort((a, b) => (b[valueKey] ?? 0) - (a[valueKey] ?? 0))
-  const top = sorted.slice(0, topN)
-  const rest = sorted.slice(topN)
-
-  const slices = top.map((row) => ({
-    name: truncate(row[nameKey], 14),
-    fullName: row[nameKey],
-    count: row[valueKey] ?? 0,
-  }))
-
-  if (rest.length) {
-    slices.push({
-      name: 'Others',
-      fullName: `${rest.length} more`,
-      count: rest.reduce((sum, row) => sum + (row[valueKey] ?? 0), 0),
-    })
-  }
-
-  return slices
-}
-
-function ChartTooltip({ active, payload, label, valueLabel = 'sub-products' }) {
-  if (!active || !payload?.length) return null
-  const item = payload[0].payload
-  const value = payload[0].value
-  return (
-    <div className="chart-tip">
-      <p className="chart-tip__title">{item?.fullName || item?.name || label}</p>
-      {item?.product && <p className="chart-tip__meta">Product: {item.product}</p>}
-      <p className="chart-tip__value">
-        {formatCount(value)}
-        {' '}
-        {valueLabel}
-      </p>
-      {item?.productCount != null && (
-        <p className="chart-tip__meta">{formatCount(item.productCount)} products</p>
-      )}
-    </div>
-  )
-}
-
-function DonutChart({ data, centerTitle, centerValue }) {
-  if (!data.length) return <p className="analytics-empty">No data available.</p>
-
-  const total = data.reduce((sum, row) => sum + row.count, 0)
-
-  return (
-    <div className="analytics-donut">
-      <div className="analytics-donut__chart">
-        <ResponsiveContainer width="100%" height={220}>
-          <PieChart>
-            <Pie
-              data={data}
-              cx="50%"
-              cy="50%"
-              innerRadius={58}
-              outerRadius={88}
-              paddingAngle={3}
-              dataKey="count"
-              stroke="#fff"
-              strokeWidth={2}
-            >
-              {data.map((entry, index) => (
-                <Cell key={`${entry.fullName}-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-              ))}
-            </Pie>
-            <Tooltip content={<ChartTooltip valueLabel="sub-products" />} />
-          </PieChart>
-        </ResponsiveContainer>
-        <div className="analytics-donut__center">
-          <strong>{centerValue ?? formatCount(total)}</strong>
-          <span>{centerTitle}</span>
-        </div>
-      </div>
-      <ul className="analytics-donut__legend">
-        {data.map((row, index) => (
-          <li key={row.fullName}>
-            <span className="analytics-donut__dot" style={{ background: CHART_COLORS[index % CHART_COLORS.length] }} />
-            <span className="analytics-donut__name" title={row.fullName}>{row.name}</span>
-            <span className="analytics-donut__pct">{pct(row.count, total)}%</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
 }
 
 function CounterSplitIcon({ type }) {
@@ -189,6 +217,274 @@ function CounterSplitChart({ data }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+function DaySalesXTick({ x, y, payload, chartData }) {
+  const item = chartData?.find((row) => row.day === payload?.value)
+  if (!item) return null
+
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text
+        x={0}
+        y={0}
+        dy={14}
+        textAnchor="middle"
+        fill={item.isToday ? '#2d9f5f' : '#6b5a45'}
+        fontSize={11}
+        fontWeight={item.isToday ? 700 : 500}
+      >
+        {item.day}
+      </text>
+      {item.daySub && (
+        <text x={0} y={0} dy={28} textAnchor="middle" fill="#2d9f5f" fontSize={11} fontWeight={600}>
+          {item.daySub}
+        </text>
+      )}
+    </g>
+  )
+}
+
+function DaySalesTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null
+  const item = payload[0].payload
+  return (
+    <div className="chart-tip">
+      <p className="chart-tip__title">{item?.day || item?.date}</p>
+      {item?.date && <p className="chart-tip__meta">{item.date}</p>}
+      <p className="chart-tip__value">
+        {formatCount(item?.soldPieces ?? 0)}
+        {' '}
+        sold pieces
+      </p>
+    </div>
+  )
+}
+
+function DayWiseSalesBarChart({ data }) {
+  const chartData = buildWeekChartRows(data)
+  const hasSales = chartData.some((row) => row.soldPieces > 0)
+
+  if (!hasSales) return <p className="analytics-empty">No sales data for this period.</p>
+
+  return (
+    <div className="day-sales-chart">
+      <ResponsiveContainer width="100%" height={280}>
+        <BarChart data={chartData} margin={{ top: 28, right: 8, left: 0, bottom: itemHasSubLabel(chartData) ? 18 : 4 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#ebe3d6" vertical={false} />
+          <XAxis
+            dataKey="day"
+            tick={(props) => <DaySalesXTick {...props} chartData={chartData} />}
+            axisLine={{ stroke: '#e8dfd3' }}
+            tickLine={false}
+            interval={0}
+            height={itemHasSubLabel(chartData) ? 52 : 36}
+          />
+          <YAxis
+            tick={{ fontSize: 12, fill: '#6b5a45' }}
+            axisLine={false}
+            tickLine={false}
+            allowDecimals={false}
+          />
+          <Tooltip content={<DaySalesTooltip />} cursor={{ fill: 'rgba(184, 134, 11, 0.08)' }} />
+          <Bar dataKey="soldPieces" radius={[10, 10, 0, 0]} maxBarSize={52}>
+            {chartData.map((entry) => (
+              <Cell key={entry.date} fill={DAY_SALES_BAR_COLORS[entry.dayType]} />
+            ))}
+            <LabelList
+              dataKey="soldPieces"
+              position="top"
+              formatter={(value) => (value > 0 ? value : '')}
+              fill="#8b6914"
+              fontSize={11}
+              fontWeight={700}
+            />
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+
+      <div className="day-sales-legend">
+        <span className="day-sales-legend__item">
+          <i className="day-sales-legend__swatch day-sales-legend__swatch--weekday" />
+          Weekday
+        </span>
+        <span className="day-sales-legend__item">
+          <i className="day-sales-legend__swatch day-sales-legend__swatch--saturday" />
+          Saturday (peak)
+        </span>
+        <span className="day-sales-legend__item">
+          <i className="day-sales-legend__swatch day-sales-legend__swatch--today" />
+          Today
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function itemHasSubLabel(chartData) {
+  return chartData.some((row) => row.daySub)
+}
+
+function DayWiseSalesHeatmap({ data }) {
+  const { cells, maxSold } = buildMonthHeatmapRows(data)
+  const hasSales = cells.some((cell) => !cell.empty && cell.soldPieces > 0)
+
+  if (!hasSales) return <p className="analytics-empty">No sales data for this period.</p>
+
+  return (
+    <div className="day-sales-heatmap">
+      <div className="day-sales-heatmap__weekdays">
+        {WEEKDAY_HEADERS.map((day) => (
+          <span key={day} className="day-sales-heatmap__weekday">{day}</span>
+        ))}
+      </div>
+
+      <div className="day-sales-heatmap__grid">
+        {cells.map((cell, index) => {
+          if (cell.empty) {
+            return <span key={`empty-${index}`} className="day-sales-heatmap__cell day-sales-heatmap__cell--empty" aria-hidden="true" />
+          }
+
+          return (
+            <div
+              key={cell.date}
+              className={`day-sales-heatmap__cell day-sales-heatmap__cell--level-${cell.heatLevel}${cell.isToday ? ' day-sales-heatmap__cell--today' : ''}`}
+              title={`${cell.date}: ${formatCount(cell.soldPieces)} pieces`}
+            >
+              <span className="day-sales-heatmap__day">{cell.dayNum}</span>
+              {cell.soldPieces > 0 && (
+                <span className="day-sales-heatmap__value">{cell.soldPieces}p</span>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="day-sales-heatmap__legend">
+        <span>Low</span>
+        <div className="day-sales-heatmap__scale">
+          {[0, 1, 2, 3, 4, 5].map((level) => (
+            <i key={level} className={`day-sales-heatmap__scale-swatch day-sales-heatmap__scale-swatch--${level}`} />
+          ))}
+        </div>
+        <span>High{maxSold > 0 ? ` (${formatCount(maxSold)} max)` : ''}</span>
+      </div>
+    </div>
+  )
+}
+
+function DayWiseSalesCard({
+  period,
+  counter,
+  onPeriodChange,
+  onCounterChange,
+  loading,
+  error,
+  data,
+  totalSoldPieces,
+}) {
+  return (
+    <article className="analytics-tile analytics-tile--wide day-sales-card">
+      <header className="day-sales-card__head">
+        <div className="day-sales-card__title-wrap">
+          <h3>Day-wise sales — pieces sold</h3>
+          <div className="day-sales-pills">
+            {DAY_SALES_COUNTERS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={`day-sales-pill${counter === option.value ? ' day-sales-pill--active' : ''}`}
+                onClick={() => onCounterChange(option.value)}
+                disabled={loading}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="day-sales-card__actions">
+          <div className="day-sales-toggle" role="group" aria-label="Sales period">
+            {DAY_SALES_PERIODS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={`day-sales-toggle__btn${period === option.value ? ' day-sales-toggle__btn--active' : ''}`}
+                onClick={() => onPeriodChange(option.value)}
+                disabled={loading}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <span className="day-sales-total">
+            Total:
+            {' '}
+            <strong>{formatCount(totalSoldPieces)}</strong>
+            {' '}
+            pieces
+          </span>
+        </div>
+      </header>
+
+      <div className="analytics-tile__body day-sales-card__body">
+        {loading && <p className="analytics-empty">Loading day-wise sales…</p>}
+        {!loading && error && <p className="analytics-empty">{error}</p>}
+        {!loading && !error && period === 'week' && <DayWiseSalesBarChart data={data} />}
+        {!loading && !error && period === 'month' && <DayWiseSalesHeatmap data={data} />}
+      </div>
+    </article>
+  )
+}
+
+function ProductCategoryBreakdown({ data, totalPieces }) {
+  const rows = [...(data || [])]
+    .map((row) => ({
+      name: truncate(row.name, 24),
+      fullName: row.name,
+      count: Number(row.pieceCount ?? 0),
+      tagCount: Number(row.tagCount ?? 0),
+    }))
+    .filter((row) => row.count > 0)
+    .sort((a, b) => b.count - a.count)
+
+  if (!rows.length) return <p className="analytics-empty">No product category data available.</p>
+
+  const max = Math.max(...rows.map((row) => row.count), 1)
+  const total = Number(totalPieces) || rows.reduce((sum, row) => sum + row.count, 0)
+
+  return (
+    <div className="product-category-breakdown">
+      <div className="product-category-breakdown__columns" aria-hidden="true">
+        <span>Category</span>
+        <span />
+        <span>Pieces</span>
+        <span>Share</span>
+      </div>
+
+      <ul className="product-category-breakdown__list">
+        {rows.map((row, index) => {
+          const width = Math.max((row.count / max) * 100, row.count > 0 ? 3 : 0)
+          return (
+            <li key={row.fullName} className="product-category-breakdown__row">
+              <span className="product-category-breakdown__name" title={row.fullName}>{row.name}</span>
+              <div className="product-category-breakdown__track" aria-hidden="true">
+                <span
+                  className="product-category-breakdown__fill"
+                  style={{
+                    width: `${width}%`,
+                    background: `linear-gradient(90deg, ${CHART_COLORS[index % CHART_COLORS.length]}, ${CHART_COLORS[(index + 1) % CHART_COLORS.length]})`,
+                  }}
+                />
+              </div>
+              <span className="product-category-breakdown__count">{formatCount(row.count)}</span>
+              <span className="product-category-breakdown__pct">{pct(row.count, total)}%</span>
+            </li>
+          )
+        })}
+      </ul>
     </div>
   )
 }
@@ -355,6 +651,11 @@ export default function Dashboard() {
   const [topSoldNotice, setTopSoldNotice] = useState('')
   const [loading, setLoading] = useState(true)
   const [topSoldLoading, setTopSoldLoading] = useState(true)
+  const [salesPeriod, setSalesPeriod] = useState('week')
+  const [salesCounter, setSalesCounter] = useState('all')
+  const [dayWiseSales, setDayWiseSales] = useState({ data: [], totalSoldPieces: 0 })
+  const [dayWiseLoading, setDayWiseLoading] = useState(true)
+  const [dayWiseError, setDayWiseError] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -413,6 +714,39 @@ export default function Dashboard() {
     return () => { cancelled = true }
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadDayWiseSales() {
+      setDayWiseLoading(true)
+      setDayWiseError('')
+
+      try {
+        const result = await fetchDayWiseSales({
+          period: salesPeriod,
+          counter: salesCounter,
+        })
+
+        if (!cancelled) {
+          setDayWiseSales(result)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setDayWiseSales({ data: [], totalSoldPieces: 0 })
+          setDayWiseError(err.message || 'Failed to load day-wise sales.')
+        }
+      } finally {
+        if (!cancelled) setDayWiseLoading(false)
+      }
+    }
+
+    if (!loading && summary) {
+      loadDayWiseSales()
+    }
+
+    return () => { cancelled = true }
+  }, [loading, summary, salesPeriod, salesCounter])
+
   const totals = summary?.totals ?? {
     totalTags: 0,
     totalPieces: 0,
@@ -427,16 +761,6 @@ export default function Dashboard() {
   const byProduct = summary?.byProduct ?? []
   const byCounter = summary?.byCounter ?? []
   const batch = summary?.batch
-  const productPieData = useMemo(
-    () => buildPieSlices(
-      byProduct.map((row) => ({ name: row.name, subProductCount: row.subProductCount ?? 0 })),
-      'subProductCount',
-      6,
-      'name',
-    ),
-    [byProduct],
-  )
-
   const topSoldBarData = useMemo(
     () => topSoldProducts.slice(0, 10).map((row) => ({
       name: truncate(row.productName, 22),
@@ -553,17 +877,27 @@ export default function Dashboard() {
         </div>
 
         <div className="analytics-grid">
-          <AnalyticsTile title="Product Mix" subtitle="Sub-product share by product group">
-            <DonutChart
-              data={productPieData}
-              centerTitle="sub-products"
-              centerValue={formatCount(totals.subProducts)}
-            />
+          <AnalyticsTile
+            title="Product Category Breakdown"
+            subtitle={`${formatCount(totals.totalPieces)} total pieces across ${formatCount(byProduct.length)} product groups`}
+          >
+            <ProductCategoryBreakdown data={byProduct} totalPieces={totals.totalPieces} />
           </AnalyticsTile>
 
           <AnalyticsTile title="Counter split" subtitle="Tag count in showroom vs safe storage">
             <CounterSplitChart data={counterSplitData} />
           </AnalyticsTile>
+
+          <DayWiseSalesCard
+            period={salesPeriod}
+            counter={salesCounter}
+            onPeriodChange={setSalesPeriod}
+            onCounterChange={setSalesCounter}
+            loading={dayWiseLoading}
+            error={dayWiseError}
+            data={dayWiseSales.data}
+            totalSoldPieces={dayWiseSales.totalSoldPieces}
+          />
 
           <AnalyticsTile title="Top Sold Products" subtitle="Sold quantity between previous and latest stock import" wide>
             {topSoldLoading && <p className="analytics-empty">Loading sold products…</p>}

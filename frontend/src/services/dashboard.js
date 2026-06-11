@@ -1,4 +1,4 @@
-import { apiFetch } from './api.js';
+import { API_BASE, apiFetch, buildQueryString, getAuthHeaders } from './api.js';
 
 const EMPTY_VERIFICATION = {
   totalFound: 0,
@@ -36,4 +36,37 @@ export async function fetchTopSoldProducts() {
     todayCount: Number(row.todayCount ?? 0),
     soldCount: Number(row.soldCount ?? 0),
   }));
+}
+
+export async function fetchDayWiseSales({ period = 'week', counter = 'all' } = {}) {
+  const query = buildQueryString({ period, counter });
+  const res = await fetch(`${API_BASE}/dashboard/day-wise-sales?${query}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  let json;
+  try {
+    json = await res.json();
+  } catch {
+    throw new Error('Unexpected server response');
+  }
+
+  if (!res.ok || json?.success === false) {
+    throw new Error(json?.message || 'Failed to load day-wise sales');
+  }
+
+  return {
+    period: json.period ?? period,
+    counter: json.counter ?? counter,
+    totalSoldPieces: Number(json.totalSoldPieces ?? 0),
+    data: (json.data || []).map((row) => ({
+      date: row.date,
+      day: row.day,
+      soldPieces: Number(row.soldPieces ?? 0),
+    })),
+  };
 }
