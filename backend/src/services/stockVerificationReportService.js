@@ -9,6 +9,15 @@ import {
 const VALID_STATUSES = ["FOUND", "MISSING", "NEW"];
 const MAX_EXPORT_ROWS = 50000;
 
+const logReport = (message, meta = undefined) => {
+  if (meta === undefined) {
+    console.info(`[stock-verification-report] ${message}`);
+    return;
+  }
+
+  console.info(`[stock-verification-report] ${message}`, meta);
+};
+
 const formatDateTime = (value) => {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
@@ -135,7 +144,10 @@ const getAllReportRows = async (filters) => {
             svd.product_name, svd.sub_product_name, svd.center_name,
             svd.tag_no, svd.status, svd.created_at
      ${baseFrom}
-     ORDER BY sv.verification_date DESC, svd.id DESC`,
+     ORDER BY
+       FIELD(svd.status, 'FOUND', 'NEW', 'MISSING'),
+       sv.verification_date DESC,
+       svd.id DESC`,
     params,
   );
 
@@ -150,21 +162,54 @@ const getAllReportRows = async (filters) => {
 };
 
 const exportReport = async (filters, exportType) => {
+  const startedAt = Date.now();
+  logReport("export started", { exportType, filters });
+
   const { summary, data } = await getAllReportRows(filters);
 
+  const [[dbTimeRow]] = await pool.execute("SELECT NOW() as currentTime");
+  const dbTime = formatDateTime(dbTimeRow.currentTime);
+
+  logReport("rows fetched for export", {
+    exportType,
+    rowCount: data.length,
+    summary,
+    durationMs: Date.now() - startedAt,
+  });
+
   if (exportType === "pdf") {
+    const buffer = await buildPdfBuffer(data, summary, filters, dbTime);
+    const fileName = getExportFileName("pdf");
+
+    logReport("export completed", {
+      exportType: "pdf",
+      fileName,
+      bufferBytes: buffer.length,
+      durationMs: Date.now() - startedAt,
+    });
+
     return {
-      buffer: await buildPdfBuffer(data, summary, filters),
+      buffer,
       contentType: "application/pdf",
-      fileName: getExportFileName("pdf"),
+      fileName,
     };
   }
 
+  const buffer = await buildExcelBuffer(data, summary, filters, dbTime);
+  const fileName = getExportFileName("excel");
+
+  logReport("export completed", {
+    exportType: "excel",
+    fileName,
+    bufferBytes: buffer.length,
+    durationMs: Date.now() - startedAt,
+  });
+
   return {
-    buffer: await buildExcelBuffer(data, summary, filters),
+    buffer,
     contentType:
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    fileName: getExportFileName("excel"),
+    fileName,
   };
 };
 

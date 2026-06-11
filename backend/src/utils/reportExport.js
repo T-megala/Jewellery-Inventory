@@ -1,21 +1,54 @@
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 
-const REPORT_HEADERS = [
-  "ID",
-  "Verification ID",
-  "Verification Date",
-  "Product",
-  "Sub Product",
-  "Center",
-  "Tag No",
-  "Status",
-  "Created At",
-];
+const logExport = (message, meta = undefined) => {
+  if (meta === undefined) {
+    console.info(`[report-export] ${message}`);
+    return;
+  }
+
+  console.info(`[report-export] ${message}`, meta);
+};
+
+const PDF_THEME = {
+  gold: "#D4AF37",
+  goldDark: "#B8860B",
+  goldLight: "#FFF8E7",
+  goldBorder: "#E8D5A3",
+  headerText: "#3D2F0A",
+  text: "#2C2416",
+  muted: "#7A6A45",
+  white: "#FFFFFF",
+  zebra: "#FFFBF0",
+  found: "#2F6B3A",
+  foundBg: "#E8F5E9",
+  missing: "#8B2E2E",
+  missingBg: "#FDECEC",
+  new: "#5C4A12",
+  newBg: "#FFF3CC",
+};
+
+const getStatusStyle = (status) => {
+  const normalized = String(status ?? "").toUpperCase();
+
+  if (normalized === "FOUND") {
+    return { fill: PDF_THEME.foundBg, text: PDF_THEME.found };
+  }
+
+  if (normalized === "MISSING") {
+    return { fill: PDF_THEME.missingBg, text: PDF_THEME.missing };
+  }
+
+  if (normalized === "NEW") {
+    return { fill: PDF_THEME.newBg, text: PDF_THEME.new };
+  }
+
+  return { fill: PDF_THEME.zebra, text: PDF_THEME.text };
+};
+
+const toARGB = (hex) => "FF" + hex.replace("#", "").toUpperCase();
 
 const mapExportRow = (row) => [
-  row.id,
-  row.verificationId,
   row.verificationDate,
   row.productName,
   row.subProductName,
@@ -25,122 +58,515 @@ const mapExportRow = (row) => [
   row.createdAt,
 ];
 
-export const buildExcelBuffer = async (data, summary, filters) => {
-  const filterRows = [
-    ["Stock Verification Report"],
-    ["Generated At", new Date().toISOString().replace("T", " ").slice(0, 19)],
-    ["Product", filters.productName ?? "All"],
-    ["Sub Product", filters.subProductName ?? "All"],
-    ["Center", filters.centerName ?? "All"],
-    ["Status", filters.status ?? "All"],
-    [
-      "Date Range",
-      filters.fromDate && filters.toDate
-        ? `${filters.fromDate} to ${filters.toDate}`
-        : "All",
-    ],
-    [],
-    ["Summary"],
-    ["Found", summary.foundCount],
-    ["Missing", summary.missingCount],
-    ["New", summary.newCount],
-    ["Total Records", data.length],
-    [],
-    REPORT_HEADERS,
-    ...data.map(mapExportRow),
-  ];
+export const buildExcelBuffer = async (data, summary, filters, dbTime) => {
+  const startedAt = Date.now();
+  logExport("excel generation started", {
+    rowCount: data.length,
+    filters,
+    summary,
+  });
 
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet("Report");
 
-  for (const row of filterRows) {
-    worksheet.addRow(row);
-  }
+  worksheet.columns = [
+    { header: "Verification Date", width: 20 },
+    { header: "Product", width: 25 },
+    { header: "Sub Product", width: 25 },
+    { header: "Center", width: 20 },
+    { header: "Tag No", width: 15 },
+    { header: "Status", width: 15 },
+    { header: "Created At", width: 20 },
+  ];
+
+  const headerRow = worksheet.getRow(1);
+  headerRow.eachCell({ includeEmpty: true }, (cell) => {
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: toARGB(PDF_THEME.goldDark) },
+    };
+    cell.font = {
+      color: { argb: toARGB(PDF_THEME.white) },
+      bold: true,
+    };
+    cell.border = {
+      top: { style: "thin", color: { argb: toARGB(PDF_THEME.goldBorder) } },
+      left: { style: "thin", color: { argb: toARGB(PDF_THEME.goldBorder) } },
+      bottom: { style: "thin", color: { argb: toARGB(PDF_THEME.goldBorder) } },
+      right: { style: "thin", color: { argb: toARGB(PDF_THEME.goldBorder) } },
+    };
+  });
+
+  data.forEach((item, index) => {
+    const rowValues = mapExportRow(item);
+    const row = worksheet.addRow(rowValues);
+    const isZebra = index % 2 === 1;
+
+    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      cell.border = {
+        top: { style: "thin", color: { argb: toARGB(PDF_THEME.goldBorder) } },
+        left: { style: "thin", color: { argb: toARGB(PDF_THEME.goldBorder) } },
+        bottom: {
+          style: "thin",
+          color: { argb: toARGB(PDF_THEME.goldBorder) },
+        },
+        right: { style: "thin", color: { argb: toARGB(PDF_THEME.goldBorder) } },
+      };
+
+      let cellFill = isZebra ? PDF_THEME.zebra : PDF_THEME.white;
+      let cellColor = PDF_THEME.text;
+
+      if (colNumber === 6) {
+        const statusStyle = getStatusStyle(item.status);
+        cellFill = statusStyle.fill;
+        cellColor = statusStyle.text;
+        cell.font = { color: { argb: toARGB(cellColor) }, bold: true };
+        cell.alignment = { horizontal: "center" };
+      } else {
+        cell.font = { color: { argb: toARGB(cellColor) } };
+      }
+
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: toARGB(cellFill) },
+      };
+    });
+  });
 
   const buffer = await workbook.xlsx.writeBuffer();
-  return Buffer.from(buffer);
+  const result = Buffer.from(buffer);
+
+  logExport("excel generation completed", {
+    rowCount: data.length,
+    bufferBytes: result.length,
+    durationMs: Date.now() - startedAt,
+  });
+
+  return result;
 };
 
-export const buildPdfBuffer = (data, summary, filters) =>
+const PDF_LAYOUT = {
+  margin: 36,
+  rowHeight: 18,
+  headerBandHeight: 58,
+  headerGapAfter: 10,
+  footerHeight: 24,
+  footerOffsetFromBottom: 14,
+  fontSize: 7,
+  headerFontSize: 7.5,
+  titleFontSize: 17,
+};
+
+const PDF_DEBUG = process.env.REPORT_EXPORT_DEBUG === "true";
+
+const logPdfDebug = (message, meta = undefined) => {
+  if (!PDF_DEBUG) {
+    return;
+  }
+
+  logExport(`[pdf-debug] ${message}`, meta);
+};
+
+const PDF_COLUMNS = [
+  { key: "tagNo", label: "Tag No", width: 148, align: "left" },
+  { key: "productName", label: "Product", width: 167, align: "left" },
+  { key: "subProductName", label: "Sub Product", width: 167, align: "left" },
+  { key: "centerName", label: "Center", width: 106, align: "left" },
+  { key: "status", label: "Status", width: 70, align: "center" },
+  { key: "verificationDate", label: "Verified On", width: 110, align: "left" },
+];
+
+const truncateToWidth = (doc, text, maxWidth) => {
+  const value = String(text ?? "");
+
+  if (!value) {
+    return "";
+  }
+
+  if (doc.widthOfString(value) <= maxWidth) {
+    return value;
+  }
+
+  const ellipsis = "...";
+  let trimmed = value;
+
+  while (
+    trimmed.length > 0 &&
+    doc.widthOfString(`${trimmed}${ellipsis}`) > maxWidth
+  ) {
+    trimmed = trimmed.slice(0, -1);
+  }
+
+  return trimmed ? `${trimmed}${ellipsis}` : ellipsis;
+};
+
+const getContentWidth = (doc) =>
+  doc.page.width - doc.page.margins.left - doc.page.margins.right;
+
+const getTableBottomLimit = (doc) =>
+  doc.page.height - doc.page.margins.bottom - PDF_LAYOUT.footerHeight;
+
+const getFooterY = (doc) =>
+  doc.page.height - PDF_LAYOUT.margin - PDF_LAYOUT.footerOffsetFromBottom;
+
+const getRowsPerPage = (usableHeight) =>
+  Math.max(1, Math.floor(usableHeight / PDF_LAYOUT.rowHeight));
+
+const resetDocCursor = (doc, x, y) => {
+  doc.x = x;
+  doc.y = y;
+};
+
+const drawPdfHeaderBand = (doc, summary, totalRows, dbTime) => {
+  const { left, top } = doc.page.margins;
+  const width = getContentWidth(doc);
+
+  doc.save();
+  doc
+    .rect(left, top - 8, width, PDF_LAYOUT.headerBandHeight)
+    .fill(PDF_THEME.gold);
+  doc.rect(left, top - 8, width, 3).fill(PDF_THEME.goldDark);
+
+  doc
+    .fillColor(PDF_THEME.headerText)
+    .font("Helvetica-Bold")
+    .fontSize(PDF_LAYOUT.titleFontSize);
+  doc.text("Jewellery Stock Verification Report", left + 16, top + 6, {
+    width: width - 32,
+  });
+
+  doc.font("Helvetica").fontSize(8);
+  doc.text(`Generated ${dbTime}`, left + 16, top + 28, {
+    width: width - 32,
+    align: "right",
+  });
+
+  doc.font("Helvetica").fontSize(8.5);
+  doc.text(
+    `Found: ${summary.foundCount}   New: ${summary.newCount}   Missing: ${summary.missingCount}   Total: ${totalRows}`,
+    left + 16,
+    top + 40,
+    { width: width - 32 },
+  );
+
+  doc.restore();
+  doc.fillColor(PDF_THEME.text);
+
+  return top + PDF_LAYOUT.headerBandHeight + PDF_LAYOUT.headerGapAfter;
+};
+
+const drawTableHeaderRow = (doc, columns, y) => {
+  const { left } = doc.page.margins;
+  const tableWidth = columns.reduce((sum, column) => sum + column.width, 0);
+  const startX = left + Math.max(0, (getContentWidth(doc) - tableWidth) / 2);
+
+  doc.save();
+  doc
+    .rect(startX, y, tableWidth, PDF_LAYOUT.rowHeight)
+    .fill(PDF_THEME.goldDark);
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(PDF_LAYOUT.headerFontSize)
+    .fillColor(PDF_THEME.white);
+
+  let x = startX;
+  columns.forEach((column) => {
+    const padding = column.align === "right" ? 4 : 6;
+    doc.text(column.label, x + padding, y + 5, {
+      width: column.width - padding * 2,
+      align: column.align,
+      lineBreak: false,
+    });
+    x += column.width;
+  });
+
+  doc.restore();
+  doc.fillColor(PDF_THEME.text);
+};
+
+const drawTableRow = (doc, columns, row, y, stripe) => {
+  const { left } = doc.page.margins;
+  const tableWidth = columns.reduce((sum, column) => sum + column.width, 0);
+  const startX = left + Math.max(0, (getContentWidth(doc) - tableWidth) / 2);
+
+  doc.save();
+  doc
+    .rect(startX, y, tableWidth, PDF_LAYOUT.rowHeight)
+    .fillAndStroke(
+      stripe ? PDF_THEME.zebra : PDF_THEME.white,
+      PDF_THEME.goldBorder,
+    );
+
+  doc.font("Helvetica").fontSize(PDF_LAYOUT.fontSize).fillColor(PDF_THEME.text);
+
+  let x = startX;
+  columns.forEach((column) => {
+    const padding = column.align === "right" ? 4 : 6;
+    const cellWidth = column.width - padding * 2;
+    const rawValue = row[column.key] ?? "";
+
+    if (column.key === "status") {
+      const statusStyle = getStatusStyle(rawValue);
+      const badgeWidth = Math.min(cellWidth, 42);
+      const badgeX = x + (column.width - badgeWidth) / 2;
+
+      doc.roundedRect(badgeX, y + 4, badgeWidth, 10, 3).fill(statusStyle.fill);
+      doc.fillColor(statusStyle.text).font("Helvetica-Bold").fontSize(6.5);
+      doc.text(String(rawValue), badgeX, y + 5.5, {
+        width: badgeWidth,
+        align: "center",
+        lineBreak: false,
+      });
+      doc
+        .font("Helvetica")
+        .fontSize(PDF_LAYOUT.fontSize)
+        .fillColor(PDF_THEME.text);
+    } else {
+      const value = truncateToWidth(doc, rawValue, cellWidth);
+      doc.text(value, x + padding, y + 5, {
+        width: cellWidth,
+        align: column.align,
+        lineBreak: false,
+      });
+    }
+
+    x += column.width;
+  });
+
+  doc.restore();
+  doc.fillColor(PDF_THEME.text);
+};
+
+const drawPageFooters = (doc) => {
+  const range = doc.bufferedPageRange();
+  const totalPages = range.count;
+  const pagesBeforeFooters = totalPages;
+
+  logPdfDebug("footer pass started", { bufferedPages: totalPages });
+
+  for (
+    let pageIndex = range.start;
+    pageIndex < range.start + totalPages;
+    pageIndex += 1
+  ) {
+    doc.switchToPage(pageIndex);
+
+    const { left, top } = doc.page.margins;
+    const width = getContentWidth(doc);
+    const footerY = getFooterY(doc);
+    const pageNumber = pageIndex - range.start + 1;
+    const cursorBeforeFooter = { x: doc.x, y: doc.y };
+
+    logPdfDebug("drawing footer", { pageNumber, footerY });
+
+    doc.save();
+    doc
+      .moveTo(left, footerY - 6)
+      .lineTo(left + width, footerY - 6)
+      .strokeColor(PDF_THEME.gold)
+      .stroke();
+
+    doc.font("Helvetica").fontSize(7).fillColor(PDF_THEME.muted);
+    doc.text("Jewellery Inventory — Stock Verification Report", left, footerY, {
+      width: width / 2,
+      lineBreak: false,
+      height: PDF_LAYOUT.footerHeight,
+      ellipsis: true,
+    });
+    doc.text(`Page ${pageNumber} of ${totalPages}`, left, footerY, {
+      width,
+      align: "right",
+      lineBreak: false,
+      height: PDF_LAYOUT.footerHeight,
+      ellipsis: true,
+    });
+    doc.restore();
+
+    resetDocCursor(doc, left, top);
+  }
+
+  const pagesAfterFooters = doc.bufferedPageRange().count;
+
+  if (pagesAfterFooters !== pagesBeforeFooters) {
+    logExport("pdf footer pass altered page count", {
+      pagesBeforeFooters,
+      pagesAfterFooters,
+      extraPages: pagesAfterFooters - pagesBeforeFooters,
+    });
+  }
+
+  doc.fillColor(PDF_THEME.text);
+  resetDocCursor(doc, doc.page.margins.left, doc.page.margins.top);
+};
+
+const renderPdfReportBody = (doc, data, summary, filters, dbTime) => {
+  const columns = PDF_COLUMNS;
+  const tableBottomLimit = () => getTableBottomLimit(doc);
+  const continuationStartY = () => doc.page.margins.top;
+
+  let currentY = drawPdfHeaderBand(doc, summary, data.length, dbTime);
+  let pageNumber = 1;
+  let rowsOnPage = 0;
+  const firstPageBottom = tableBottomLimit();
+  const firstPageUsable = firstPageBottom - currentY - PDF_LAYOUT.rowHeight;
+  const continuationUsable =
+    tableBottomLimit() - continuationStartY() - PDF_LAYOUT.rowHeight;
+
+  logPdfDebug("pagination layout", {
+    firstPageStartY: currentY,
+    continuationStartY: continuationStartY(),
+    tableBottomLimit: firstPageBottom,
+    rowsPerFirstPage: getRowsPerPage(firstPageUsable),
+    rowsPerContinuationPage: getRowsPerPage(continuationUsable),
+    totalRecords: data.length,
+  });
+
+  const startContinuationPage = () => {
+    doc.addPage({
+      size: "A4",
+      layout: "landscape",
+      margin: PDF_LAYOUT.margin,
+    });
+    pageNumber += 1;
+    rowsOnPage = 0;
+    currentY = continuationStartY();
+
+    logPdfDebug("continuation page added", {
+      pageNumber,
+      currentY,
+      maxY: tableBottomLimit(),
+    });
+
+    drawTableHeaderRow(doc, columns, currentY);
+    currentY += PDF_LAYOUT.rowHeight;
+    resetDocCursor(doc, doc.page.margins.left, currentY);
+  };
+
+  const ensureTableSpace = () => {
+    if (currentY + PDF_LAYOUT.rowHeight <= tableBottomLimit()) {
+      return;
+    }
+
+    logPdfDebug("page break", {
+      pageNumber,
+      currentY,
+      maxY: tableBottomLimit(),
+      rowsOnPage,
+    });
+
+    startContinuationPage();
+  };
+
+  if (data.length === 0) {
+    doc.font("Helvetica").fontSize(10).fillColor(PDF_THEME.muted);
+    doc.text(
+      "No records found for the selected filters.",
+      doc.page.margins.left,
+      currentY,
+      { lineBreak: false },
+    );
+    resetDocCursor(doc, doc.page.margins.left, currentY);
+    return { pageNumber, rowsOnPage };
+  }
+
+  drawTableHeaderRow(doc, columns, currentY);
+  currentY += PDF_LAYOUT.rowHeight;
+  resetDocCursor(doc, doc.page.margins.left, currentY);
+
+  for (let index = 0; index < data.length; index += 1) {
+    ensureTableSpace();
+    drawTableRow(doc, columns, data[index], currentY, index % 2 === 1);
+    currentY += PDF_LAYOUT.rowHeight;
+    rowsOnPage += 1;
+    resetDocCursor(doc, doc.page.margins.left, currentY);
+
+    if (PDF_DEBUG && rowsOnPage % 50 === 0) {
+      logPdfDebug("row progress", {
+        pageNumber,
+        currentY,
+        maxY: tableBottomLimit(),
+        rowsOnPage,
+        rowIndex: index + 1,
+      });
+    }
+  }
+
+  logExport("pdf body rendered", {
+    totalRecords: data.length,
+    contentPages: pageNumber,
+    rowsOnLastPage: rowsOnPage,
+  });
+
+  return { pageNumber, rowsOnPage };
+};
+
+export const buildPdfBuffer = (data, summary, filters, dbTime) =>
   new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ margin: 40, size: "A4", layout: "landscape" });
+    const startedAt = Date.now();
+    logExport("pdf generation started", {
+      rowCount: data.length,
+      filters,
+      summary,
+    });
+
+    const doc = new PDFDocument({
+      size: "A4",
+      layout: "landscape",
+      margin: PDF_LAYOUT.margin,
+      bufferPages: true,
+    });
     const chunks = [];
 
     doc.on("data", (chunk) => chunks.push(chunk));
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
-    doc.on("error", reject);
-
-    doc.fontSize(16).text("Stock Verification Report", { align: "center" });
-    doc.moveDown(0.5);
-    doc.fontSize(10);
-    doc.text(`Product: ${filters.productName ?? "All"}`);
-    doc.text(`Sub Product: ${filters.subProductName ?? "All"}`);
-    doc.text(`Center: ${filters.centerName ?? "All"}`);
-    doc.text(`Status: ${filters.status ?? "All"}`);
-    doc.text(
-      `Date Range: ${
-        filters.fromDate && filters.toDate
-          ? `${filters.fromDate} to ${filters.toDate}`
-          : "All"
-      }`,
-    );
-    doc.text(
-      `Summary - Found: ${summary.foundCount} | Missing: ${summary.missingCount} | New: ${summary.newCount} | Total: ${data.length}`,
-    );
-    doc.moveDown();
-
-    const columns = [
-      { key: "id", label: "ID", width: 35 },
-      { key: "verificationId", label: "Ver ID", width: 45 },
-      { key: "verificationDate", label: "Ver Date", width: 95 },
-      { key: "productName", label: "Product", width: 90 },
-      { key: "subProductName", label: "Sub Product", width: 90 },
-      { key: "centerName", label: "Center", width: 80 },
-      { key: "tagNo", label: "Tag No", width: 80 },
-      { key: "status", label: "Status", width: 55 },
-      { key: "createdAt", label: "Created At", width: 95 },
-    ];
-
-    const drawTableHeader = () => {
-      let x = doc.page.margins.left;
-      const y = doc.y;
-
-      doc.font("Helvetica-Bold").fontSize(8);
-      columns.forEach((column) => {
-        doc.text(column.label, x, y, { width: column.width, lineBreak: false });
-        x += column.width;
+    doc.on("end", () => {
+      const buffer = Buffer.concat(chunks);
+      logExport("pdf generation completed", {
+        rowCount: data.length,
+        bufferBytes: buffer.length,
+        durationMs: Date.now() - startedAt,
       });
-      doc.moveDown(0.8);
-      doc.font("Helvetica").fontSize(7);
-    };
-
-    drawTableHeader();
-
-    data.forEach((row, index) => {
-      if (doc.y > doc.page.height - 50) {
-        doc.addPage({ layout: "landscape" });
-        drawTableHeader();
-      }
-
-      let x = doc.page.margins.left;
-      const y = doc.y;
-
-      columns.forEach((column) => {
-        const value = String(row[column.key] ?? "");
-        doc.text(value, x, y, { width: column.width, lineBreak: false });
-        x += column.width;
+      resolve(buffer);
+    });
+    doc.on("error", (error) => {
+      logExport("pdf generation failed", {
+        message: error.message,
+        durationMs: Date.now() - startedAt,
       });
-
-      doc.moveDown(0.7);
-
-      if (index === data.length - 1) {
-        doc.end();
-      }
+      reject(error);
     });
 
-    if (data.length === 0) {
-      doc.text("No records found for the selected filters.");
+    try {
+      const bodyStats = renderPdfReportBody(
+        doc,
+        data,
+        summary,
+        filters,
+        dbTime,
+      );
+      const pagesBeforeFooters = doc.bufferedPageRange().count;
+
+      drawPageFooters(doc);
+
+      const pagesAfterFooters = doc.bufferedPageRange().count;
+      logExport("pdf pagination summary", {
+        totalRecords: data.length,
+        contentPages: bodyStats.pageNumber,
+        bufferedPagesBeforeFooters: pagesBeforeFooters,
+        bufferedPagesAfterFooters: pagesAfterFooters,
+        extraPagesFromFooters: pagesAfterFooters - pagesBeforeFooters,
+      });
+
+      doc.switchToPage(pagesAfterFooters - 1);
+      resetDocCursor(doc, doc.page.margins.left, doc.page.margins.top);
       doc.end();
+    } catch (error) {
+      logExport("pdf generation failed", {
+        message: error.message,
+        durationMs: Date.now() - startedAt,
+      });
+      reject(error);
     }
   });
 
