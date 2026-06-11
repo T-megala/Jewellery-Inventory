@@ -120,8 +120,8 @@ export default function Reports() {
     subProductName: subProduct || undefined,
     centerName: counter || undefined,
     status: status || undefined,
-    fromDate,
-    toDate,
+    fromDate: fromDate || undefined,
+    toDate: toDate || undefined,
   }), [product, subProduct, counter, status, fromDate, toDate])
 
   useEffect(() => {
@@ -205,13 +205,17 @@ export default function Reports() {
   }, [product, subProduct])
 
   function validateDates() {
+    if (!fromDate && !toDate) {
+      return true
+    }
+
     if (!fromDate) {
-      setError('From Date is required.')
+      setError('From Date is required when To Date is set.')
       return false
     }
 
     if (!toDate) {
-      setError('To Date is required.')
+      setError('To Date is required when From Date is set.')
       return false
     }
 

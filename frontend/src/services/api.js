@@ -1,8 +1,7 @@
+import { API_BASE } from '../config/apiConfig.js';
 import { getToken } from './auth.js';
 
-const LOCAL_API = 'http://localhost:5005/api/v1';
-
-export const API_BASE = import.meta.env.VITE_API_BASE_URL || LOCAL_API;
+export { API_BASE };
 
 /** Bearer token for all API calls except login. */
 export function getAuthHeaders() {
