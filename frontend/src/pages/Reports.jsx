@@ -7,7 +7,7 @@ import {
 import TablePagination from '../components/TablePagination.jsx'
 import './Reports.css'
 
-const DEFAULT_PAGE_SIZE = 20
+const DEFAULT_PAGE_SIZE = 10
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All Statuses' },
@@ -83,6 +83,43 @@ function formatStatValue(summary, field) {
   if (!summary) return '—'
   const value = summary[field]
   return Number(value ?? 0).toLocaleString('en-IN')
+}
+
+function formatPieces(value) {
+  if (value === null || value === undefined || value === '') return '—'
+  const numeric = Number(value)
+  if (Number.isNaN(numeric)) return '—'
+  return numeric.toLocaleString('en-IN')
+}
+
+function ReportLoader() {
+  return (
+    <div className="report-loader" role="status" aria-live="polite" aria-label="Loading report">
+      <div className="report-loader__center">
+        <div className="report-loader__spinner" aria-hidden="true">
+          <span className="report-loader__ring" />
+          <span className="report-loader__gem" />
+        </div>
+        <p className="report-loader__text">Fetching report data</p>
+        <div className="report-loader__dots" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+      </div>
+
+      <div className="report-loader__skeleton" aria-hidden="true">
+        <div className="report-loader__skeleton-toolbar" />
+        {Array.from({ length: 6 }, (_, index) => (
+          <div
+            key={index}
+            className="report-loader__skeleton-row"
+            style={{ animationDelay: `${index * 0.08}s` }}
+          />
+        ))}
+      </div>
+    </div>
+  )
 }
 
 function getTodayDate() {
@@ -297,10 +334,6 @@ export default function Reports() {
     await handleExport('excel', 'Excel')
   }
 
-  async function handleExportPdf() {
-    await handleExport('pdf', 'PDF')
-  }
-
   return (
     <div className="reports-page">
       <div className="reports-stats">
@@ -421,41 +454,35 @@ export default function Reports() {
             </button>
             <button
               type="submit"
-              className="report-btn report-btn--primary"
+              className={`report-btn report-btn--primary${loadingReport ? ' report-btn--loading' : ''}`}
               disabled={loadingReport || loadingFilters || exporting}
             >
-              {loadingReport ? 'Generating…' : 'Generate Report'}
+              {loadingReport && <span className="report-btn__spin" aria-hidden="true" />}
+              Generate Report
             </button>
           </div>
         </form>
       </section>
 
-      {hasSearched && (
+      {(hasSearched || loadingReport) && (
         <section className="reports-results-card">
           <div className="reports-results__head">
             <h3 className="reports-results__title">Results</h3>
             <div className="reports-export">
               <button
                 type="button"
-                className="report-btn report-btn--export"
+                className={`report-btn report-btn--export${exporting ? ' report-btn--loading' : ''}`}
                 onClick={handleExportExcel}
                 disabled={exporting || loadingReport}
               >
-                {exporting ? 'Exporting…' : 'Excel'}
-              </button>
-              <button
-                type="button"
-                className="report-btn report-btn--export"
-                onClick={handleExportPdf}
-                disabled={exporting || loadingReport}
-              >
-                {exporting ? 'Exporting…' : 'PDF'}
+                {exporting && <span className="report-btn__spin report-btn__spin--export" aria-hidden="true" />}
+                Excel
               </button>
             </div>
           </div>
 
           {loadingReport ? (
-            <p className="report-loading">Loading results…</p>
+            <ReportLoader />
           ) : rows.length === 0 ? (
             <p className="report-empty">No records found for the selected filters.</p>
           ) : (
@@ -469,6 +496,7 @@ export default function Reports() {
                       <th>Sub Product</th>
                       <th>Counter</th>
                       <th>Tag No</th>
+                      <th>Pieces</th>
                       <th>Status</th>
                     </tr>
                   </thead>
@@ -480,6 +508,7 @@ export default function Reports() {
                         <td>{row.subProduct}</td>
                         <td>{row.counter}</td>
                         <td className="reports-table__tag">{row.tagNo}</td>
+                        <td className="reports-table__pieces">{formatPieces(row.pieces)}</td>
                         <td>
                           <span className={statusBadgeClass(row.status)}>
                             {formatStatus(row.status)}

@@ -134,6 +134,7 @@ function normalizeReportRow(row) {
     subProduct: row.subProductName ?? row.subProduct ?? '',
     counter: row.centerName ?? row.counter ?? '',
     tagNo: row.tagNo ?? '',
+    pieces: row.pieces ?? row.product?.pieces ?? null,
     status: row.status ?? '',
   };
 }

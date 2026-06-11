@@ -3,7 +3,7 @@ import { apiFetchRaw, apiFetchReport, buildQueryString } from './api.js';
 function buildReportParams(filters = {}) {
   return {
     page: filters.page ?? 1,
-    limit: filters.limit ?? 20,
+    limit: filters.limit ?? 10,
     productName: filters.productName,
     subProductName: filters.subProductName,
     centerName: filters.centerName,

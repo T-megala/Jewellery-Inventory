@@ -596,8 +596,47 @@ function buildDailyImportWeekRows(apiData) {
   return buildDailyImportDayRows(apiData, 7)
 }
 
-function buildDailyImportMonthRows(apiData) {
-  return buildDailyImportDayRows(apiData, 30)
+function buildDailyImportMonthHeatmapRows(apiData) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const todayKey = toDateKey(today)
+  const byDate = groupBatchesByDate(apiData)
+
+  const days = Array.from({ length: 30 }, (_, index) => {
+    const date = new Date(today)
+    date.setDate(today.getDate() - (29 - index))
+    const dateKey = toDateKey(date)
+    const dayGroup = byDate[dateKey]
+    const hasImport = Boolean(dayGroup)
+    const importCount = dayGroup?.count ?? 0
+    const totalStock = hasImport ? Number(dayGroup.latest.totalStock ?? 0) : 0
+
+    return {
+      date: dateKey,
+      dayNum: date.getDate(),
+      weekday: date.getDay(),
+      importCount,
+      totalStock,
+      hasImport,
+      isToday: dateKey === todayKey,
+      empty: false,
+    }
+  })
+
+  const maxImports = Math.max(...days.map((row) => row.importCount), 0)
+  const enrichedDays = days.map((row) => ({
+    ...row,
+    heatLevel: row.hasImport ? getHeatLevel(row.importCount, maxImports) : 0,
+  }))
+
+  const leading = Array.from({ length: enrichedDays[0].weekday }, () => ({ empty: true }))
+  const cells = [...leading, ...enrichedDays]
+
+  while (cells.length % 7 !== 0) {
+    cells.push({ empty: true })
+  }
+
+  return { cells, maxImports }
 }
 
 function DailyImportTooltip({ active, payload }) {
@@ -639,10 +678,8 @@ function DailyImportTooltip({ active, payload }) {
   )
 }
 
-function DailyImportsLineChart({ data, period }) {
-  const chartData = period === 'month'
-    ? buildDailyImportMonthRows(data)
-    : buildDailyImportWeekRows(data)
+function DailyImportsLineChart({ data }) {
+  const chartData = buildDailyImportWeekRows(data)
   const hasImports = (data || []).length > 0
 
   if (!hasImports) {
@@ -652,12 +689,72 @@ function DailyImportsLineChart({ data, period }) {
   return (
     <JewelleryTrendLineChart
       chartData={chartData}
-      period={period}
+      period="week"
       dataKey="totalStock"
       tooltip={DailyImportTooltip}
       legendPrimaryLabel="Stock per batch"
       dotOnImportOnly
     />
+  )
+}
+
+function DailyImportsCalendar({ data }) {
+  const { cells, maxImports } = buildDailyImportMonthHeatmapRows(data)
+  const hasImports = (data || []).length > 0
+
+  if (!hasImports) {
+    return <p className="analytics-empty">No import data for this period.</p>
+  }
+
+  return (
+    <div className="day-sales-heatmap daily-imports-calendar">
+      <div className="day-sales-heatmap__weekdays">
+        {WEEKDAY_HEADERS.map((day) => (
+          <span key={day} className="day-sales-heatmap__weekday">{day}</span>
+        ))}
+      </div>
+
+      <div className="day-sales-heatmap__grid">
+        {cells.map((cell, index) => {
+          if (cell.empty) {
+            return <span key={`empty-${index}`} className="day-sales-heatmap__cell day-sales-heatmap__cell--empty" aria-hidden="true" />
+          }
+
+          const title = cell.hasImport
+            ? `${cell.date}: ${cell.importCount} import${cell.importCount === 1 ? '' : 's'} · ${formatCount(cell.totalStock)} stock`
+            : `${cell.date}: no import`
+
+          return (
+            <div
+              key={cell.date}
+              className={`day-sales-heatmap__cell day-sales-heatmap__cell--level-${cell.heatLevel}${cell.isToday ? ' day-sales-heatmap__cell--today' : ''}`}
+              title={title}
+            >
+              <span className="day-sales-heatmap__day">{cell.dayNum}</span>
+              {cell.hasImport && (
+                <span className="day-sales-heatmap__value">
+                  {cell.importCount}
+                  ×
+                </span>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="day-sales-heatmap__legend">
+        <span>No import</span>
+        <div className="day-sales-heatmap__scale">
+          {[0, 1, 2, 3, 4, 5].map((level) => (
+            <i key={level} className={`day-sales-heatmap__scale-swatch day-sales-heatmap__scale-swatch--${level}`} />
+          ))}
+        </div>
+        <span>
+          More imports
+          {maxImports > 0 ? ` (${formatCount(maxImports)} max/day)` : ''}
+        </span>
+      </div>
+    </div>
   )
 }
 
@@ -722,7 +819,8 @@ function DailyImportsCard({
       <div className="analytics-tile__body day-sales-card__body">
         {loading && <p className="analytics-empty">Loading daily imports…</p>}
         {!loading && error && <p className="analytics-empty">{error}</p>}
-        {!loading && !error && <DailyImportsLineChart data={data} period={period} />}
+        {!loading && !error && period === 'week' && <DailyImportsLineChart data={data} />}
+        {!loading && !error && period === 'month' && <DailyImportsCalendar data={data} />}
       </div>
     </article>
   )

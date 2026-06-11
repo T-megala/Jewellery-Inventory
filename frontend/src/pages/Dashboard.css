@@ -901,6 +901,11 @@
   padding: 4px 6px 2px;
 }
 
+.daily-imports-calendar .day-sales-heatmap__value {
+  font-size: 0.72rem;
+  letter-spacing: -0.02em;
+}
+
 .day-sales-heatmap__weekdays {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
