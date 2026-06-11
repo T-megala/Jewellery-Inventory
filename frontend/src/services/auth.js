@@ -1,11 +1,11 @@
-import { API_BASE } from './api.js'
+import { apiUrl } from './api.js'
 
 const TOKEN_KEY = 'auth_token'
 const USER_KEY = 'auth_user'
 
 /** Login only — no access token sent (token is received from this response). */
 export async function login(username, password) {
-  const res = await fetch(`${API_BASE}/auth/login`, {
+  const res = await fetch(apiUrl('/auth/login'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password }),

@@ -11,7 +11,12 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { fetchDashboard, fetchDayWiseSales, fetchTopSoldProducts } from '../services/dashboard.js'
+import {
+  fetchDailyImports,
+  fetchDashboard,
+  fetchDayWiseSales,
+  fetchTopSoldProducts,
+} from '../services/dashboard.js'
 import './Module.css'
 import './Dashboard.css'
 
@@ -26,6 +31,13 @@ const DAY_SALES_COUNTERS = [
   { value: 'all', label: 'All counters' },
   { value: 'showroom', label: 'Showroom' },
   { value: 'safe', label: 'Safe' },
+]
+
+const DAILY_IMPORT_COUNTERS = [
+  { value: 'ALL', label: 'All counters' },
+  { value: 'SHOWROOM STOCK', label: 'Showroom' },
+  { value: 'SAFE STOCK', label: 'Safe' },
+  { value: 'Unassigned', label: 'Unassigned' },
 ]
 
 const WEEKDAY_HEADERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -375,6 +387,180 @@ function DayWiseSalesHeatmap({ data }) {
   )
 }
 
+function buildDailyImportChartRows(apiData) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const todayKey = toDateKey(today)
+
+  return (apiData || []).map((row) => {
+    const dateKey = row.date
+    const isToday = dateKey === todayKey || row.day === 'Today'
+    const dayType = getDayType(dateKey, todayKey)
+    const date = new Date(`${dateKey}T00:00:00`)
+    const weekday = WEEKDAY_HEADERS[date.getDay()]
+    const dayNum = date.getDate()
+    const month = MONTH_NAMES_SHORT[date.getMonth()]
+    const day = isToday ? 'Today' : `${weekday} ${dayNum} ${month}`
+
+    return {
+      ...row,
+      day,
+      daySub: isToday ? `${dayNum} ${month}` : null,
+      isToday,
+      dayType,
+    }
+  })
+}
+
+function DailyImportTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null
+  const item = payload[0].payload
+  return (
+    <div className="chart-tip">
+      <p className="chart-tip__title">Batch #{item?.batchId}</p>
+      {item?.date && <p className="chart-tip__meta">{item.date}</p>}
+      <p className="chart-tip__value">
+        {formatCount(item?.totalStock ?? 0)}
+        {' '}
+        total stock
+      </p>
+      <p className="chart-tip__meta">
+        Est. sold:
+        {' '}
+        {formatCount(item?.estimatedSold ?? 0)}
+      </p>
+    </div>
+  )
+}
+
+function DailyImportsBarChart({ data }) {
+  const chartData = buildDailyImportChartRows(data)
+
+  if (!chartData.length) {
+    return <p className="analytics-empty">No import data for this period.</p>
+  }
+
+  return (
+    <div className="day-sales-chart daily-imports-chart">
+      <ResponsiveContainer width="100%" height={280}>
+        <BarChart data={chartData} margin={{ top: 28, right: 8, left: 0, bottom: itemHasSubLabel(chartData) ? 18 : 4 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#ebe3d6" vertical={false} />
+          <XAxis
+            dataKey="day"
+            tick={(props) => <DaySalesXTick {...props} chartData={chartData} />}
+            axisLine={{ stroke: '#e8dfd3' }}
+            tickLine={false}
+            interval={0}
+            height={itemHasSubLabel(chartData) ? 52 : 36}
+          />
+          <YAxis
+            tick={{ fontSize: 12, fill: '#6b5a45' }}
+            axisLine={false}
+            tickLine={false}
+            allowDecimals={false}
+          />
+          <Tooltip content={<DailyImportTooltip />} cursor={{ fill: 'rgba(184, 134, 11, 0.08)' }} />
+          <Bar dataKey="totalStock" radius={[10, 10, 0, 0]} maxBarSize={52}>
+            {chartData.map((entry) => (
+              <Cell key={`${entry.batchId}-${entry.date}`} fill={DAY_SALES_BAR_COLORS[entry.dayType]} />
+            ))}
+            <LabelList
+              dataKey="totalStock"
+              position="top"
+              formatter={(value) => (value > 0 ? formatCount(value) : '')}
+              fill="#8b6914"
+              fontSize={11}
+              fontWeight={700}
+            />
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+
+      <div className="day-sales-legend">
+        <span className="day-sales-legend__item">
+          <i className="day-sales-legend__swatch day-sales-legend__swatch--weekday" />
+          Weekday import
+        </span>
+        <span className="day-sales-legend__item">
+          <i className="day-sales-legend__swatch day-sales-legend__swatch--saturday" />
+          Saturday import
+        </span>
+        <span className="day-sales-legend__item">
+          <i className="day-sales-legend__swatch day-sales-legend__swatch--today" />
+          Today
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function DailyImportsCard({
+  period,
+  counter,
+  onPeriodChange,
+  onCounterChange,
+  loading,
+  error,
+  data,
+}) {
+  const totalStock = data.reduce((sum, row) => sum + (row.totalStock ?? 0), 0)
+  const importCount = data.length
+
+  return (
+    <article className="analytics-tile analytics-tile--wide day-sales-card">
+      <header className="day-sales-card__head">
+        <div className="day-sales-card__title-wrap">
+          <h3>Daily imports — stock per batch</h3>
+          <div className="day-sales-pills">
+            {DAILY_IMPORT_COUNTERS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={`day-sales-pill${counter === option.value ? ' day-sales-pill--active' : ''}`}
+                onClick={() => onCounterChange(option.value)}
+                disabled={loading}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="day-sales-card__actions">
+          <div className="day-sales-toggle" role="group" aria-label="Import period">
+            {DAY_SALES_PERIODS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={`day-sales-toggle__btn${period === option.value ? ' day-sales-toggle__btn--active' : ''}`}
+                onClick={() => onPeriodChange(option.value)}
+                disabled={loading}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <span className="day-sales-total">
+            {formatCount(importCount)}
+            {' '}
+            imports ·
+            {' '}
+            <strong>{formatCount(totalStock)}</strong>
+            {' '}
+            stock
+          </span>
+        </div>
+      </header>
+
+      <div className="analytics-tile__body day-sales-card__body">
+        {loading && <p className="analytics-empty">Loading daily imports…</p>}
+        {!loading && error && <p className="analytics-empty">{error}</p>}
+        {!loading && !error && <DailyImportsBarChart data={data} />}
+      </div>
+    </article>
+  )
+}
+
 function DayWiseSalesCard({
   period,
   counter,
@@ -656,6 +842,11 @@ export default function Dashboard() {
   const [dayWiseSales, setDayWiseSales] = useState({ data: [], totalSoldPieces: 0 })
   const [dayWiseLoading, setDayWiseLoading] = useState(true)
   const [dayWiseError, setDayWiseError] = useState('')
+  const [importPeriod, setImportPeriod] = useState('week')
+  const [importCounter, setImportCounter] = useState('ALL')
+  const [dailyImports, setDailyImports] = useState({ data: [] })
+  const [dailyImportsLoading, setDailyImportsLoading] = useState(true)
+  const [dailyImportsError, setDailyImportsError] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -746,6 +937,39 @@ export default function Dashboard() {
 
     return () => { cancelled = true }
   }, [loading, summary, salesPeriod, salesCounter])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadDailyImports() {
+      setDailyImportsLoading(true)
+      setDailyImportsError('')
+
+      try {
+        const result = await fetchDailyImports({
+          period: importPeriod,
+          counter: importCounter,
+        })
+
+        if (!cancelled) {
+          setDailyImports(result)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setDailyImports({ data: [] })
+          setDailyImportsError(err.message || 'Failed to load daily imports.')
+        }
+      } finally {
+        if (!cancelled) setDailyImportsLoading(false)
+      }
+    }
+
+    if (!loading && summary) {
+      loadDailyImports()
+    }
+
+    return () => { cancelled = true }
+  }, [loading, summary, importPeriod, importCounter])
 
   const totals = summary?.totals ?? {
     totalTags: 0,
@@ -897,6 +1121,16 @@ export default function Dashboard() {
             error={dayWiseError}
             data={dayWiseSales.data}
             totalSoldPieces={dayWiseSales.totalSoldPieces}
+          />
+
+          <DailyImportsCard
+            period={importPeriod}
+            counter={importCounter}
+            onPeriodChange={setImportPeriod}
+            onCounterChange={setImportCounter}
+            loading={dailyImportsLoading}
+            error={dailyImportsError}
+            data={dailyImports.data}
           />
 
           <AnalyticsTile title="Top Sold Products" subtitle="Sold quantity between previous and latest stock import" wide>

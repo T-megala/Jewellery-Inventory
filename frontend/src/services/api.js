@@ -1,7 +1,7 @@
-import { API_BASE } from '../config/apiConfig.js';
+import { API_BASE, apiUrl } from '../config/apiConfig.js';
 import { getToken } from './auth.js';
 
-export { API_BASE };
+export { API_BASE, apiUrl };
 
 /** Bearer token for all API calls except login. */
 export function getAuthHeaders() {
@@ -56,7 +56,7 @@ function buildJsonHeaders(options = {}) {
 }
 
 export async function apiFetch(path, options = {}) {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(apiUrl(path), {
     ...options,
     headers: buildJsonHeaders(options),
   });
@@ -66,7 +66,7 @@ export async function apiFetch(path, options = {}) {
 }
 
 export async function apiUpload(path, formData) {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(apiUrl(path), {
     method: 'POST',
     headers: {
       ...getAuthHeaders(),
@@ -79,7 +79,7 @@ export async function apiUpload(path, formData) {
 }
 
 export async function apiFetchPaged(path, options = {}) {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(apiUrl(path), {
     ...options,
     headers: buildJsonHeaders(options),
   });
@@ -96,7 +96,7 @@ export async function apiFetchReport(path, params = {}) {
   const query = buildQueryString(params);
   const url = query ? `${path}?${query}` : path;
 
-  const res = await fetch(`${API_BASE}${url}`, {
+  const res = await fetch(apiUrl(url), {
     method: 'GET',
     headers: buildJsonHeaders(),
   });
@@ -117,7 +117,7 @@ export async function apiFetchReport(path, params = {}) {
 
 /** Authenticated fetch for non-JSON responses (e.g. file downloads). */
 export async function apiFetchRaw(path, options = {}) {
-  return fetch(`${API_BASE}${path}`, {
+  return fetch(apiUrl(path), {
     ...options,
     headers: {
       ...getAuthHeaders(),

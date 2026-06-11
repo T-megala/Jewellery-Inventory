@@ -1,7 +1,7 @@
-import { API_BASE, getAuthHeaders } from './api.js';
+import { apiUrl, getAuthHeaders } from './api.js';
 
 /** Bulk stock import — POST multipart/form-data with field name "file" */
-export const BULK_STOCK_IMPORT_URL = `${API_BASE}/products/import`;
+export const BULK_STOCK_IMPORT_URL = apiUrl('/products/import');
 
 const POLL_INTERVAL_MS = 800;
 
@@ -48,15 +48,13 @@ export async function startAsyncImport(file) {
   const formData = new FormData();
   formData.append('file', file);
 
-  const token = getToken();
-
   console.info('[import] starting upload', {
     fileName: file?.name,
     fileSize: file?.size,
     fileType: file?.type,
   });
 
-  const res = await fetch(`${API_BASE}/products/import?async=true`, {
+  const res = await fetch(apiUrl('/products/import?async=true'), {
     method: 'POST',
     headers: {
       ...getAuthHeaders(),
@@ -76,7 +74,7 @@ export async function startAsyncImport(file) {
 }
 
 export async function getImportStatus(jobId) {
-  const res = await fetch(`${API_BASE}/products/import/status/${jobId}`, {
+  const res = await fetch(apiUrl(`/products/import/status/${jobId}`), {
     headers: {
       ...getAuthHeaders(),
     },
