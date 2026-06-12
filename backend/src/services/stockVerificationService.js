@@ -3,10 +3,8 @@ import { getActiveBatchId } from "../services/productBatchService.js";
 import ApiError from "../utils/ApiError.js";
 import {
   TAG_EXPR,
-  buildInventoryScopeFilter,
-  isAllProducts,
+  buildActiveBatchInventoryFilter,
   normalizeTag,
-  resolveStoredScope,
 } from "../utils/verificationScope.js";
 
 const DETAIL_BATCH_SIZE = 500;
@@ -40,53 +38,32 @@ const normalizeScannedTags = (tagData) => [
   ...new Set(tagData.map((tag) => normalizeTag(tag)).filter(Boolean)),
 ];
 
-const toDetailRecord = (tag, productInfo, scopeLabels) => ({
-  tag,
-  productName: productInfo?.productName ?? scopeLabels.productName,
-  subProductName: productInfo?.subProductName ?? scopeLabels.subProductName,
-  centerName: productInfo?.centerName ?? scopeLabels.centerName,
-});
-
-const mapRowToProductInfo = (row) => ({
-  productName: String(row.product ?? "").trim(),
-  subProductName: String(row.sub_product ?? "").trim(),
-  centerName: String(row.counter_name ?? "").trim() || "Unassigned",
-});
-
-const fetchProductDetailsByTags = async (connection, tags, activeBatchId) => {
+const fetchItemDescriptionsByTags = async (connection, tags, batchId) => {
   const map = new Map();
 
   if (tags.length === 0) {
     return map;
   }
 
-  const batchOrderParam = activeBatchId ?? -1;
-
   for (let index = 0; index < tags.length; index += TAG_LOOKUP_CHUNK_SIZE) {
     const chunk = tags.slice(index, index + TAG_LOOKUP_CHUNK_SIZE);
     const placeholders = chunk.map(() => "?").join(", ");
 
     const [rows] = await connection.execute(
-      `SELECT ${TAG_EXPR} AS tag, product, sub_product, counter_name, batch_id
+      `SELECT ${TAG_EXPR} AS tag, item_description
        FROM products
-       WHERE tag_packet_no IS NOT NULL
-         AND TRIM(tag_packet_no) != ''
-         AND ${TAG_EXPR} IN (${placeholders})
-       ORDER BY
-         CASE
-           WHEN batch_id = ? THEN 0
-           WHEN batch_id IS NULL THEN 1
-           ELSE 2
-         END,
-         id DESC`,
-      [...chunk, batchOrderParam],
+       WHERE batch_id = ?
+         AND barcode IS NOT NULL
+         AND TRIM(barcode) != ''
+         AND ${TAG_EXPR} IN (${placeholders})`,
+      [batchId, ...chunk],
     );
 
     for (const row of rows) {
       const tag = normalizeTag(row.tag);
 
       if (!map.has(tag)) {
-        map.set(tag, mapRowToProductInfo(row));
+        map.set(tag, String(row.item_description ?? "").trim());
       }
     }
   }
@@ -94,29 +71,22 @@ const fetchProductDetailsByTags = async (connection, tags, activeBatchId) => {
   return map;
 };
 
-const insertDetailRecords = async (
-  connection,
-  verificationId,
-  records,
-  status,
-) => {
+const insertDetailRecords = async (connection, verificationId, records, status) => {
   if (records.length === 0) {
     return;
   }
 
-  const placeholders = records.map(() => "(?, ?, ?, ?, ?, ?)").join(", ");
+  const placeholders = records.map(() => "(?, ?, ?, ?)").join(", ");
   const values = records.flatMap((record) => [
     verificationId,
     record.tag,
     status,
-    record.productName,
-    record.subProductName,
-    record.centerName,
+    record.itemDescription,
   ]);
 
   await connection.execute(
     `INSERT INTO stock_verification_details
-      (verification_id, tag_no, status, product_name, sub_product_name, center_name)
+      (verification_id, tag_no, status, item_description)
      VALUES ${placeholders}`,
     values,
   );
@@ -147,20 +117,7 @@ const countExpectedTags = async (scope) => {
   };
 };
 
-const sampleExpectedTags = async (scope, limit = 5) => {
-  const [rows] = await pool.execute(
-    `SELECT DISTINCT ${TAG_EXPR} AS tag
-     FROM products
-     WHERE ${scope.whereClause}
-     ORDER BY tag
-     LIMIT ${limit}`,
-    scope.params,
-  );
-
-  return rows.map((row) => row.tag);
-};
-
-const findScannedTagsInScope = async (scope, scannedTags) => {
+const findScannedTagsInInventory = async (scope, scannedTags) => {
   if (scannedTags.length === 0) {
     return [];
   }
@@ -176,34 +133,14 @@ const findScannedTagsInScope = async (scope, scannedTags) => {
   return rows.map((row) => normalizeTag(row.tag));
 };
 
-const buildInventoryDetailRecords = (tags, productDetailsMap, scopeLabels) =>
-  tags.map((tag) =>
-    toDetailRecord(tag, productDetailsMap.get(tag), scopeLabels),
-  );
-
-const buildNewDetailRecords = (tags, scopeLabels) =>
-  tags.map((tag) => toDetailRecord(tag, null, scopeLabels));
-
-const findExistingVerificationId = async (
-  connection,
-  verificationEpochSeconds,
-  scopeLabels,
-) => {
+const findExistingVerificationId = async (connection, verificationEpochSeconds) => {
   const [rows] = await connection.execute(
     `SELECT id
      FROM stock_verification
      WHERE verification_day = DATE(FROM_UNIXTIME(?))
-       AND product_name = ?
-       AND sub_product_name = ?
-       AND center_name = ?
      LIMIT 1
      FOR UPDATE`,
-    [
-      verificationEpochSeconds,
-      scopeLabels.productName,
-      scopeLabels.subProductName,
-      scopeLabels.centerName,
-    ],
+    [verificationEpochSeconds],
   );
 
   return rows[0]?.id ?? null;
@@ -214,7 +151,7 @@ const upsertVerificationHeader = async (
   {
     verificationEpochSeconds,
     datetimeMillis,
-    scopeLabels,
+    batchId,
     totalExpected,
     scannedCount,
     foundCount,
@@ -225,16 +162,13 @@ const upsertVerificationHeader = async (
   const existingId = await findExistingVerificationId(
     connection,
     verificationEpochSeconds,
-    scopeLabels,
   );
 
   const headerValues = [
+    batchId,
     verificationEpochSeconds,
     verificationEpochSeconds,
     datetimeMillis,
-    scopeLabels.productName,
-    scopeLabels.subProductName,
-    scopeLabels.centerName,
     totalExpected,
     scannedCount,
     foundCount,
@@ -245,12 +179,10 @@ const upsertVerificationHeader = async (
   if (existingId) {
     await connection.execute(
       `UPDATE stock_verification
-       SET verification_date = FROM_UNIXTIME(?),
+       SET batch_id = ?,
+           verification_date = FROM_UNIXTIME(?),
            verification_day = DATE(FROM_UNIXTIME(?)),
            verification_millis = ?,
-           product_name = ?,
-           sub_product_name = ?,
-           center_name = ?,
            total_expected = ?,
            total_scanned = ?,
            found_count = ?,
@@ -271,7 +203,7 @@ const upsertVerificationHeader = async (
     logVerificationDebug("verification-reused", {
       verificationId: existingId,
       verificationDay: verificationEpochSeconds,
-      scope: scopeLabels,
+      batchId,
     });
 
     return { verificationId: existingId, reused: true };
@@ -279,10 +211,9 @@ const upsertVerificationHeader = async (
 
   const [headerResult] = await connection.execute(
     `INSERT INTO stock_verification
-      (verification_date, verification_day, verification_millis, product_name,
-       sub_product_name, center_name, total_expected, total_scanned,
-       found_count, missing_count, new_count)
-     VALUES (FROM_UNIXTIME(?), DATE(FROM_UNIXTIME(?)), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (batch_id, verification_date, verification_day, verification_millis,
+       total_expected, total_scanned, found_count, missing_count, new_count)
+     VALUES (?, FROM_UNIXTIME(?), DATE(FROM_UNIXTIME(?)), ?, ?, ?, ?, ?, ?)`,
     headerValues,
   );
 
@@ -291,72 +222,50 @@ const upsertVerificationHeader = async (
   logVerificationDebug("verification-created", {
     verificationId,
     verificationDay: verificationEpochSeconds,
-    scope: scopeLabels,
+    batchId,
   });
 
   return { verificationId, reused: false };
 };
 
-const uploadStockVerification = async ({
-  datetimeMillis,
-  product,
-  subProduct,
-  center,
-  tagData,
-}) => {
-  const allProductsScope = isAllProducts(product);
+const uploadStockVerification = async ({ datetimeMillis, tagData }) => {
   const activeBatchId = await getActiveBatchId();
 
-  if (!allProductsScope && !activeBatchId) {
+  if (!activeBatchId) {
     throw new ApiError(
       400,
       "No active product batch found. Upload inventory first.",
     );
   }
 
-  const scope = buildInventoryScopeFilter(
-    activeBatchId,
-    product,
-    subProduct,
-    center,
-  );
+  const scope = buildActiveBatchInventoryFilter(activeBatchId);
+  const { total: totalExpected, sql: countSql } = await countExpectedTags(scope);
 
-  const { total: totalExpected, sql: countSql } =
-    await countExpectedTags(scope);
-  const sampleTags = await sampleExpectedTags(scope);
-
-  logVerificationDebug("scope", {
-    allProductsScope,
+  logVerificationDebug("inventory-scope", {
     activeBatchId,
     whereClause: scope.whereClause,
-    params: scope.params,
     countSql,
     totalExpected,
-    sampleExpectedTags: sampleTags,
   });
 
   if (totalExpected === 0) {
-    throw new ApiError(400, "No inventory tags found for the selected scope.");
+    throw new ApiError(400, "No inventory barcodes found in the active batch.");
   }
 
-  const scopeLabels = resolveStoredScope(product, subProduct, center);
-
   const scannedTags = normalizeScannedTags(tagData);
-
-  const found = await findScannedTagsInScope(scope, scannedTags);
+  const found = await findScannedTagsInInventory(scope, scannedTags);
   const foundSet = new Set(found);
   const newTags = scannedTags.filter((tag) => !foundSet.has(tag));
   const missingCount = totalExpected - found.length;
 
   logVerificationDebug("classification", {
-    scannedTags,
-    found,
-    newTags,
+    scannedCount: scannedTags.length,
+    foundCount: found.length,
+    newCount: newTags.length,
     missingCount,
   });
 
   const connection = await pool.getConnection();
-
   const verificationEpochSeconds =
     resolveVerificationEpochSeconds(datetimeMillis);
 
@@ -368,7 +277,7 @@ const uploadStockVerification = async ({
       {
         verificationEpochSeconds,
         datetimeMillis,
-        scopeLabels,
+        batchId: activeBatchId,
         totalExpected,
         scannedCount: scannedTags.length,
         foundCount: found.length,
@@ -377,25 +286,16 @@ const uploadStockVerification = async ({
       },
     );
 
-    const foundProductDetails = await fetchProductDetailsByTags(
+    const descriptionsByTag = await fetchItemDescriptionsByTags(
       connection,
       found,
       activeBatchId,
     );
 
-    logVerificationDebug("found-product-details", {
-      foundCount: found.length,
-      resolvedCount: foundProductDetails.size,
-      sample: found.slice(0, 3).map((tag) => ({
-        tag,
-        details: foundProductDetails.get(tag) ?? null,
-      })),
-    });
-    const foundRecords = buildInventoryDetailRecords(
-      found,
-      foundProductDetails,
-      scopeLabels,
-    );
+    const foundRecords = found.map((tag) => ({
+      tag,
+      itemDescription: descriptionsByTag.get(tag) || null,
+    }));
 
     await insertDetailRecordsBatched(
       connection,
@@ -404,7 +304,10 @@ const uploadStockVerification = async ({
       "FOUND",
     );
 
-    const newRecords = buildNewDetailRecords(newTags, scopeLabels);
+    const newRecords = newTags.map((tag) => ({
+      tag,
+      itemDescription: null,
+    }));
 
     await insertDetailRecordsBatched(
       connection,

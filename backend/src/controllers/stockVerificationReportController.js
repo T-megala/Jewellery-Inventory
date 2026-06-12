@@ -75,15 +75,7 @@ const validateFilters = (req, { isExport = false } = {}) => {
     throw new ApiError(400, "status must be one of FOUND, MISSING, or NEW");
   }
 
-  const productName = getRequestValue(req, "productName", "product");
-  const subProductName = getRequestValue(req, "subProductName", "subProduct");
-  const centerName = getRequestValue(
-    req,
-    "centerName",
-    "counterName",
-    "center",
-    "counter",
-  );
+  const search = getRequestValue(req, "search", "q");
 
   const exportTypeRaw = getRequestValue(req, "export_type", "exportType");
   const exportType = exportTypeRaw
@@ -96,9 +88,7 @@ const validateFilters = (req, { isExport = false } = {}) => {
 
   return {
     filters: {
-      productName: productName ? String(productName).trim() : null,
-      subProductName: subProductName ? String(subProductName).trim() : null,
-      centerName: centerName ? String(centerName).trim() : null,
+      search: search ? String(search).trim() : null,
       status,
       fromDate,
       toDate,

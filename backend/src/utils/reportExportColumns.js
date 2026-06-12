@@ -1,66 +1,18 @@
-const EXCEL_ONLY_KEYS = new Set([
-  "productId",
-  "inventoryProduct",
-  "inventorySubProduct",
-  "inventoryTagPacketNo",
-  "productCreatedAt",
-  "createdAt",
-]);
-
 export const REPORT_EXPORT_COLUMNS = [
   { key: "verificationDate", label: "Verification Date", width: 52, excelWidth: 20 },
   { key: "status", label: "Status", width: 34, excelWidth: 12, isStatus: true },
-  { key: "tagNo", label: "Tag No", width: 58, excelWidth: 16 },
-  { key: "productName", label: "Product", width: 48, excelWidth: 22 },
-  { key: "subProductName", label: "Sub Product", width: 48, excelWidth: 22 },
-  { key: "centerName", label: "Center", width: 42, excelWidth: 18 },
-  { key: "pieces", label: "Pieces", width: 30, excelWidth: 10, align: "right" },
-  { key: "tranNo", label: "Tran No", width: 34, excelWidth: 12 },
-  { key: "tranDate", label: "Tran Date", width: 42, excelWidth: 12 },
-  { key: "grossWt", label: "Gross Wt", width: 34, excelWidth: 10, align: "right" },
-  { key: "netWt", label: "Net Wt", width: 34, excelWidth: 10, align: "right" },
+  { key: "barcode", label: "Barcode", width: 58, excelWidth: 16 },
+  { key: "itemDescription", label: "Item Description", width: 64, excelWidth: 28 },
   {
-    key: "inventoryCounterName",
-    label: "Inventory Center",
-    width: 42,
-    excelWidth: 18,
+    key: "closingBalQty",
+    label: "Closing Bal.Qty",
+    width: 36,
+    excelWidth: 14,
+    align: "right",
   },
-  { key: "size", label: "Size", width: 30, excelWidth: 10 },
-  { key: "tagType", label: "Tag Type", width: 34, excelWidth: 12 },
-  { key: "itemPieces", label: "Item Pieces", width: 34, excelWidth: 12, align: "right" },
-  { key: "weightGram", label: "Weight (g)", width: 36, excelWidth: 12, align: "right" },
-  { key: "weightCarat", label: "Weight (ct)", width: 36, excelWidth: 12, align: "right" },
-  { key: "productId", label: "Product ID", width: 32, excelWidth: 12, align: "right" },
-  {
-    key: "inventoryProduct",
-    label: "Inventory Product",
-    width: 48,
-    excelWidth: 22,
-  },
-  {
-    key: "inventorySubProduct",
-    label: "Inventory Sub Product",
-    width: 48,
-    excelWidth: 22,
-  },
-  {
-    key: "inventoryTagPacketNo",
-    label: "Inventory Tag",
-    width: 58,
-    excelWidth: 16,
-  },
-  {
-    key: "productCreatedAt",
-    label: "Product Created At",
-    width: 52,
-    excelWidth: 20,
-  },
-  { key: "createdAt", label: "Verified At", width: 52, excelWidth: 20 },
 ];
 
-export const EXCEL_EXPORT_COLUMNS = REPORT_EXPORT_COLUMNS.filter(
-  (column) => !EXCEL_ONLY_KEYS.has(column.key),
-);
+export const EXCEL_EXPORT_COLUMNS = REPORT_EXPORT_COLUMNS;
 
 export const scaleColumnsToWidth = (columns, maxWidth) => {
   const total = columns.reduce((sum, column) => sum + column.width, 0);

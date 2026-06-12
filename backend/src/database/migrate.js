@@ -20,6 +20,7 @@ const files = [
   "011_inventory_sales_audit.sql",
   "012_simplify_products.sql",
   "013_simplify_dashboard_sales.sql",
+  "014_simplify_stock_verification.sql",
 ];
 
 const SKIPPABLE_ERROR_CODES = new Set([

@@ -6,50 +6,74 @@ import {
   buildPdfBuffer,
   getExportFileName,
 } from "../utils/reportExport.js";
-import {
-  SCOPE_NAMES,
-  formatNewScopeDisplayValue,
-} from "../utils/verificationScope.js";
 
 const VALID_STATUSES = ["FOUND", "MISSING", "NEW"];
 const MAX_EXPORT_ROWS = 50000;
 
-/**
- * Builds WHERE conditions for inventory scope matching.
- * Used to find expected tags that should be in the verification.
- */
-const buildInventoryScopeConditions = (batchIdParam) => `
-  p.tag_packet_no IS NOT NULL
-  AND TRIM(p.tag_packet_no) != ''
-  AND (
-    sv.product_name = '${SCOPE_NAMES.ALL_PRODUCTS}'
-    OR (
-      (p.batch_id = ${batchIdParam} OR p.batch_id IS NULL)
-      AND p.product = sv.product_name
-      AND (
-        sv.sub_product_name = '${SCOPE_NAMES.ALL_SUB_PRODUCTS}'
-        OR p.sub_product = sv.sub_product_name
-      )
-      AND (
-        sv.center_name = '${SCOPE_NAMES.ALL_CENTERS}'
-        OR p.counter_name = sv.center_name
-      )
-    )
-  )
+const PRODUCT_JOIN_SQL = `
+  LEFT JOIN products p ON
+    p.batch_id = sv.batch_id
+    AND UPPER(TRIM(p.barcode)) = svd.tag_no
 `;
 
-/**
- * Builds NOT EXISTS condition to exclude tags that were already FOUND.
- * Used to dynamically generate MISSING tags.
- */
+const PRODUCT_SELECT_SQL = `
+  p.id AS product_id,
+  p.item_description AS inventory_item_description,
+  p.closing_bal_qty AS product_closing_bal_qty
+`;
+
+const DETAIL_FROM_SQL = `
+  FROM stock_verification_details svd
+  INNER JOIN stock_verification sv ON sv.id = svd.verification_id
+`;
+
+const DETAIL_SELECT_SQL = `
+  SELECT svd.id, svd.verification_id, sv.verification_date,
+         svd.item_description, svd.tag_no, svd.status, svd.created_at
+`;
+
+const EXCEL_DETAIL_SELECT_SQL = `
+  SELECT sv.verification_date, svd.item_description, svd.tag_no, svd.status
+`;
+
+const STORED_REPORT_ORDER_SQL = `
+  ORDER BY
+    FIELD(svd.status, 'FOUND', 'NEW'),
+    sv.verification_date DESC,
+    svd.id DESC
+`;
+
 const buildNotFoundCondition = () => `
   NOT EXISTS (
     SELECT 1
     FROM stock_verification_details svd_found
     WHERE svd_found.verification_id = sv.id
-      AND svd_found.tag_no = UPPER(TRIM(p.tag_packet_no))
+      AND svd_found.tag_no = UPPER(TRIM(p.barcode))
       AND svd_found.status = 'FOUND'
   )
+`;
+
+const buildMissingRankedFromSql = (headerWhereClause) => `
+  FROM (
+    SELECT
+      NULL AS id,
+      sv.id AS verification_id,
+      sv.verification_date,
+      p.item_description,
+      UPPER(TRIM(p.barcode)) AS tag_no,
+      'MISSING' AS status,
+      NULL AS created_at,
+      p.id AS product_id,
+      p.item_description AS inventory_item_description,
+      p.closing_bal_qty AS product_closing_bal_qty
+    FROM stock_verification sv
+    INNER JOIN products p ON
+      p.batch_id = sv.batch_id
+      AND p.barcode IS NOT NULL
+      AND TRIM(p.barcode) != ''
+    WHERE ${buildNotFoundCondition()}
+      AND ${headerWhereClause}
+  ) missing_ranked
 `;
 
 const logReport = (message, meta = undefined) => {
@@ -69,96 +93,13 @@ const formatDateTime = (value) => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 };
 
-const formatDate = (value) => {
-  if (!value) return null;
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
-  return date.toISOString().slice(0, 10);
-};
-
 const toNumber = (value) =>
   value === null || value === undefined ? null : Number(value);
-
-const DETAIL_FROM_SQL = `
-  FROM stock_verification_details svd
-  INNER JOIN stock_verification sv ON sv.id = svd.verification_id
-`;
-
-const PRODUCT_JOIN_SQL = `
-  LEFT JOIN products p ON
-    p.batch_id = ?
-    AND p.tag_packet_no = svd.tag_no
-`;
-
-const PRODUCT_SELECT_SQL = `
-  p.id AS product_id,
-  p.tran_no AS product_tran_no,
-  p.tran_date AS product_tran_date,
-  p.product AS inventory_product,
-  p.sub_product AS inventory_sub_product,
-  p.tag_packet_no AS inventory_tag_packet_no,
-  p.pieces AS product_pieces,
-  p.gross_wt AS product_gross_wt,
-  p.net_wt AS product_net_wt,
-  p.counter_name AS product_counter_name,
-  p.size AS product_size,
-  p.tag_type AS product_tag_type,
-  p.item_pieces AS product_item_pieces,
-  p.weight_gram AS product_weight_gram,
-  p.weight_carat AS product_weight_carat,
-  p.created_at AS product_created_at
-`;
-
-const EXCEL_PRODUCT_SELECT_SQL = `
-  p.tran_no AS product_tran_no,
-  p.tran_date AS product_tran_date,
-  p.pieces AS product_pieces,
-  p.gross_wt AS product_gross_wt,
-  p.net_wt AS product_net_wt,
-  p.counter_name AS product_counter_name,
-  p.size AS product_size,
-  p.tag_type AS product_tag_type,
-  p.item_pieces AS product_item_pieces,
-  p.weight_gram AS product_weight_gram,
-  p.weight_carat AS product_weight_carat
-`;
-
-
-const DETAIL_SELECT_SQL = `
-  SELECT svd.id, svd.verification_id, sv.verification_date,
-         svd.product_name, svd.sub_product_name, svd.center_name,
-         svd.tag_no, svd.status, svd.created_at
-`;
-
-const EXCEL_DETAIL_SELECT_SQL = `
-  SELECT sv.verification_date,
-         svd.product_name, svd.sub_product_name, svd.center_name,
-         svd.tag_no, svd.status
-`;
-
-const STORED_REPORT_ORDER_SQL = `
-  ORDER BY
-    FIELD(svd.status, 'FOUND', 'NEW'),
-    sv.verification_date DESC,
-    svd.id DESC
-`;
 
 const buildHeaderFilterClause = (filters) => {
   const conditions = ["1 = 1"];
   const params = [];
 
-  if (filters.productName) {
-    conditions.push("AND sv.product_name = ?");
-    params.push(filters.productName);
-  }
-  if (filters.subProductName) {
-    conditions.push("AND sv.sub_product_name = ?");
-    params.push(filters.subProductName);
-  }
-  if (filters.centerName) {
-    conditions.push("AND sv.center_name = ?");
-    params.push(filters.centerName);
-  }
   if (filters.fromDate && filters.toDate) {
     conditions.push("AND DATE(sv.verification_date) BETWEEN ? AND ?");
     params.push(filters.fromDate, filters.toDate);
@@ -171,24 +112,21 @@ const buildStoredDetailFilterClause = (filters) => {
   const conditions = ["1 = 1"];
   const params = [];
 
-  if (filters.productName) {
-    conditions.push("AND svd.product_name = ?");
-    params.push(filters.productName);
+  if (filters.search) {
+    conditions.push(
+      "AND (svd.tag_no LIKE ? OR svd.item_description LIKE ?)",
+    );
+    const term = `%${filters.search}%`;
+    params.push(term, term);
   }
-  if (filters.subProductName) {
-    conditions.push("AND svd.sub_product_name = ?");
-    params.push(filters.subProductName);
-  }
-  if (filters.centerName) {
-    conditions.push("AND svd.center_name = ?");
-    params.push(filters.centerName);
-  }
+
   if (filters.status === "FOUND" || filters.status === "NEW") {
     conditions.push("AND svd.status = ?");
     params.push(filters.status);
   } else {
     conditions.push("AND svd.status IN ('FOUND', 'NEW')");
   }
+
   if (filters.fromDate && filters.toDate) {
     conditions.push("AND DATE(sv.verification_date) BETWEEN ? AND ?");
     params.push(filters.fromDate, filters.toDate);
@@ -209,9 +147,8 @@ const buildStoredDetailQuery = (filters) => {
   };
 };
 
-const buildExportQuery = async (filters) => {
+const buildExportQuery = (filters) => {
   const { whereClause, params } = buildStoredDetailFilterClause(filters);
-  const activeBatchId = (await getActiveBatchId()) ?? -1;
 
   return {
     baseFrom: `
@@ -219,7 +156,7 @@ const buildExportQuery = async (filters) => {
       ${PRODUCT_JOIN_SQL}
       WHERE ${whereClause}
     `,
-    params: [...params, activeBatchId],
+    params,
   };
 };
 
@@ -235,141 +172,56 @@ const getStoredRecordCount = (summary, filters) => {
   return summary.foundCount + summary.newCount;
 };
 
-const mapProductRow = (row) => ({
-  product_id: row.id ?? row.product_id,
-  product_tran_no: row.tran_no ?? row.product_tran_no,
-  product_tran_date: row.tran_date ?? row.product_tran_date,
-  inventory_product: row.product ?? row.inventory_product,
-  inventory_sub_product: row.sub_product ?? row.inventory_sub_product,
-  inventory_tag_packet_no: row.tag_packet_no ?? row.inventory_tag_packet_no,
-  product_pieces: row.pieces ?? row.product_pieces,
-  product_gross_wt: row.gross_wt ?? row.product_gross_wt,
-  product_net_wt: row.net_wt ?? row.product_net_wt,
-  product_counter_name: row.counter_name ?? row.product_counter_name,
-  product_size: row.size ?? row.product_size,
-  product_tag_type: row.tag_type ?? row.product_tag_type,
-  product_item_pieces: row.item_pieces ?? row.product_item_pieces,
-  product_weight_gram: row.weight_gram ?? row.product_weight_gram,
-  product_weight_carat: row.weight_carat ?? row.product_weight_carat,
-  product_created_at: row.created_at ?? row.product_created_at,
-});
-
-const enrichRowsWithProducts = async (rows, activeBatchId) => {
-  if (rows.length === 0 || !activeBatchId) {
-    return rows;
-  }
-
-  const tags = [...new Set(rows.map((row) => String(row.tag_no ?? "").trim()).filter(Boolean))];
-
-  if (tags.length === 0) {
-    return rows;
-  }
-
-  const placeholders = tags.map(() => "?").join(", ");
-  const [productRows] = await pool.execute(
-    `SELECT id, tran_no, tran_date, product, sub_product, tag_packet_no,
-            pieces, gross_wt, net_wt, counter_name, size, tag_type,
-            item_pieces, weight_gram, weight_carat, created_at
-     FROM products
-     WHERE batch_id = ?
-       AND tag_packet_no IN (${placeholders})`,
-    [activeBatchId, ...tags],
-  );
-
-  const productByTag = new Map(
-    productRows.map((row) => [String(row.tag_packet_no ?? "").trim().toUpperCase(), row]),
-  );
-
-  return rows.map((row) => {
-    const product = productByTag.get(String(row.tag_no ?? "").trim().toUpperCase());
-
-    if (!product) {
-      return row;
-    }
-
-    return {
-      ...row,
-      ...mapProductRow(product),
-    };
-  });
-};
-
-const mapProductFields = (row) => ({
-  productId: row.product_id ? Number(row.product_id) : null,
-  tranNo: row.product_tran_no ?? null,
-  tranDate: formatDate(row.product_tran_date),
-  pieces: toNumber(row.product_pieces),
-  grossWt: toNumber(row.product_gross_wt),
-  netWt: toNumber(row.product_net_wt),
-  inventoryCounterName: row.product_counter_name ?? null,
-  size: row.product_size ?? null,
-  tagType: row.product_tag_type ?? null,
-  itemPieces: toNumber(row.product_item_pieces),
-  weightGram: toNumber(row.product_weight_gram),
-  weightCarat: toNumber(row.product_weight_carat),
-  inventoryProduct: row.inventory_product ?? null,
-  inventorySubProduct: row.inventory_sub_product ?? null,
-  inventoryTagPacketNo: row.inventory_tag_packet_no ?? null,
-  productCreatedAt: formatDateTime(row.product_created_at),
-});
-
-const resolveDisplayScopeFields = (row) => {
+const resolveItemDescription = (row) => {
   if (row.status === "NEW") {
-    return {
-      productName: formatNewScopeDisplayValue(row.product_name),
-      subProductName: formatNewScopeDisplayValue(row.sub_product_name),
-      centerName: formatNewScopeDisplayValue(row.center_name),
-    };
+    return row.item_description ?? "--";
   }
 
-  return {
-    productName: row.inventory_product ?? row.product_name,
-    subProductName: row.inventory_sub_product ?? row.sub_product_name,
-    centerName: row.product_counter_name ?? row.center_name,
-  };
+  return (
+    row.inventory_item_description ??
+    row.item_description ??
+    null
+  );
 };
 
-const mapExcelRow = (row) => {
-  const scopeFields = resolveDisplayScopeFields(row);
-
-  return {
-    verificationDate: formatDateTime(row.verification_date),
-    productName: scopeFields.productName,
-    subProductName: scopeFields.subProductName,
-    centerName: scopeFields.centerName,
-    tagNo: row.tag_no,
-    status: row.status,
-    pieces: toNumber(row.product_pieces),
-    tranNo: row.product_tran_no ?? null,
-    tranDate: formatDate(row.product_tran_date),
-    grossWt: toNumber(row.product_gross_wt),
-    netWt: toNumber(row.product_net_wt),
-    inventoryCounterName: row.product_counter_name ?? null,
-    size: row.product_size ?? null,
-    tagType: row.product_tag_type ?? null,
-    itemPieces: toNumber(row.product_item_pieces),
-    weightGram: toNumber(row.product_weight_gram),
-    weightCarat: toNumber(row.product_weight_carat),
-  };
-};
+const mapExcelRow = (row) => ({
+  verificationDate: formatDateTime(row.verification_date),
+  barcode: row.tag_no,
+  itemDescription: resolveItemDescription(row),
+  closingBalQty: toNumber(row.product_closing_bal_qty),
+  status: row.status,
+  tagNo: row.tag_no,
+  productName: resolveItemDescription(row),
+  subProductName: "--",
+  centerName: "--",
+  pieces: toNumber(row.product_closing_bal_qty),
+});
 
 const mapRow = (row) => {
-  const productFields = mapProductFields(row);
-  const scopeFields = resolveDisplayScopeFields(row);
+  const itemDescription = resolveItemDescription(row);
+  const closingBalQty = toNumber(row.product_closing_bal_qty);
 
   return {
     id: row.id ?? null,
     verificationId: row.verification_id,
     verificationDate: formatDateTime(row.verification_date),
-    productName: scopeFields.productName,
-    subProductName: scopeFields.subProductName,
-    centerName: scopeFields.centerName,
+    barcode: row.tag_no,
     tagNo: row.tag_no,
+    itemDescription,
+    productName: itemDescription,
+    subProductName: "--",
+    centerName: "--",
+    closingBalQty,
+    pieces: closingBalQty,
     status: row.status,
-    pieces: productFields.pieces,
     createdAt: formatDateTime(row.created_at),
-    product: row.product_id ? productFields : null,
-    ...productFields,
+    product: row.product_id
+      ? {
+          id: Number(row.product_id),
+          itemDescription,
+          closingBalQty,
+        }
+      : null,
   };
 };
 
@@ -394,71 +246,76 @@ const getHeaderSummary = async (filters) => {
   };
 };
 
-const buildMissingRankedFromSql = (headerWhereClause) => {
-  const inventoryScopeConditions = buildInventoryScopeConditions("?");
-  const notFoundCondition = buildNotFoundCondition();
-
-  return `
-    FROM (
-      SELECT
-        NULL AS id,
-        sv.id AS verification_id,
-        sv.verification_date,
-        p.product AS product_name,
-        p.sub_product AS sub_product_name,
-        COALESCE(NULLIF(TRIM(p.counter_name), ''), 'Unassigned') AS center_name,
-        UPPER(TRIM(p.tag_packet_no)) AS tag_no,
-        'MISSING' AS status,
-        NULL AS created_at,
-        p.id AS product_id,
-        p.tran_no AS product_tran_no,
-        p.tran_date AS product_tran_date,
-        p.product AS inventory_product,
-        p.sub_product AS inventory_sub_product,
-        p.tag_packet_no AS inventory_tag_packet_no,
-        p.pieces AS product_pieces,
-        p.gross_wt AS product_gross_wt,
-        p.net_wt AS product_net_wt,
-        p.counter_name AS product_counter_name,
-        p.size AS product_size,
-        p.tag_type AS product_tag_type,
-        p.item_pieces AS product_item_pieces,
-        p.weight_gram AS product_weight_gram,
-        p.weight_carat AS product_weight_carat,
-        p.created_at AS product_created_at,
-        ROW_NUMBER() OVER (
-          PARTITION BY sv.id, UPPER(TRIM(p.tag_packet_no))
-          ORDER BY
-            CASE
-              WHEN p.batch_id = ? THEN 0
-              WHEN p.batch_id IS NULL THEN 1
-              ELSE 2
-            END,
-            p.id DESC
-        ) AS row_num
-      FROM stock_verification sv
-      INNER JOIN products p ON ${inventoryScopeConditions}
-      WHERE ${notFoundCondition}
-        AND ${headerWhereClause}
-    ) missing_ranked
-    WHERE missing_ranked.row_num = 1
-  `;
-};
-
 const buildMissingQueryParts = async (filters) => {
   const { whereClause, params } = buildHeaderFilterClause(filters);
-  const activeBatchId = (await getActiveBatchId()) ?? -1;
 
   return {
     baseFrom: buildMissingRankedFromSql(whereClause),
-    // Placeholders bind in SQL text order: JOIN batch_id, then ROW_NUMBER batch_id, then filters.
-    params: [activeBatchId, activeBatchId, ...params],
-    activeBatchId,
+    params,
   };
 };
 
+const enrichRowsWithProducts = async (rows) => {
+  if (rows.length === 0) {
+    return rows;
+  }
+
+  const tags = [
+    ...new Set(rows.map((row) => String(row.tag_no ?? "").trim()).filter(Boolean)),
+  ];
+
+  if (tags.length === 0) {
+    return rows;
+  }
+
+  const verificationIds = [
+    ...new Set(rows.map((row) => row.verification_id).filter(Boolean)),
+  ];
+
+  if (verificationIds.length === 0) {
+    return rows;
+  }
+
+  const tagPlaceholders = tags.map(() => "?").join(", ");
+  const verificationPlaceholders = verificationIds.map(() => "?").join(", ");
+
+  const [productRows] = await pool.execute(
+    `SELECT sv.id AS verification_id, UPPER(TRIM(p.barcode)) AS tag_no,
+            p.id AS product_id, p.item_description, p.closing_bal_qty
+     FROM stock_verification sv
+     INNER JOIN products p ON p.batch_id = sv.batch_id
+     WHERE sv.id IN (${verificationPlaceholders})
+       AND UPPER(TRIM(p.barcode)) IN (${tagPlaceholders})`,
+    [...verificationIds, ...tags],
+  );
+
+  const productByKey = new Map(
+    productRows.map((row) => [
+      `${row.verification_id}:${String(row.tag_no).trim().toUpperCase()}`,
+      row,
+    ]),
+  );
+
+  return rows.map((row) => {
+    const product = productByKey.get(
+      `${row.verification_id}:${String(row.tag_no ?? "").trim().toUpperCase()}`,
+    );
+
+    if (!product) {
+      return row;
+    }
+
+    return {
+      ...row,
+      product_id: product.product_id,
+      inventory_item_description: product.item_description,
+      product_closing_bal_qty: product.closing_bal_qty,
+    };
+  });
+};
+
 const getMissingRows = async (filters, pagination) => {
-  const { baseFrom, params, activeBatchId } = await buildMissingQueryParts(filters);
+  const { baseFrom, params } = await buildMissingQueryParts(filters);
   const { limit, offset } = pagination;
 
   const [dataRows] = await pool.execute(
@@ -466,28 +323,13 @@ const getMissingRows = async (filters, pagination) => {
        missing_ranked.id,
        missing_ranked.verification_id,
        missing_ranked.verification_date,
-       missing_ranked.product_name,
-       missing_ranked.sub_product_name,
-       missing_ranked.center_name,
+       missing_ranked.item_description,
        missing_ranked.tag_no,
        missing_ranked.status,
        missing_ranked.created_at,
        missing_ranked.product_id,
-       missing_ranked.product_tran_no,
-       missing_ranked.product_tran_date,
-       missing_ranked.inventory_product,
-       missing_ranked.inventory_sub_product,
-       missing_ranked.inventory_tag_packet_no,
-       missing_ranked.product_pieces,
-       missing_ranked.product_gross_wt,
-       missing_ranked.product_net_wt,
-       missing_ranked.product_counter_name,
-       missing_ranked.product_size,
-       missing_ranked.product_tag_type,
-       missing_ranked.product_item_pieces,
-       missing_ranked.product_weight_gram,
-       missing_ranked.product_weight_carat,
-       missing_ranked.product_created_at
+       missing_ranked.inventory_item_description,
+       missing_ranked.product_closing_bal_qty
      ${baseFrom}
      ORDER BY missing_ranked.verification_date DESC, missing_ranked.tag_no ASC
      LIMIT ${limit} OFFSET ${offset}`,
@@ -512,121 +354,62 @@ const getStoredDetailRows = async (filters, pagination) => {
   return dataRows;
 };
 
-/**
- * Fetches combined FOUND, NEW, and MISSING records in a single query.
- * Used when no status filter is provided, returning all three types together.
- */
 const getCombinedRows = async (filters, pagination) => {
   const { limit, offset } = pagination;
-  const { whereClause: headerWhereClause, params: headerParams } = buildHeaderFilterClause(filters);
-  const { whereClause: detailWhereClause, params: detailParams } = buildStoredDetailFilterClause(filters);
-  const activeBatchId = (await getActiveBatchId()) ?? -1;
+  const { whereClause: headerWhereClause, params: headerParams } =
+    buildHeaderFilterClause(filters);
+  const { whereClause: detailWhereClause, params: detailParams } =
+    buildStoredDetailFilterClause(filters);
 
-  /**
-   * UNION query that combines:
-   * 1. FOUND records from stock_verification_details
-   * 2. NEW records from stock_verification_details
-   * 3. MISSING records dynamically generated from products
-   *
-   * All three statuses are returned mixed together, sorted by date and tag.
-   */
   const [dataRows] = await pool.execute(
     `SELECT combined_data.* FROM (
-      -- FOUND records
       SELECT
         svd.id,
         svd.verification_id,
         sv.verification_date,
-        svd.product_name,
-        svd.sub_product_name,
-        svd.center_name,
+        svd.item_description,
         svd.tag_no,
         svd.status,
         svd.created_at,
         p.id AS product_id,
-        p.tran_no AS product_tran_no,
-        p.tran_date AS product_tran_date,
-        p.product AS inventory_product,
-        p.sub_product AS inventory_sub_product,
-        p.tag_packet_no AS inventory_tag_packet_no,
-        p.pieces AS product_pieces,
-        p.gross_wt AS product_gross_wt,
-        p.net_wt AS product_net_wt,
-        p.counter_name AS product_counter_name,
-        p.size AS product_size,
-        p.tag_type AS product_tag_type,
-        p.item_pieces AS product_item_pieces,
-        p.weight_gram AS product_weight_gram,
-        p.weight_carat AS product_weight_carat,
-        p.created_at AS product_created_at
+        p.item_description AS inventory_item_description,
+        p.closing_bal_qty AS product_closing_bal_qty
       FROM stock_verification_details svd
       INNER JOIN stock_verification sv ON sv.id = svd.verification_id
-      LEFT JOIN products p ON p.batch_id = ? AND p.tag_packet_no = svd.tag_no
+      ${PRODUCT_JOIN_SQL}
       WHERE svd.status = 'FOUND' AND ${detailWhereClause}
 
       UNION ALL
 
-      -- NEW records
       SELECT
         svd.id,
         svd.verification_id,
         sv.verification_date,
-        svd.product_name,
-        svd.sub_product_name,
-        svd.center_name,
+        svd.item_description,
         svd.tag_no,
         svd.status,
         svd.created_at,
         p.id AS product_id,
-        p.tran_no AS product_tran_no,
-        p.tran_date AS product_tran_date,
-        p.product AS inventory_product,
-        p.sub_product AS inventory_sub_product,
-        p.tag_packet_no AS inventory_tag_packet_no,
-        p.pieces AS product_pieces,
-        p.gross_wt AS product_gross_wt,
-        p.net_wt AS product_net_wt,
-        p.counter_name AS product_counter_name,
-        p.size AS product_size,
-        p.tag_type AS product_tag_type,
-        p.item_pieces AS product_item_pieces,
-        p.weight_gram AS product_weight_gram,
-        p.weight_carat AS product_weight_carat,
-        p.created_at AS product_created_at
+        p.item_description AS inventory_item_description,
+        p.closing_bal_qty AS product_closing_bal_qty
       FROM stock_verification_details svd
       INNER JOIN stock_verification sv ON sv.id = svd.verification_id
-      LEFT JOIN products p ON p.batch_id = ? AND p.tag_packet_no = svd.tag_no
+      ${PRODUCT_JOIN_SQL}
       WHERE svd.status = 'NEW' AND ${detailWhereClause}
 
       UNION ALL
 
-      -- MISSING records (dynamically generated with inventory product details)
       SELECT
         missing_ranked.id,
         missing_ranked.verification_id,
         missing_ranked.verification_date,
-        missing_ranked.product_name,
-        missing_ranked.sub_product_name,
-        missing_ranked.center_name,
+        missing_ranked.item_description,
         missing_ranked.tag_no,
         missing_ranked.status,
         missing_ranked.created_at,
         missing_ranked.product_id,
-        missing_ranked.product_tran_no,
-        missing_ranked.product_tran_date,
-        missing_ranked.inventory_product,
-        missing_ranked.inventory_sub_product,
-        missing_ranked.inventory_tag_packet_no,
-        missing_ranked.product_pieces,
-        missing_ranked.product_gross_wt,
-        missing_ranked.product_net_wt,
-        missing_ranked.product_counter_name,
-        missing_ranked.product_size,
-        missing_ranked.product_tag_type,
-        missing_ranked.product_item_pieces,
-        missing_ranked.product_weight_gram,
-        missing_ranked.product_weight_carat,
-        missing_ranked.product_created_at
+        missing_ranked.inventory_item_description,
+        missing_ranked.product_closing_bal_qty
       ${buildMissingRankedFromSql(headerWhereClause)}
     ) combined_data
     ORDER BY
@@ -634,15 +417,7 @@ const getCombinedRows = async (filters, pagination) => {
       combined_data.verification_date DESC,
       combined_data.tag_no ASC
     LIMIT ${limit} OFFSET ${offset}`,
-    [
-      ...detailParams,
-      activeBatchId,
-      ...detailParams,
-      activeBatchId,
-      activeBatchId,
-      activeBatchId,
-      ...headerParams,
-    ],
+    [...detailParams, ...detailParams, ...headerParams],
   );
 
   return dataRows;
@@ -652,19 +427,13 @@ const getReport = async (filters, pagination) => {
   const { page, limit } = pagination;
   const summary = await getHeaderSummary(filters);
 
-  // If specific status requested, fetch only that status
   if (filters.status === "MISSING") {
     const totalRecords = summary.missingCount;
     const totalPages = totalRecords === 0 ? 0 : Math.ceil(totalRecords / limit);
     const data = await getMissingRows(filters, pagination);
 
     return {
-      pagination: {
-        page,
-        limit,
-        totalRecords,
-        totalPages,
-      },
+      pagination: { page, limit, totalRecords, totalPages },
       summary: {
         foundCount: summary.foundCount,
         missingCount: summary.missingCount,
@@ -677,17 +446,11 @@ const getReport = async (filters, pagination) => {
   if (filters.status === "FOUND" || filters.status === "NEW") {
     const totalRecords = getStoredRecordCount(summary, filters);
     const totalPages = totalRecords === 0 ? 0 : Math.ceil(totalRecords / limit);
-    const activeBatchId = await getActiveBatchId();
     const dataRows = await getStoredDetailRows(filters, pagination);
-    const enrichedRows = await enrichRowsWithProducts(dataRows, activeBatchId);
+    const enrichedRows = await enrichRowsWithProducts(dataRows);
 
     return {
-      pagination: {
-        page,
-        limit,
-        totalRecords,
-        totalPages,
-      },
+      pagination: { page, limit, totalRecords, totalPages },
       summary: {
         foundCount: summary.foundCount,
         missingCount: summary.missingCount,
@@ -697,26 +460,19 @@ const getReport = async (filters, pagination) => {
     };
   }
 
-  // If no status filter, return combined FOUND + NEW + MISSING
-  const totalRecords = summary.foundCount + summary.newCount + summary.missingCount;
+  const totalRecords =
+    summary.foundCount + summary.newCount + summary.missingCount;
   const totalPages = totalRecords === 0 ? 0 : Math.ceil(totalRecords / limit);
-  const activeBatchId = await getActiveBatchId();
   const dataRows = await getCombinedRows(filters, pagination);
-  const enrichedRows = await enrichRowsWithProducts(dataRows, activeBatchId);
 
   return {
-    pagination: {
-      page,
-      limit,
-      totalRecords,
-      totalPages,
-    },
+    pagination: { page, limit, totalRecords, totalPages },
     summary: {
       foundCount: summary.foundCount,
       missingCount: summary.missingCount,
       newCount: summary.newCount,
     },
-    data: enrichedRows.map(mapRow),
+    data: dataRows.map(mapRow),
   };
 };
 
@@ -731,7 +487,7 @@ const getAllStoredReportRows = async (filters) => {
     );
   }
 
-  const { baseFrom, params } = await buildExportQuery(filters);
+  const { baseFrom, params } = buildExportQuery(filters);
 
   const [dataRows] = await pool.execute(
     `${DETAIL_SELECT_SQL},
@@ -768,28 +524,13 @@ const getAllMissingReportRows = async (filters) => {
        missing_ranked.id,
        missing_ranked.verification_id,
        missing_ranked.verification_date,
-       missing_ranked.product_name,
-       missing_ranked.sub_product_name,
-       missing_ranked.center_name,
+       missing_ranked.item_description,
        missing_ranked.tag_no,
        missing_ranked.status,
        missing_ranked.created_at,
        missing_ranked.product_id,
-       missing_ranked.product_tran_no,
-       missing_ranked.product_tran_date,
-       missing_ranked.inventory_product,
-       missing_ranked.inventory_sub_product,
-       missing_ranked.inventory_tag_packet_no,
-       missing_ranked.product_pieces,
-       missing_ranked.product_gross_wt,
-       missing_ranked.product_net_wt,
-       missing_ranked.product_counter_name,
-       missing_ranked.product_size,
-       missing_ranked.product_tag_type,
-       missing_ranked.product_item_pieces,
-       missing_ranked.product_weight_gram,
-       missing_ranked.product_weight_carat,
-       missing_ranked.product_created_at
+       missing_ranked.inventory_item_description,
+       missing_ranked.product_closing_bal_qty
      ${baseFrom}
      ORDER BY missing_ranked.verification_date DESC, missing_ranked.tag_no ASC`,
     params,
@@ -807,14 +548,10 @@ const getAllMissingReportRows = async (filters) => {
 
 const getAllCombinedReportRows = async (filters) => {
   const summary = await getHeaderSummary(filters);
-
   const stored = await getAllStoredReportRows(filters);
   const missing = await getAllMissingReportRows(filters);
-
-  // Combine stored (FOUND/NEW) and dynamically generated MISSING rows
   const combined = [...stored.data, ...missing.data];
 
-  // Sort to match stored report ordering: FOUND, NEW, then MISSING
   combined.sort((a, b) => {
     const order = { FOUND: 0, NEW: 1, MISSING: 2 };
     if (order[a.status] !== order[b.status]) return order[a.status] - order[b.status];
@@ -848,7 +585,6 @@ const getAllReportRows = async (filters) => {
 const getExcelExportRows = async (filters) => {
   const summary = await getHeaderSummary(filters);
 
-  // If explicit MISSING requested, export only missing rows
   if (filters.status === "MISSING") {
     if (summary.missingCount > MAX_EXPORT_ROWS) {
       throw new ApiError(
@@ -861,24 +597,11 @@ const getExcelExportRows = async (filters) => {
     const [dataRows] = await pool.execute(
       `SELECT
          missing_ranked.verification_date,
-         missing_ranked.product_name,
-         missing_ranked.sub_product_name,
-         missing_ranked.center_name,
+         missing_ranked.item_description,
          missing_ranked.tag_no,
          missing_ranked.status,
-         missing_ranked.product_tran_no,
-         missing_ranked.product_tran_date,
-         missing_ranked.product_pieces,
-         missing_ranked.product_gross_wt,
-         missing_ranked.product_net_wt,
-         missing_ranked.product_counter_name,
-         missing_ranked.product_size,
-         missing_ranked.product_tag_type,
-         missing_ranked.product_item_pieces,
-         missing_ranked.product_weight_gram,
-         missing_ranked.product_weight_carat,
-         missing_ranked.inventory_product,
-         missing_ranked.inventory_sub_product
+         missing_ranked.inventory_item_description,
+         missing_ranked.product_closing_bal_qty
        ${baseFrom}
        ORDER BY missing_ranked.verification_date DESC, missing_ranked.tag_no ASC`,
       params,
@@ -894,7 +617,6 @@ const getExcelExportRows = async (filters) => {
     };
   }
 
-  // If explicit FOUND or NEW requested, export stored rows only
   if (filters.status === "FOUND" || filters.status === "NEW") {
     const exportableCount = getStoredRecordCount(summary, filters);
 
@@ -905,17 +627,14 @@ const getExcelExportRows = async (filters) => {
       );
     }
 
-    const { whereClause, params } = buildStoredDetailFilterClause(filters);
-    const activeBatchId = (await getActiveBatchId()) ?? -1;
-
+    const { baseFrom, params } = buildExportQuery(filters);
     const [dataRows] = await pool.execute(
       `${EXCEL_DETAIL_SELECT_SQL},
-              ${EXCEL_PRODUCT_SELECT_SQL}
-       ${DETAIL_FROM_SQL}
-       ${PRODUCT_JOIN_SQL}
-       WHERE ${whereClause}
+              p.item_description AS inventory_item_description,
+              p.closing_bal_qty AS product_closing_bal_qty
+       ${baseFrom}
        ${STORED_REPORT_ORDER_SQL}`,
-      [...params, activeBatchId],
+      params,
     );
 
     return {
@@ -924,12 +643,12 @@ const getExcelExportRows = async (filters) => {
         missingCount: summary.missingCount,
         newCount: summary.newCount,
       },
-      data: dataRows.map(mapExcelRow),
+      data: dataRows.map((row) => mapExcelRow(row)),
     };
   }
 
-  // No specific status: combine stored (FOUND/NEW) + dynamic MISSING for export
-  const totalRecords = summary.foundCount + summary.newCount + summary.missingCount;
+  const totalRecords =
+    summary.foundCount + summary.newCount + summary.missingCount;
   if (totalRecords > MAX_EXPORT_ROWS) {
     throw new ApiError(
       400,
@@ -937,49 +656,35 @@ const getExcelExportRows = async (filters) => {
     );
   }
 
-  // Stored rows (FOUND + NEW)
-  const { whereClause, params } = buildStoredDetailFilterClause(filters);
-  const activeBatchId = (await getActiveBatchId()) ?? -1;
-
+  const { baseFrom, params } = buildExportQuery(filters);
   const [storedRows] = await pool.execute(
     `${EXCEL_DETAIL_SELECT_SQL},
-            ${EXCEL_PRODUCT_SELECT_SQL}
-     ${DETAIL_FROM_SQL}
-     ${PRODUCT_JOIN_SQL}
-     WHERE ${whereClause}
+            p.item_description AS inventory_item_description,
+            p.closing_bal_qty AS product_closing_bal_qty
+     ${baseFrom}
      ${STORED_REPORT_ORDER_SQL}`,
-    [...params, activeBatchId],
+    params,
   );
 
-  // Missing rows (dynamic)
-  const { baseFrom: missingBaseFrom, params: missingParams } = await buildMissingQueryParts(filters);
+  const { baseFrom: missingBaseFrom, params: missingParams } =
+    await buildMissingQueryParts(filters);
   const [missingRows] = await pool.execute(
     `SELECT
        missing_ranked.verification_date,
-       missing_ranked.product_name,
-       missing_ranked.sub_product_name,
-       missing_ranked.center_name,
+       missing_ranked.item_description,
        missing_ranked.tag_no,
        missing_ranked.status,
-       missing_ranked.product_tran_no,
-       missing_ranked.product_tran_date,
-       missing_ranked.product_pieces,
-       missing_ranked.product_gross_wt,
-       missing_ranked.product_net_wt,
-       missing_ranked.product_counter_name,
-       missing_ranked.product_size,
-       missing_ranked.product_tag_type,
-       missing_ranked.product_item_pieces,
-       missing_ranked.product_weight_gram,
-       missing_ranked.product_weight_carat,
-       missing_ranked.inventory_product,
-       missing_ranked.inventory_sub_product
+       missing_ranked.inventory_item_description,
+       missing_ranked.product_closing_bal_qty
      ${missingBaseFrom}
      ORDER BY missing_ranked.verification_date DESC, missing_ranked.tag_no ASC`,
     missingParams,
   );
 
-  const combined = [...storedRows.map((r) => mapExcelRow(r)), ...missingRows.map((r) => mapExcelRow(r))];
+  const combined = [
+    ...storedRows.map((row) => mapExcelRow(row)),
+    ...missingRows.map((row) => mapExcelRow(row)),
+  ];
 
   combined.sort((a, b) => {
     const order = { FOUND: 0, NEW: 1, MISSING: 2 };
@@ -1024,13 +729,6 @@ const exportReport = async (filters, exportType) => {
     const buffer = await buildPdfBuffer(data, summary, filters, dbTime);
     const fileName = getExportFileName("pdf");
 
-    logReport("export completed", {
-      exportType: "pdf",
-      fileName,
-      bufferBytes: buffer.length,
-      durationMs: Date.now() - startedAt,
-    });
-
     return {
       buffer,
       contentType: "application/pdf",
@@ -1040,13 +738,6 @@ const exportReport = async (filters, exportType) => {
 
   const buffer = await buildExcelBuffer(data, summary, filters, dbTime);
   const fileName = getExportFileName("excel");
-
-  logReport("export completed", {
-    exportType: "excel",
-    fileName,
-    bufferBytes: buffer.length,
-    durationMs: Date.now() - startedAt,
-  });
 
   return {
     buffer,
