@@ -527,12 +527,10 @@
 
 .reports-table thead th:nth-child(1) { width: 40px; }
 .reports-table thead th:nth-child(2) { width: 86px; }
-.reports-table thead th:nth-child(3) { width: 18%; }
-.reports-table thead th:nth-child(4) { width: 18%; }
-.reports-table thead th:nth-child(5) { width: 16%; }
-.reports-table thead th:nth-child(6) { width: 13%; }
-.reports-table thead th:nth-child(7) { width: 6%; }
-.reports-table thead th:nth-child(8) { width: 8%; }
+.reports-table thead th:nth-child(3) { width: 14%; }
+.reports-table thead th:nth-child(4) { width: 34%; }
+.reports-table thead th:nth-child(5) { width: 12%; }
+.reports-table thead th:nth-child(6) { width: 10%; }
 
 .reports-table thead th:first-child {
   text-align: center;
@@ -600,29 +598,25 @@
   font-variant-numeric: tabular-nums;
 }
 
-.reports-table__product {
+.reports-table__barcode {
+  font-weight: 500;
+  color: #8b6914;
+  font-variant-numeric: tabular-nums;
+}
+
+.reports-table__description {
   font-weight: 600;
   color: #1c1410;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.reports-table td:nth-child(4),
-.reports-table td:nth-child(5) {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.reports-table__tag {
-  font-weight: 500;
-  color: #8b6914;
-}
-
-.reports-table__pieces {
+.reports-table__qty {
   font-family: var(--font-numeric);
   font-variant-numeric: tabular-nums;
   text-align: right;
   white-space: nowrap;
+  font-weight: 600;
 }
 
 .reports-table td:last-child {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { fetchCenters, fetchProducts, fetchSubProducts } from '../services/products.js'
+import { fetchReportFilterOptions } from '../services/products.js'
 import {
   downloadReportExport,
   fetchStockVerificationReport,
@@ -17,7 +17,7 @@ const STATUS_OPTIONS = [
 ]
 
 const STAT_CARDS = [
-  { key: 'total', label: 'Total Tags', field: 'totalTags', variant: 'total' },
+  { key: 'total', label: 'Total Items', field: 'totalTags', variant: 'total' },
   { key: 'found', label: 'Found', field: 'totalFound', variant: 'found' },
   { key: 'missing', label: 'Missing', field: 'totalMissing', variant: 'missing' },
   { key: 'new', label: 'New', field: 'totalNew', variant: 'new' },
@@ -102,26 +102,16 @@ function formatStatValue(summary, field) {
   return Number(value ?? 0).toLocaleString('en-IN')
 }
 
-function formatPieces(value) {
+function formatQty(value) {
   if (value === null || value === undefined || value === '') return '—'
   const numeric = Number(value)
-  if (Number.isNaN(numeric)) return '—'
-  return numeric.toLocaleString('en-IN')
+  if (!Number.isFinite(numeric)) return '—'
+  return numeric.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-const ALL_SCOPE_LABELS = new Set([
-  'all products',
-  'all sub products',
-  'all centers',
-])
-
-function formatScopeDisplay(value, rowStatus) {
+function formatCellValue(value) {
   const label = String(value ?? '').trim()
-  if (!label) return '—'
-  if (rowStatus === 'NEW' && ALL_SCOPE_LABELS.has(label.toLowerCase())) {
-    return '—'
-  }
-  return label
+  return label || '—'
 }
 
 function ReportLoader() {
@@ -161,16 +151,14 @@ function getTodayDate() {
 }
 
 export default function Reports() {
-  const [product, setProduct] = useState('')
-  const [subProduct, setSubProduct] = useState('')
-  const [counter, setCounter] = useState('')
+  const [barcode, setBarcode] = useState('')
+  const [itemDescription, setItemDescription] = useState('')
   const [status, setStatus] = useState('')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
 
-  const [products, setProducts] = useState([])
-  const [subProducts, setSubProducts] = useState([])
-  const [counters, setCounters] = useState([])
+  const [barcodes, setBarcodes] = useState([])
+  const [itemDescriptions, setItemDescriptions] = useState([])
 
   const [rows, setRows] = useState([])
   const [summary, setSummary] = useState(null)
@@ -186,93 +174,39 @@ export default function Reports() {
   const [filtersNotice, setFiltersNotice] = useState('')
 
   const filterParams = useMemo(() => ({
-    productName: product || undefined,
-    subProductName: subProduct || undefined,
-    centerName: counter || undefined,
+    productName: itemDescription || undefined,
+    barcode: barcode || undefined,
     status: status || undefined,
     fromDate: fromDate || undefined,
     toDate: toDate || undefined,
-  }), [product, subProduct, counter, status, fromDate, toDate])
+  }), [barcode, itemDescription, status, fromDate, toDate])
 
   useEffect(() => {
     let cancelled = false
 
-    async function loadProducts() {
+    async function loadFilterOptions() {
       setLoadingFilters(true)
       setFiltersNotice('')
 
       try {
-        const data = await fetchProducts()
+        const data = await fetchReportFilterOptions()
         if (!cancelled) {
-          setProducts(data)
-          if (!data.length) {
+          setBarcodes(data.barcodes)
+          setItemDescriptions(data.itemDescriptions)
+          if (!data.barcodes.length && !data.itemDescriptions.length) {
             setFiltersNotice('No active inventory batch found. Upload Excel on the Import page first.')
           }
         }
       } catch (err) {
-        if (!cancelled) setError(err.message || 'Failed to load products')
+        if (!cancelled) setError(err.message || 'Failed to load filter options')
       } finally {
         if (!cancelled) setLoadingFilters(false)
       }
     }
 
-    loadProducts()
+    loadFilterOptions()
     return () => { cancelled = true }
   }, [])
-
-  useEffect(() => {
-    if (!product) {
-      setSubProducts([])
-      setSubProduct('')
-      setCounters([])
-      setCounter('')
-      return undefined
-    }
-
-    let cancelled = false
-
-    async function loadSubProducts() {
-      try {
-        const data = await fetchSubProducts(product)
-        if (!cancelled) {
-          setSubProducts(data)
-          setSubProduct('')
-          setCounters([])
-          setCounter('')
-        }
-      } catch (err) {
-        if (!cancelled) setError(err.message || 'Failed to load sub products')
-      }
-    }
-
-    loadSubProducts()
-    return () => { cancelled = true }
-  }, [product])
-
-  useEffect(() => {
-    if (!product || !subProduct) {
-      setCounters([])
-      setCounter('')
-      return undefined
-    }
-
-    let cancelled = false
-
-    async function loadCounters() {
-      try {
-        const data = await fetchCenters(product, subProduct)
-        if (!cancelled) {
-          setCounters(data)
-          setCounter('')
-        }
-      } catch (err) {
-        if (!cancelled) setError(err.message || 'Failed to load counters')
-      }
-    }
-
-    loadCounters()
-    return () => { cancelled = true }
-  }, [product, subProduct])
 
   function validateDates() {
     if (!fromDate && !toDate) {
@@ -332,9 +266,8 @@ export default function Reports() {
   }
 
   function handleReset() {
-    setProduct('')
-    setSubProduct('')
-    setCounter('')
+    setBarcode('')
+    setItemDescription('')
     setStatus('')
     setFromDate('')
     setToDate('')
@@ -412,42 +345,28 @@ export default function Reports() {
             </label>
 
             <label className="report-field">
-              <span>Product</span>
+              <span>Barcode</span>
               <select
-                value={product}
-                onChange={(e) => setProduct(e.target.value)}
+                value={barcode}
+                onChange={(e) => setBarcode(e.target.value)}
                 disabled={loadingFilters}
               >
-                <option value="">All Products</option>
-                {products.map((item) => (
+                <option value="">All Barcodes</option>
+                {barcodes.map((item) => (
                   <option key={item.id} value={item.name}>{item.name}</option>
                 ))}
               </select>
             </label>
 
             <label className="report-field">
-              <span>Sub Product</span>
+              <span>Item Description</span>
               <select
-                value={subProduct}
-                onChange={(e) => setSubProduct(e.target.value)}
-                disabled={!product}
+                value={itemDescription}
+                onChange={(e) => setItemDescription(e.target.value)}
+                disabled={loadingFilters}
               >
-                <option value="">All Sub Products</option>
-                {subProducts.map((item) => (
-                  <option key={item.id} value={item.name}>{item.name}</option>
-                ))}
-              </select>
-            </label>
-
-            <label className="report-field">
-              <span>Counter</span>
-              <select
-                value={counter}
-                onChange={(e) => setCounter(e.target.value)}
-                disabled={!product || !subProduct}
-              >
-                <option value="">All Counters</option>
-                {counters.map((item) => (
+                <option value="">All Items</option>
+                {itemDescriptions.map((item) => (
                   <option key={item.id} value={item.name}>{item.name}</option>
                 ))}
               </select>
@@ -525,11 +444,9 @@ export default function Reports() {
                     <tr>
                       <th>S.No</th>
                       <th>Date</th>
-                      <th>Product</th>
-                      <th>Sub Product</th>
-                      <th>Counter</th>
-                      <th>Tag No</th>
-                      <th>Pieces</th>
+                      <th>Barcode</th>
+                      <th>Item Description</th>
+                      <th>Closing Bal.Qty</th>
                       <th>Status</th>
                     </tr>
                   </thead>
@@ -545,13 +462,9 @@ export default function Reports() {
                             <span className="reports-table__date-time">{dateCell.timeLine}</span>
                           )}
                         </td>
-                        <td className="reports-table__product">
-                          {formatScopeDisplay(row.product, row.status)}
-                        </td>
-                        <td>{formatScopeDisplay(row.subProduct, row.status)}</td>
-                        <td>{formatScopeDisplay(row.counter, row.status)}</td>
-                        <td className="reports-table__tag">{row.tagNo}</td>
-                        <td className="reports-table__pieces">{formatPieces(row.pieces)}</td>
+                        <td className="reports-table__barcode">{formatCellValue(row.barcode)}</td>
+                        <td className="reports-table__description">{formatCellValue(row.itemDescription)}</td>
+                        <td className="reports-table__qty">{formatQty(row.closingBalQty)}</td>
                         <td>
                           <span className={statusBadgeClass(row.status)}>
                             {formatStatus(row.status)}

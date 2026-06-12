@@ -5,6 +5,7 @@ function buildReportParams(filters = {}) {
     page: filters.page ?? 1,
     limit: filters.limit ?? 10,
     productName: filters.productName,
+    barcode: filters.barcode,
     subProductName: filters.subProductName,
     centerName: filters.centerName,
     status: filters.status,

@@ -130,11 +130,9 @@ function normalizeReportRow(row) {
   return {
     id: row.id,
     verificationDate: row.verificationDate,
-    product: row.productName ?? row.product ?? '',
-    subProduct: row.subProductName ?? row.subProduct ?? '',
-    counter: row.centerName ?? row.counter ?? '',
-    tagNo: row.tagNo ?? '',
-    pieces: row.pieces ?? row.product?.pieces ?? null,
+    barcode: row.barcode ?? row.tagNo ?? '',
+    itemDescription: row.itemDescription ?? row.productName ?? row.product ?? '',
+    closingBalQty: row.closingBalQty ?? row.pieces ?? row.product?.pieces ?? null,
     status: row.status ?? '',
   };
 }
