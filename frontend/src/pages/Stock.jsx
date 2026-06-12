@@ -13,6 +13,17 @@ function formatValue(value) {
   return value
 }
 
+function formatQty(value) {
+  if (value === null || value === undefined || value === '') {
+    return <span className="stock-cell--empty">—</span>
+  }
+  const num = Number(value)
+  if (!Number.isFinite(num)) {
+    return value
+  }
+  return num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 export default function Stock() {
   const [rows, setRows] = useState([])
   const [pagination, setPagination] = useState(null)
@@ -81,7 +92,7 @@ export default function Stock() {
               type="search"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search product, tag, counter…"
+              placeholder="Search barcode or description…"
               aria-label="Search stock"
             />
             {searchInput && (
@@ -136,34 +147,18 @@ export default function Stock() {
                 <thead>
                   <tr>
                     <th>S.No</th>
-                    <th>Tran No</th>
-                    <th>Tran Date</th>
-                    <th>Product</th>
-                    <th>Sub Product</th>
-                    <th>Tag / Packet No</th>
-                    <th>Pieces</th>
-                    <th>Gross Wt</th>
-                    <th>Net Wt</th>
-                    <th>Counter</th>
-                    <th>Size</th>
-                    <th>Tag Type</th>
+                    <th>Barcode</th>
+                    <th>Item Description</th>
+                    <th>Closing Bal.Qty</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((row, index) => (
                     <tr key={row.id}>
                       <td className="stock-cell--sno">{(page - 1) * pageSize + index + 1}</td>
-                      <td>{formatValue(row.tranNo)}</td>
-                      <td>{formatValue(row.tranDate)}</td>
-                      <td>{formatValue(row.product)}</td>
-                      <td>{formatValue(row.subProduct)}</td>
-                      <td>{formatValue(row.tagPacketNo)}</td>
-                      <td>{formatValue(row.pieces)}</td>
-                      <td>{formatValue(row.grossWt)}</td>
-                      <td>{formatValue(row.netWt)}</td>
-                      <td>{formatValue(row.counterName)}</td>
-                      <td>{formatValue(row.size)}</td>
-                      <td>{formatValue(row.tagType)}</td>
+                      <td className="stock-cell--barcode">{formatValue(row.barcode)}</td>
+                      <td className="stock-cell--description">{formatValue(row.itemDescription)}</td>
+                      <td className="stock-cell--qty">{formatQty(row.closingBalQty)}</td>
                     </tr>
                   ))}
                 </tbody>
