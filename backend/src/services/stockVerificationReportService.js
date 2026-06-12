@@ -6,7 +6,10 @@ import {
   buildPdfBuffer,
   getExportFileName,
 } from "../utils/reportExport.js";
-import { SCOPE_NAMES } from "../utils/verificationScope.js";
+import {
+  SCOPE_NAMES,
+  formatNewScopeDisplayValue,
+} from "../utils/verificationScope.js";
 
 const VALID_STATUSES = ["FOUND", "MISSING", "NEW"];
 const MAX_EXPORT_ROWS = 50000;
@@ -313,9 +316,9 @@ const mapProductFields = (row) => ({
 const resolveDisplayScopeFields = (row) => {
   if (row.status === "NEW") {
     return {
-      productName: row.product_name,
-      subProductName: row.sub_product_name,
-      centerName: row.center_name,
+      productName: formatNewScopeDisplayValue(row.product_name),
+      subProductName: formatNewScopeDisplayValue(row.sub_product_name),
+      centerName: formatNewScopeDisplayValue(row.center_name),
     };
   }
 

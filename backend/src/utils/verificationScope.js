@@ -58,6 +58,24 @@ export const isAllSubProductsByName = (name) =>
 export const isAllCentersByName = (name) =>
   matchesScopeName(name, SCOPE_NAMES.ALL_CENTERS);
 
+/** NEW report/export rows: All-scope labels show as "--" (matches Reports UI). */
+export const formatNewScopeDisplayValue = (name) => {
+  const label = normalizeName(name);
+  if (!label) {
+    return "--";
+  }
+
+  if (
+    isAllProductsByName(label) ||
+    isAllSubProductsByName(label) ||
+    isAllCentersByName(label)
+  ) {
+    return "--";
+  }
+
+  return label;
+};
+
 const scopeItemFromStoredName = (name, isAllFn) =>
   isAllFn(name) ? { id: ALL_SCOPE_ID, name } : { name };
 
