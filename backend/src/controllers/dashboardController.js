@@ -38,25 +38,24 @@ export const getTopSoldProducts = async (req, res) => {
 
 export const getDayWiseSales = async (req, res) => {
   const period = getRequestParam(req, 'period') ?? 'week';
-  const counter = getRequestParam(req, 'counter') ?? 'all';
 
-  const result = await dashboardService.getDayWiseSales({ period, counter });
+  const result = await dashboardService.getDayWiseSales({ period });
 
   res.status(200).json({
     success: true,
     message: 'Day-wise sales fetched successfully',
     period: result.period,
-    counter: result.counter,
+    totalSoldQty: result.totalSoldQty,
     totalSoldPieces: result.totalSoldPieces,
+    counter: result.counter,
     data: result.data,
   });
 };
 
 export const getDailyImports = async (req, res) => {
   const period = getRequestParam(req, 'period') ?? 'week';
-  const counter = getRequestParam(req, 'counter') ?? 'ALL';
 
-  const result = await dashboardService.getDailyImports({ period, counter });
+  const result = await dashboardService.getDailyImports({ period });
 
   res.status(200).json({
     success: true,

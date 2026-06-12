@@ -18,6 +18,8 @@ const files = [
   "009_dedupe_verification_scope_day.sql",
   "010_verification_details_found_new_only.sql",
   "011_inventory_sales_audit.sql",
+  "012_simplify_products.sql",
+  "013_simplify_dashboard_sales.sql",
 ];
 
 const SKIPPABLE_ERROR_CODES = new Set([

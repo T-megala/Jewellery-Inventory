@@ -1,28 +1,16 @@
 import pool from "../config/database.js";
 
-const AUDIT_INSERT_BATCH_SIZE = 2000;
-
-const COUNTER_EXPR = `CASE
-  WHEN counter_name IS NULL OR TRIM(counter_name) = '' THEN 'Unassigned'
-  ELSE TRIM(counter_name)
-END`;
-
-const PREV_COUNTER_EXPR = `CASE
-  WHEN prev.counter_name IS NULL OR TRIM(prev.counter_name) = '' THEN 'Unassigned'
-  ELSE TRIM(prev.counter_name)
-END`;
-
-const PREV_TAG_FILTER = `
-  prev.tag_packet_no IS NOT NULL
-  AND TRIM(prev.tag_packet_no) != ''
+const prevBarcodeFilter = `
+  prev.barcode IS NOT NULL
+  AND TRIM(prev.barcode) != ''
 `;
 
-const TAG_FILTER = `
-  tag_packet_no IS NOT NULL
-  AND TRIM(tag_packet_no) != ''
+const plainBarcodeFilter = `
+  barcode IS NOT NULL
+  AND TRIM(barcode) != ''
 `;
 
-const toSoldPiecesInt = (value) => Math.max(0, Math.round(Number(value ?? 0)));
+const toQtyInt = (value) => Math.max(0, Math.round(Number(value ?? 0) * 1000) / 1000);
 
 const logAudit = (message, meta = undefined) => {
   if (meta === undefined) {
@@ -39,39 +27,7 @@ export const deleteBatchSalesAudit = async (connection, batchId) => {
   ]);
 };
 
-const countRemovedTags = async (connection, previousBatchId, currentBatchId) => {
-  const [[row]] = await connection.execute(
-    `SELECT COUNT(*) AS total
-     FROM products prev
-     LEFT JOIN products curr
-       ON curr.batch_id = ?
-      AND curr.tag_packet_no = prev.tag_packet_no
-     WHERE prev.batch_id = ?
-       AND ${PREV_TAG_FILTER}
-       AND curr.id IS NULL`,
-    [currentBatchId, previousBatchId],
-  );
-
-  return Number(row.total ?? 0);
-};
-
-const countPieceReductions = async (connection, previousBatchId, currentBatchId) => {
-  const [[row]] = await connection.execute(
-    `SELECT COUNT(*) AS total
-     FROM products prev
-     INNER JOIN products curr
-       ON curr.batch_id = ?
-      AND curr.tag_packet_no = prev.tag_packet_no
-     WHERE prev.batch_id = ?
-       AND ${PREV_TAG_FILTER}
-       AND COALESCE(prev.pieces, 0) > COALESCE(curr.pieces, 0)`,
-    [currentBatchId, previousBatchId],
-  );
-
-  return Number(row.total ?? 0);
-};
-
-const insertRemovedTagAudits = async (
+const insertRemovedBarcodeAudits = async (
   connection,
   batchId,
   previousBatchId,
@@ -79,26 +35,24 @@ const insertRemovedTagAudits = async (
 ) => {
   const [result] = await connection.execute(
     `INSERT INTO inventory_sales_audit
-      (batch_id, previous_batch_id, tag_no, product, sub_product, counter_name,
-       sale_type, previous_pieces, current_pieces, sold_pieces, sold_tags)
+      (batch_id, previous_batch_id, barcode, item_description,
+       sale_type, previous_qty, current_qty, sold_qty, sold_barcodes)
      SELECT
        ?,
        ?,
-       TRIM(prev.tag_packet_no),
-       prev.product,
-       prev.sub_product,
-       ${PREV_COUNTER_EXPR},
-       'TAG_REMOVED',
-       prev.pieces,
+       TRIM(prev.barcode),
+       prev.item_description,
+       'BARCODE_REMOVED',
+       prev.closing_bal_qty,
        NULL,
-       COALESCE(prev.pieces, 0),
+       COALESCE(prev.closing_bal_qty, 0),
        1
      FROM products prev
      LEFT JOIN products curr
        ON curr.batch_id = ?
-      AND curr.tag_packet_no = prev.tag_packet_no
+      AND curr.barcode = prev.barcode
      WHERE prev.batch_id = ?
-       AND ${PREV_TAG_FILTER}
+       AND ${prevBarcodeFilter}
        AND curr.id IS NULL`,
     [batchId, previousBatchId, currentBatchId, previousBatchId],
   );
@@ -106,7 +60,7 @@ const insertRemovedTagAudits = async (
   return Number(result.affectedRows ?? 0);
 };
 
-const insertPieceReductionAudits = async (
+const insertQtyReductionAudits = async (
   connection,
   batchId,
   previousBatchId,
@@ -114,27 +68,25 @@ const insertPieceReductionAudits = async (
 ) => {
   const [result] = await connection.execute(
     `INSERT INTO inventory_sales_audit
-      (batch_id, previous_batch_id, tag_no, product, sub_product, counter_name,
-       sale_type, previous_pieces, current_pieces, sold_pieces, sold_tags)
+      (batch_id, previous_batch_id, barcode, item_description,
+       sale_type, previous_qty, current_qty, sold_qty, sold_barcodes)
      SELECT
        ?,
        ?,
-       TRIM(prev.tag_packet_no),
-       prev.product,
-       prev.sub_product,
-       ${PREV_COUNTER_EXPR},
-       'PIECE_REDUCTION',
-       prev.pieces,
-       curr.pieces,
-       COALESCE(prev.pieces, 0) - COALESCE(curr.pieces, 0),
+       TRIM(prev.barcode),
+       prev.item_description,
+       'QTY_REDUCTION',
+       prev.closing_bal_qty,
+       curr.closing_bal_qty,
+       COALESCE(prev.closing_bal_qty, 0) - COALESCE(curr.closing_bal_qty, 0),
        0
      FROM products prev
      INNER JOIN products curr
        ON curr.batch_id = ?
-      AND curr.tag_packet_no = prev.tag_packet_no
+      AND curr.barcode = prev.barcode
      WHERE prev.batch_id = ?
-       AND ${PREV_TAG_FILTER}
-       AND COALESCE(prev.pieces, 0) > COALESCE(curr.pieces, 0)`,
+       AND ${prevBarcodeFilter}
+       AND COALESCE(prev.closing_bal_qty, 0) > COALESCE(curr.closing_bal_qty, 0)`,
     [batchId, previousBatchId, currentBatchId, previousBatchId],
   );
 
@@ -149,10 +101,10 @@ export const rebuildBatchSalesAudit = async (
   if (!previousBatchId) {
     await deleteBatchSalesAudit(connection, batchId);
     return {
-      removedTags: 0,
-      pieceReductions: 0,
-      soldTags: 0,
-      soldPieces: 0,
+      removedBarcodes: 0,
+      qtyReductions: 0,
+      soldBarcodes: 0,
+      soldQty: 0,
       durationMs: 0,
     };
   }
@@ -161,13 +113,13 @@ export const rebuildBatchSalesAudit = async (
 
   await deleteBatchSalesAudit(connection, batchId);
 
-  const removedTags = await insertRemovedTagAudits(
+  const removedBarcodes = await insertRemovedBarcodeAudits(
     connection,
     batchId,
     previousBatchId,
     batchId,
   );
-  const pieceReductions = await insertPieceReductionAudits(
+  const qtyReductions = await insertQtyReductionAudits(
     connection,
     batchId,
     previousBatchId,
@@ -176,18 +128,18 @@ export const rebuildBatchSalesAudit = async (
 
   const [[totals]] = await connection.execute(
     `SELECT
-       COALESCE(SUM(sold_tags), 0) AS soldTags,
-       COALESCE(SUM(sold_pieces), 0) AS soldPieces
+       COALESCE(SUM(sold_barcodes), 0) AS soldBarcodes,
+       COALESCE(SUM(sold_qty), 0) AS soldQty
      FROM inventory_sales_audit
      WHERE batch_id = ?`,
     [batchId],
   );
 
   const summary = {
-    removedTags,
-    pieceReductions,
-    soldTags: Number(totals.soldTags ?? 0),
-    soldPieces: toSoldPiecesInt(totals.soldPieces),
+    removedBarcodes,
+    qtyReductions,
+    soldBarcodes: Number(totals.soldBarcodes ?? 0),
+    soldQty: toQtyInt(totals.soldQty),
     durationMs: Date.now() - startedAt,
   };
 
@@ -196,53 +148,16 @@ export const rebuildBatchSalesAudit = async (
   return summary;
 };
 
-export const getBatchSalesTotalsByCounter = async (connection, batchId) => {
-  const [rows] = await connection.execute(
-    `SELECT
-       counter_name AS counterName,
-       COALESCE(SUM(sold_tags), 0) AS soldTags,
-       COALESCE(SUM(sold_pieces), 0) AS soldPieces
-     FROM inventory_sales_audit
-     WHERE batch_id = ?
-     GROUP BY counter_name`,
-    [batchId],
-  );
-
-  return rows.map((row) => ({
-    counterName: row.counterName,
-    soldTags: Number(row.soldTags ?? 0),
-    soldPieces: toSoldPiecesInt(row.soldPieces),
-  }));
-};
-
-export const countBatchStockPieces = async (connection, batchId) => {
+export const countBatchStockQty = async (connection, batchId) => {
   const [[row]] = await connection.execute(
-    `SELECT COALESCE(SUM(COALESCE(pieces, 0)), 0) AS totalPieces
+    `SELECT COALESCE(SUM(COALESCE(closing_bal_qty, 0)), 0) AS totalQty
      FROM products
      WHERE batch_id = ?
-       AND ${TAG_FILTER}`,
+       AND ${plainBarcodeFilter}`,
     [batchId],
   );
 
-  return toSoldPiecesInt(row.totalPieces);
-};
-
-export const countBatchStockPiecesByCounter = async (connection, batchId) => {
-  const [rows] = await connection.execute(
-    `SELECT
-       ${COUNTER_EXPR} AS counter_name,
-       COALESCE(SUM(COALESCE(pieces, 0)), 0) AS totalPieces
-     FROM products
-     WHERE batch_id = ?
-       AND ${TAG_FILTER}
-     GROUP BY ${COUNTER_EXPR}`,
-    [batchId],
-  );
-
-  return rows.map((row) => ({
-    counterName: row.counter_name,
-    totalPieces: toSoldPiecesInt(row.totalPieces),
-  }));
+  return toQtyInt(row.totalQty);
 };
 
 export const benchmarkBatchComparison = async (previousBatchId, currentBatchId) => {
@@ -250,42 +165,28 @@ export const benchmarkBatchComparison = async (previousBatchId, currentBatchId) 
 
   try {
     const startedAt = Date.now();
-    const removedCount = await countRemovedTags(
-      connection,
-      previousBatchId,
-      currentBatchId,
-    );
-    const reductionCount = await countPieceReductions(
-      connection,
-      previousBatchId,
-      currentBatchId,
-    );
-    const compareDurationMs = Date.now() - startedAt;
-
-    const auditStartedAt = Date.now();
     await deleteBatchSalesAudit(connection, currentBatchId);
-    await insertRemovedTagAudits(
+    const removedBarcodes = await insertRemovedBarcodeAudits(
       connection,
       currentBatchId,
       previousBatchId,
       currentBatchId,
     );
-    await insertPieceReductionAudits(
+    const qtyReductions = await insertQtyReductionAudits(
       connection,
       currentBatchId,
       previousBatchId,
       currentBatchId,
     );
-    const auditDurationMs = Date.now() - auditStartedAt;
+    const auditDurationMs = Date.now() - startedAt;
 
     return {
       previousBatchId,
       currentBatchId,
-      removedCount,
-      reductionCount,
-      compareDurationMs,
+      removedBarcodes,
+      qtyReductions,
       auditDurationMs,
-      totalDurationMs: compareDurationMs + auditDurationMs,
+      totalDurationMs: auditDurationMs,
     };
   } finally {
     connection.release();
@@ -295,9 +196,6 @@ export const benchmarkBatchComparison = async (previousBatchId, currentBatchId) 
 export default {
   rebuildBatchSalesAudit,
   deleteBatchSalesAudit,
-  getBatchSalesTotalsByCounter,
-  countBatchStockPieces,
-  countBatchStockPiecesByCounter,
+  countBatchStockQty,
   benchmarkBatchComparison,
-  AUDIT_INSERT_BATCH_SIZE,
 };

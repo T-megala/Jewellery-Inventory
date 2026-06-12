@@ -69,32 +69,20 @@ export const listBatches = async () => {
 const mapProductRow = (row) => ({
   id: row.id,
   batchId: row.batch_id,
-  tranNo: row.tran_no,
-  tranDate: row.tran_date,
-  product: row.product,
-  subProduct: row.sub_product,
-  tagPacketNo: row.tag_packet_no,
-  pieces: row.pieces,
-  grossWt: row.gross_wt,
-  netWt: row.net_wt,
-  counterName: row.counter_name,
-  size: row.size,
-  tagType: row.tag_type,
-  itemPieces: row.item_pieces,
-  weightGram: row.weight_gram,
-  weightCarat: row.weight_carat,
+  barcode: row.barcode,
+  itemDescription: row.item_description,
+  closingBalQty:
+    row.closing_bal_qty === null ? null : Number(row.closing_bal_qty),
 });
 
 export const getBatchProducts = async (batchId, { search, page, limit, offset }) => {
   const searchClause = search
     ? `AND (
-        p.product LIKE ?
-        OR p.sub_product LIKE ?
-        OR p.tag_packet_no LIKE ?
-        OR p.counter_name LIKE ?
+        p.barcode LIKE ?
+        OR p.item_description LIKE ?
       )`
     : '';
-  const searchParams = search ? [`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`] : [];
+  const searchParams = search ? [`%${search}%`, `%${search}%`] : [];
 
   const baseFrom = `
     FROM products p
@@ -135,10 +123,10 @@ export const compareBatches = async (currentBatchId, previousBatchId) => {
   );
 
   const currentMap = new Map(
-    currentRows.map((row) => [String(row.tag_packet_no).trim(), row])
+    currentRows.map((row) => [String(row.barcode).trim(), row])
   );
   const previousMap = new Map(
-    previousRows.map((row) => [String(row.tag_packet_no).trim(), row])
+    previousRows.map((row) => [String(row.barcode).trim(), row])
   );
 
   const added = [];

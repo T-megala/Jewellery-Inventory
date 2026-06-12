@@ -25,55 +25,29 @@ const logImport = (message, meta = undefined) => {
   console.info(`[product-import] ${message}`, meta);
 };
 
-const COMPARE_FIELDS = [
-  'tran_no',
-  'tran_date',
-  'product',
-  'sub_product',
-  'tag_packet_no',
-  'pieces',
-  'gross_wt',
-  'net_wt',
-  'counter_name',
-  'size',
-  'tag_type',
-  'item_pieces',
-  'weight_gram',
-  'weight_carat',
-];
+const COMPARE_FIELDS = ['barcode', 'item_description', 'closing_bal_qty'];
 
 const rowToValues = (batchId, row) => [
   batchId,
-  row.tran_no,
-  row.tran_date,
-  row.product,
-  row.sub_product,
-  row.tag_packet_no,
-  row.pieces,
-  row.gross_wt,
-  row.net_wt,
-  row.counter_name,
-  row.size,
-  row.tag_type,
-  row.item_pieces,
-  row.weight_gram,
-  row.weight_carat,
+  row.barcode,
+  row.item_description,
+  row.closing_bal_qty,
 ];
 
 const buildPlaceholders = (rowCount, columnCount) =>
   Array.from({ length: rowCount }, () => `(${Array(columnCount).fill('?').join(', ')})`).join(', ');
 
-const dedupeRowsByTag = (rows) => {
-  const byTag = new Map();
+const dedupeRowsByBarcode = (rows) => {
+  const byBarcode = new Map();
 
   for (const row of rows) {
-    const tag = String(row.tag_packet_no ?? '').trim();
-    if (tag) {
-      byTag.set(tag, row);
+    const barcode = String(row.barcode ?? '').trim();
+    if (barcode) {
+      byBarcode.set(barcode, row);
     }
   }
 
-  return [...byTag.values()];
+  return [...byBarcode.values()];
 };
 
 const enableBulkSession = async (connection) => {
@@ -105,14 +79,12 @@ const bulkInsert = async (connection, batchId, rows) => {
     return;
   }
 
-  const placeholders = buildPlaceholders(rows.length, 15);
+  const placeholders = buildPlaceholders(rows.length, 4);
   const values = rows.flatMap((row) => rowToValues(batchId, row));
 
   await connection.query(
     `INSERT INTO products
-      (batch_id, tran_no, tran_date, product, sub_product, tag_packet_no,
-       pieces, gross_wt, net_wt, counter_name, size, tag_type,
-       item_pieces, weight_gram, weight_carat)
+      (batch_id, barcode, item_description, closing_bal_qty)
      VALUES ${placeholders}`,
     values
   );
@@ -123,70 +95,52 @@ const bulkUpsert = async (connection, batchId, rows) => {
     return;
   }
 
-  const placeholders = buildPlaceholders(rows.length, 15);
+  const placeholders = buildPlaceholders(rows.length, 4);
   const values = rows.flatMap((row) => rowToValues(batchId, row));
 
   await connection.query(
     `INSERT INTO products
-      (batch_id, tran_no, tran_date, product, sub_product, tag_packet_no,
-       pieces, gross_wt, net_wt, counter_name, size, tag_type,
-       item_pieces, weight_gram, weight_carat)
+      (batch_id, barcode, item_description, closing_bal_qty)
      VALUES ${placeholders}
      ON DUPLICATE KEY UPDATE
-       tran_no = VALUES(tran_no),
-       tran_date = VALUES(tran_date),
-       product = VALUES(product),
-       sub_product = VALUES(sub_product),
-       pieces = VALUES(pieces),
-       gross_wt = VALUES(gross_wt),
-       net_wt = VALUES(net_wt),
-       counter_name = VALUES(counter_name),
-       size = VALUES(size),
-       tag_type = VALUES(tag_type),
-       item_pieces = VALUES(item_pieces),
-       weight_gram = VALUES(weight_gram),
-       weight_carat = VALUES(weight_carat)`,
+       item_description = VALUES(item_description),
+       closing_bal_qty = VALUES(closing_bal_qty)`,
     values
   );
 };
 
-// Database-side deduplication: Compare rows efficiently without loading all products into memory
 const classifyRowsViaDatabase = async (connection, batchId, rows) => {
   const toInsert = [];
   const toUpsert = [];
   let unchanged = 0;
 
-  // Build list of unique tags from incoming rows
-  const tags = rows
-    .map((r) => String(r.tag_packet_no ?? '').trim())
+  const barcodes = rows
+    .map((r) => String(r.barcode ?? '').trim())
     .filter(Boolean);
 
-  if (tags.length === 0) {
+  if (barcodes.length === 0) {
     return { toInsert: rows, toUpsert: [], unchanged };
   }
 
-  // Get only the tags that already exist in the database
-  const placeholders = tags.map(() => '?').join(', ');
+  const placeholders = barcodes.map(() => '?').join(', ');
   const [existingRows] = await connection.query(
     `SELECT ${COMPARE_FIELDS.join(', ')}
      FROM products
-     WHERE batch_id = ? AND tag_packet_no IN (${placeholders})`,
-    [batchId, ...tags]
+     WHERE batch_id = ? AND barcode IN (${placeholders})`,
+    [batchId, ...barcodes]
   );
 
-  // Create a map of existing products for comparison
   const existingMap = new Map();
   for (const row of existingRows) {
-    const tag = String(row.tag_packet_no ?? '').trim();
-    if (tag) {
-      existingMap.set(tag, row);
+    const barcode = String(row.barcode ?? '').trim();
+    if (barcode) {
+      existingMap.set(barcode, row);
     }
   }
 
-  // Classify incoming rows
   for (const row of rows) {
-    const tag = String(row.tag_packet_no).trim();
-    const existing = existingMap.get(tag);
+    const barcode = String(row.barcode).trim();
+    const existing = existingMap.get(barcode);
 
     if (!existing) {
       toInsert.push(row);
@@ -200,28 +154,28 @@ const classifyRowsViaDatabase = async (connection, batchId, rows) => {
   return { toInsert, toUpsert, unchanged };
 };
 
-const loadExistingTags = async (connection, batchId) => {
+const loadExistingBarcodes = async (connection, batchId) => {
   const [rows] = await connection.query(
-    `SELECT tag_packet_no
+    `SELECT barcode
      FROM products
      WHERE batch_id = ?
-       AND tag_packet_no IS NOT NULL
-       AND TRIM(tag_packet_no) != ''`,
+       AND barcode IS NOT NULL
+       AND TRIM(barcode) != ''`,
     [batchId]
   );
 
   return new Set(
-    rows.map((row) => String(row.tag_packet_no).trim()).filter(Boolean)
+    rows.map((row) => String(row.barcode).trim()).filter(Boolean)
   );
 };
 
-const countInsertVsExisting = (validRows, existingTags) => {
+const countInsertVsExisting = (validRows, existingBarcodes) => {
   let inserted = 0;
   let updated = 0;
 
   for (const row of validRows) {
-    const tag = String(row.tag_packet_no).trim();
-    if (existingTags.has(tag)) {
+    const barcode = String(row.barcode).trim();
+    if (existingBarcodes.has(barcode)) {
       updated += 1;
     } else {
       inserted += 1;
@@ -287,7 +241,7 @@ const importProductsFromExcel = async (
     throw new ApiError(400, error.message);
   }
 
-  const validRows = dedupeRowsByTag(parsed.validRows);
+  const validRows = dedupeRowsByBarcode(parsed.validRows);
   const { totalRowsInFile, skipped } = parsed;
 
   logImport('excel parse completed', {
@@ -328,8 +282,8 @@ const importProductsFromExcel = async (
       uploadedBy
     );
 
-    const existingTags = await loadExistingTags(connection, batchId);
-    const isFirstImport = existingTags.size === 0;
+    const existingBarcodes = await loadExistingBarcodes(connection, batchId);
+    const isFirstImport = existingBarcodes.size === 0;
     const useFastReimport =
       !isFirstImport &&
       !isNewBatch &&
@@ -413,7 +367,7 @@ const importProductsFromExcel = async (
         100
       );
 
-      const counts = countInsertVsExisting(validRows, existingTags);
+      const counts = countInsertVsExisting(validRows, existingBarcodes);
       inserted = counts.inserted;
       updated = counts.updated;
       logImport('fast bulk upsert completed', {
@@ -423,7 +377,6 @@ const importProductsFromExcel = async (
         durationMs: Date.now() - upsertStartedAt,
       });
     } else {
-      // Use database-side deduplication for efficient comparison
       const classified = await classifyRowsViaDatabase(connection, batchId, validRows);
       const { toInsert, toUpsert } = classified;
       unchanged = classified.unchanged;
@@ -513,7 +466,7 @@ const importProductsFromExcel = async (
     });
 
     try {
-      await refreshDailySalesSummary(batchId);
+      await refreshDailySalesSummary(batchId, connection);
     } catch (summaryError) {
       console.error('[product-import] daily sales summary refresh failed', {
         batchId,

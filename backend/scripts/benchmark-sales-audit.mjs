@@ -26,8 +26,8 @@ const summaryDurationMs = Date.now() - summaryStartedAt;
 const [[auditStats]] = await pool.execute(
   `SELECT
      COUNT(*) AS auditRows,
-     COALESCE(SUM(sold_tags), 0) AS soldTags,
-     COALESCE(SUM(sold_pieces), 0) AS soldPieces
+     COALESCE(SUM(sold_barcodes), 0) AS soldBarcodes,
+     COALESCE(SUM(sold_qty), 0) AS soldQty
    FROM inventory_sales_audit
    WHERE batch_id = ?`,
   [currentBatchId],
@@ -43,8 +43,8 @@ const [[summaryRow]] = await pool.execute(
 console.log({
   summaryRefreshDurationMs: summaryDurationMs,
   auditRows: Number(auditStats.auditRows),
-  soldTags: Number(auditStats.soldTags),
-  soldPieces: Number(auditStats.soldPieces),
+  soldBarcodes: Number(auditStats.soldBarcodes),
+  soldQty: Number(auditStats.soldQty),
   summaryRow,
   estimatedAddedImportOverheadMs: comparison.totalDurationMs,
 });

@@ -3,11 +3,11 @@ import ApiError from "../utils/ApiError.js";
 import { getActiveBatchId } from "./productBatchService.js";
 import dailySalesSummaryService from "./dailySalesSummaryService.js";
 
-const PRODUCT_TAG_FILTER = `
-  tag_packet_no IS NOT NULL
-  AND TRIM(tag_packet_no) != ''
-  AND product IS NOT NULL
-  AND TRIM(product) != ''
+const PRODUCT_BARCODE_FILTER = `
+  barcode IS NOT NULL
+  AND TRIM(barcode) != ''
+  AND item_description IS NOT NULL
+  AND TRIM(item_description) != ''
 `;
 
 const formatDateTime = (value) => {
@@ -26,12 +26,15 @@ const formatDate = (value) => {
 };
 
 const emptyTotals = () => ({
+  totalBarcodes: 0,
+  totalQty: 0,
+  itemDescriptions: 0,
   totalTags: 0,
   totalPieces: 0,
-  totalGrossWt: 0,
-  totalNetWt: 0,
   productGroups: 0,
   subProducts: 0,
+  totalGrossWt: 0,
+  totalNetWt: 0,
   counters: 0,
 });
 
@@ -64,68 +67,46 @@ const getInventorySummary = async () => {
     return {
       batch: null,
       totals: emptyTotals(),
+      byDescription: [],
       byProduct: [],
       byCounter: [],
+      recentItems: [],
       recentTags: [],
     };
   }
 
   const batch = await getBatchInfo(batchId);
   const baseWhere = `batch_id = ?
-    AND tag_packet_no IS NOT NULL
-    AND TRIM(tag_packet_no) != ''`;
-  const counterNameExpr = `CASE
-    WHEN counter_name IS NULL OR TRIM(counter_name) = '' THEN 'Unassigned'
-    ELSE TRIM(counter_name)
-  END`;
+    AND ${PRODUCT_BARCODE_FILTER}`;
 
   const [[totalsRow]] = await pool.execute(
     `SELECT
-       COUNT(*) AS totalTags,
-       COALESCE(SUM(pieces), 0) AS totalPieces,
-       COALESCE(SUM(gross_wt), 0) AS totalGrossWt,
-       COALESCE(SUM(net_wt), 0) AS totalNetWt,
-       COUNT(DISTINCT product) AS productGroups,
-       COUNT(DISTINCT CONCAT(product, '|', sub_product)) AS subProducts,
-       COUNT(DISTINCT ${counterNameExpr}) AS counters
+       COUNT(*) AS totalBarcodes,
+       COALESCE(SUM(closing_bal_qty), 0) AS totalQty,
+       COUNT(DISTINCT item_description) AS itemDescriptions
      FROM products
      WHERE ${baseWhere}`,
     [batchId],
   );
 
-  const [byProductRows] = await pool.execute(
+  const [byDescriptionRows] = await pool.execute(
     `SELECT
-       product AS name,
-       COUNT(DISTINCT sub_product) AS subProductCount,
-       COUNT(*) AS tagCount,
-       COALESCE(SUM(pieces), 0) AS pieceCount
+       item_description AS name,
+       COUNT(*) AS barcodeCount,
+       COALESCE(SUM(closing_bal_qty), 0) AS qtySum
      FROM products
      WHERE ${baseWhere}
-     GROUP BY product
-     ORDER BY pieceCount DESC, product ASC`,
-    [batchId],
-  );
-
-  const [byCounterRows] = await pool.execute(
-    `SELECT
-       ${counterNameExpr} AS name,
-       COUNT(DISTINCT CONCAT(product, '|', sub_product)) AS subProductCount,
-       COUNT(DISTINCT product) AS productCount,
-       COUNT(*) AS tagCount
-     FROM products
-     WHERE ${baseWhere}
-     GROUP BY ${counterNameExpr}
-     ORDER BY subProductCount DESC, name ASC`,
+     GROUP BY item_description
+     ORDER BY qtySum DESC, item_description ASC`,
     [batchId],
   );
 
   const [recentRows] = await pool.execute(
     `SELECT
        id,
-       product,
-       sub_product AS subProduct,
-       counter_name AS counterName,
-       tag_packet_no AS tagPacketNo
+       barcode,
+       item_description,
+       closing_bal_qty
      FROM products
      WHERE batch_id = ?
      ORDER BY id DESC
@@ -133,35 +114,47 @@ const getInventorySummary = async () => {
     [batchId],
   );
 
+  const totalBarcodes = Number(totalsRow.totalBarcodes ?? 0);
+  const totalQty = Number(totalsRow.totalQty ?? 0);
+  const itemDescriptions = Number(totalsRow.itemDescriptions ?? 0);
+
+  const byDescription = byDescriptionRows.map((row) => ({
+    name: row.name,
+    barcodeCount: Number(row.barcodeCount ?? 0),
+    qtySum: Number(row.qtySum ?? 0),
+    tagCount: Number(row.barcodeCount ?? 0),
+    pieceCount: Number(row.qtySum ?? 0),
+  }));
+
   return {
     batch,
     totals: {
-      totalTags: Number(totalsRow.totalTags ?? 0),
-      totalPieces: Number(totalsRow.totalPieces ?? 0),
-      totalGrossWt: Number(totalsRow.totalGrossWt ?? 0),
-      totalNetWt: Number(totalsRow.totalNetWt ?? 0),
-      productGroups: Number(totalsRow.productGroups ?? 0),
-      subProducts: Number(totalsRow.subProducts ?? 0),
-      counters: Number(totalsRow.counters ?? 0),
+      totalBarcodes,
+      totalQty,
+      itemDescriptions,
+      totalTags: totalBarcodes,
+      totalPieces: totalQty,
+      productGroups: itemDescriptions,
+      subProducts: itemDescriptions,
+      totalGrossWt: 0,
+      totalNetWt: 0,
+      counters: 0,
     },
-    byProduct: byProductRows.map((row) => ({
-      name: row.name,
-      subProductCount: Number(row.subProductCount ?? 0),
-      tagCount: Number(row.tagCount ?? 0),
-      pieceCount: Number(row.pieceCount ?? 0),
-    })),
-    byCounter: byCounterRows.map((row) => ({
-      name: row.name,
-      subProductCount: Number(row.subProductCount ?? 0),
-      productCount: Number(row.productCount ?? 0),
-      tagCount: Number(row.tagCount ?? 0),
+    byDescription,
+    byProduct: byDescription,
+    byCounter: [],
+    recentItems: recentRows.map((row) => ({
+      id: row.id,
+      barcode: row.barcode,
+      itemDescription: row.item_description,
+      closingBalQty: Number(row.closing_bal_qty ?? 0),
     })),
     recentTags: recentRows.map((row) => ({
       id: row.id,
-      product: row.product,
-      subProduct: row.subProduct,
-      counterName: row.counterName,
-      tagPacketNo: row.tagPacketNo,
+      barcode: row.barcode,
+      product: row.item_description,
+      tagPacketNo: row.barcode,
+      counterName: null,
     })),
   };
 };
@@ -223,8 +216,8 @@ const getTopSoldProducts = async ({ period = "all" } = {}) => {
   }
 
   const conditions = [
-    "isa.product IS NOT NULL",
-    "TRIM(isa.product) != ''",
+    "isa.item_description IS NOT NULL",
+    "TRIM(isa.item_description) != ''",
   ];
   const params = [];
 
@@ -235,15 +228,15 @@ const getTopSoldProducts = async ({ period = "all" } = {}) => {
 
   const [rows] = await pool.execute(
     `SELECT
-       isa.product AS productName,
-       COALESCE(SUM(isa.sold_tags), 0) AS soldTags,
-       COALESCE(SUM(isa.sold_pieces), 0) AS soldCount
+       isa.item_description AS itemDescription,
+       COALESCE(SUM(isa.sold_barcodes), 0) AS soldBarcodes,
+       COALESCE(SUM(isa.sold_qty), 0) AS soldQty
      FROM inventory_sales_audit isa
      INNER JOIN product_upload_batches b ON b.id = isa.batch_id
      WHERE ${conditions.join(" AND ")}
-     GROUP BY isa.product
-     HAVING soldCount > 0 OR soldTags > 0
-     ORDER BY soldCount DESC, soldTags DESC, isa.product ASC
+     GROUP BY isa.item_description
+     HAVING soldQty > 0 OR soldBarcodes > 0
+     ORDER BY soldQty DESC, soldBarcodes DESC, isa.item_description ASC
      LIMIT 10`,
     params,
   );
@@ -257,9 +250,12 @@ const getTopSoldProducts = async ({ period = "all" } = {}) => {
     latestBatch: latestBatchId ? await getBatchInfo(latestBatchId) : null,
     previousBatch: previousBatchId ? await getBatchInfo(previousBatchId) : null,
     products: rows.map((row) => ({
-      productName: row.productName,
-      soldTags: Number(row.soldTags ?? 0),
-      soldCount: Number(row.soldCount ?? 0),
+      itemDescription: row.itemDescription,
+      productName: row.itemDescription,
+      soldBarcodes: Number(row.soldBarcodes ?? 0),
+      soldQty: Number(row.soldQty ?? 0),
+      soldTags: Number(row.soldBarcodes ?? 0),
+      soldCount: Number(row.soldQty ?? 0),
     })),
   };
 };
@@ -292,46 +288,46 @@ const formatDayLabel = (batchDate) => {
   return DAY_LABELS[date.getDay()];
 };
 
-const getDayWiseSales = async ({ period = "week", counter = "all" } = {}) => {
+const getDayWiseSales = async ({ period = "week" } = {}) => {
   const validatedPeriod = dailySalesSummaryService.validatePeriod(period);
 
   if (!validatedPeriod) {
     throw new ApiError(400, 'period must be "week" or "month"');
   }
 
-  const counterName = dailySalesSummaryService.resolveCounterFilter(counter);
   const intervalDays = validatedPeriod === "month" ? 30 : 7;
 
   const [rows] = await pool.execute(
     `SELECT
        batch_date,
-       SUM(sold_pieces) AS sold_pieces,
-       SUM(sold_tags) AS sold_tags
+       SUM(sold_pieces) AS sold_qty,
+       SUM(sold_tags) AS sold_barcodes
      FROM daily_sales_summary
      WHERE counter_name = ?
        AND batch_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
      GROUP BY batch_date
      ORDER BY batch_date ASC`,
-    [counterName, intervalDays],
+    [dailySalesSummaryService.ALL_COUNTER, intervalDays],
   );
 
   const data = rows.map((row) => ({
     date: toDateKey(row.batch_date),
     day: formatDayLabel(row.batch_date),
-    soldPieces: Number(row.sold_pieces ?? 0),
-    soldTags: Number(row.sold_tags ?? 0),
+    soldQty: Number(row.sold_qty ?? 0),
+    soldBarcodes: Number(row.sold_barcodes ?? 0),
   }));
 
-  const totalSoldPieces = data.reduce((sum, row) => sum + row.soldPieces, 0);
+  const totalSoldQty = data.reduce((sum, row) => sum + row.soldQty, 0);
 
   return {
     period: validatedPeriod,
-    counter:
-      counterName === dailySalesSummaryService.ALL_COUNTER
-        ? "all"
-        : counterName,
-    totalSoldPieces,
-    data,
+    totalSoldQty,
+    totalSoldPieces: totalSoldQty,
+    counter: "all",
+    data: data.map((row) => ({
+      ...row,
+      soldPieces: row.soldQty,
+    })),
   };
 };
 
@@ -341,7 +337,6 @@ const DAILY_IMPORT_PERIOD_LIMITS = {
 };
 
 const buildDailyImportQuery = ({
-  counterName,
   limit,
   fromDate,
   toDate,
@@ -349,7 +344,7 @@ const buildDailyImportQuery = ({
   batchTo,
 }) => {
   const conditions = ["counter_name = ?"];
-  const params = [counterName];
+  const params = [dailySalesSummaryService.ALL_COUNTER];
 
   if (fromDate) {
     conditions.push("batch_date >= ?");
@@ -378,8 +373,7 @@ const buildDailyImportQuery = ({
             total_stock,
             total_stock_pieces,
             sold_tags,
-            sold_pieces,
-            estimated_sold
+            sold_pieces
           FROM daily_sales_summary
           WHERE ${conditions.join(" AND ")}
           ORDER BY batch_id DESC
@@ -390,7 +384,6 @@ const buildDailyImportQuery = ({
 
 const getDailyImports = async ({
   period = "week",
-  counter = dailySalesSummaryService.ALL_COUNTER,
   fromDate,
   toDate,
   batchFrom,
@@ -405,19 +398,8 @@ const getDailyImports = async ({
     );
   }
 
-  const counterName =
-    dailySalesSummaryService.validateDailyImportCounter(counter);
-
-  if (!counterName) {
-    throw new ApiError(
-      400,
-      "Invalid counter. Allowed values are ALL, SHOWROOM STOCK, SAFE STOCK, or Unassigned.",
-    );
-  }
-
   const limit = DAILY_IMPORT_PERIOD_LIMITS[validatedPeriod];
   const { sql, params } = buildDailyImportQuery({
-    counterName,
     limit,
     fromDate,
     toDate,
@@ -434,17 +416,21 @@ const getDailyImports = async ({
       batchId: Number(row.batch_id),
       date: toDateKey(row.batch_date),
       day: formatDayLabel(row.batch_date),
-      totalStock: Number(row.total_stock ?? 0),
-      totalStockPieces: Number(row.total_stock_pieces ?? 0),
-      soldTags: Number(row.sold_tags ?? 0),
-      soldPieces: Number(row.sold_pieces ?? row.estimated_sold ?? 0),
-      estimatedSold: Number(row.sold_pieces ?? row.estimated_sold ?? 0),
+      totalBarcodes: Number(row.total_stock ?? 0),
+      totalQty: Number(row.total_stock_pieces ?? 0),
+      soldBarcodes: Number(row.sold_tags ?? 0),
+      soldQty: Number(row.sold_pieces ?? 0),
     }));
 
   return {
     period: validatedPeriod,
-    counter: counterName,
-    data,
+    counter: dailySalesSummaryService.ALL_COUNTER,
+    data: data.map((row) => ({
+      ...row,
+      totalStock: row.totalBarcodes,
+      totalStockPieces: row.totalQty,
+      estimatedSold: row.soldQty,
+    })),
   };
 };
 
