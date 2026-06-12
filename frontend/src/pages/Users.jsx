@@ -276,6 +276,14 @@ export default function Users() {
 
         <div className="users-list__body">
           <div className="users-table-scroll">
+            {loading ? (
+              <div className="users-loading" role="status" aria-live="polite" aria-label="Loading users">
+                <div className="users-loading__spinner" aria-hidden="true">
+                  <span className="users-loading__ring" />
+                </div>
+                <p className="users-loading__text">Loading users…</p>
+              </div>
+            ) : (
             <table className="users-table">
               <thead>
                 <tr>
@@ -286,19 +294,13 @@ export default function Users() {
                 </tr>
               </thead>
               <tbody>
-                {loading && (
-                  <tr>
-                    <td colSpan={4} className="users-table__empty">Loading users…</td>
-                  </tr>
-                )}
-
-                {!loading && filteredUsers.length === 0 && (
+                {filteredUsers.length === 0 && (
                   <tr>
                     <td colSpan={4} className="users-table__empty">No users found.</td>
                   </tr>
                 )}
 
-                {!loading && paginatedUsers.map((user, index) => (
+                {paginatedUsers.map((user, index) => (
                   <tr key={user.id} className={editingId === user.id ? 'users-table__row--active' : ''}>
                     <td>{(page - 1) * pageSize + index + 1}</td>
                     <td>{user.username}</td>
@@ -327,6 +329,7 @@ export default function Users() {
                 ))}
               </tbody>
             </table>
+            )}
           </div>
 
           {!loading && filteredUsers.length > 0 && (

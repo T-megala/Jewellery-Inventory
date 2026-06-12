@@ -66,17 +66,34 @@ function formatStatus(status) {
   return status || '—'
 }
 
-function formatDate(value) {
-  if (!value) return '—'
+function formatReportDateCell(value) {
+  if (!value) {
+    return { dateLine: '—', timeLine: '', title: '' }
+  }
+
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '—'
-  return date.toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  if (Number.isNaN(date.getTime())) {
+    return { dateLine: '—', timeLine: '', title: String(value) }
+  }
+
+  return {
+    dateLine: date.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    }),
+    timeLine: date.toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
+    title: date.toLocaleString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
+  }
 }
 
 function formatStatValue(summary, field) {
@@ -501,11 +518,12 @@ export default function Reports() {
           ) : rows.length === 0 ? (
             <p className="report-empty">No records found for the selected filters.</p>
           ) : (
-            <>
-              <div className="reports-table-wrap">
+            <div className="reports-results__body">
+              <div className="reports-table-scroll">
                 <table className="reports-table">
                   <thead>
                     <tr>
+                      <th>S.No</th>
                       <th>Date</th>
                       <th>Product</th>
                       <th>Sub Product</th>
@@ -516,9 +534,17 @@ export default function Reports() {
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((row) => (
+                    {rows.map((row, index) => {
+                      const dateCell = formatReportDateCell(row.verificationDate)
+                      return (
                       <tr key={row.id}>
-                        <td>{formatDate(row.verificationDate)}</td>
+                        <td className="reports-table__sno">{(page - 1) * pageSize + index + 1}</td>
+                        <td className="reports-table__date" title={dateCell.title}>
+                          <span className="reports-table__date-line">{dateCell.dateLine}</span>
+                          {dateCell.timeLine && (
+                            <span className="reports-table__date-time">{dateCell.timeLine}</span>
+                          )}
+                        </td>
                         <td className="reports-table__product">
                           {formatScopeDisplay(row.product, row.status)}
                         </td>
@@ -532,7 +558,8 @@ export default function Reports() {
                           </span>
                         </td>
                       </tr>
-                    ))}
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -550,7 +577,7 @@ export default function Reports() {
                   disabled={loadingReport}
                 />
               )}
-            </>
+            </div>
           )}
         </section>
       )}

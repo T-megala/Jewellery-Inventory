@@ -417,6 +417,46 @@ body.users-modal-open {
   border: 1px solid #f0ebe3;
   border-radius: 12px;
   background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+
+.users-loading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 280px;
+  padding: 32px 24px;
+}
+
+.users-loading__spinner {
+  position: relative;
+  width: 44px;
+  height: 44px;
+}
+
+.users-loading__ring {
+  position: absolute;
+  inset: 0;
+  border: 3px solid #f3ead8;
+  border-top-color: #d4af37;
+  border-right-color: #b8860b;
+  border-radius: 50%;
+  animation: users-spin 0.9s linear infinite;
+}
+
+.users-loading__text {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-primary-dark);
+}
+
+@keyframes users-spin {
+  to { transform: rotate(360deg); }
 }
 
 .users-table {

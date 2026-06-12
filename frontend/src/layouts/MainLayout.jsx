@@ -111,6 +111,7 @@ export default function MainLayout() {
   const displayName = user?.name || user?.username || 'User'
   const page = PAGE_META[location.pathname] || PAGE_META['/dashboard']
   const isTablePage = location.pathname === '/stock' || location.pathname === '/users'
+  const isReportsPage = location.pathname === '/reports'
   const isFillPage = location.pathname === '/import' || isTablePage
   const isWidePage = location.pathname === '/dashboard'
 
@@ -244,7 +245,7 @@ export default function MainLayout() {
           </div>
         </header>
 
-        <main className={`page-content${isTablePage ? ' page-content--table' : ''}`}>
+        <main className={`page-content${isTablePage || isReportsPage ? ' page-content--table' : ''}`}>
           <div className={`page-content__inner${isFillPage ? ' page-content__inner--fill' : ''}${isWidePage ? ' page-content__inner--wide' : ''}`}>
             <Outlet />
           </div>

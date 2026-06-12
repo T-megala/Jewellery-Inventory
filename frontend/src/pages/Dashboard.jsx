@@ -148,6 +148,24 @@ function formatCount(value) {
   return Number(value || 0).toLocaleString('en-IN')
 }
 
+function formatHeatmapCount(value) {
+  const num = Number(value || 0)
+  if (!num) return '0'
+  if (num >= 10000000) {
+    const crores = num / 10000000
+    return `${crores % 1 === 0 ? crores.toFixed(0) : crores.toFixed(1)}Cr`
+  }
+  if (num >= 100000) {
+    const lakhs = num / 100000
+    return `${lakhs % 1 === 0 ? lakhs.toFixed(0) : lakhs.toFixed(1)}L`
+  }
+  if (num >= 1000) {
+    const thousands = num / 1000
+    return `${thousands % 1 === 0 ? thousands.toFixed(0) : thousands.toFixed(1)}K`
+  }
+  return String(num)
+}
+
 function truncate(text, max = 18) {
   const str = String(text || '')
   return str.length > max ? `${str.slice(0, max)}…` : str
@@ -623,10 +641,10 @@ function buildDailyImportMonthHeatmapRows(apiData) {
     }
   })
 
-  const maxImports = Math.max(...days.map((row) => row.importCount), 0)
+  const maxStock = Math.max(...days.map((row) => row.totalStock), 0)
   const enrichedDays = days.map((row) => ({
     ...row,
-    heatLevel: row.hasImport ? getHeatLevel(row.importCount, maxImports) : 0,
+    heatLevel: row.hasImport ? getHeatLevel(row.totalStock, maxStock) : 0,
   }))
 
   const leading = Array.from({ length: enrichedDays[0].weekday }, () => ({ empty: true }))
@@ -636,7 +654,7 @@ function buildDailyImportMonthHeatmapRows(apiData) {
     cells.push({ empty: true })
   }
 
-  return { cells, maxImports }
+  return { cells, maxStock }
 }
 
 function DailyImportTooltip({ active, payload }) {
@@ -699,7 +717,7 @@ function DailyImportsLineChart({ data }) {
 }
 
 function DailyImportsCalendar({ data }) {
-  const { cells, maxImports } = buildDailyImportMonthHeatmapRows(data)
+  const { cells, maxStock } = buildDailyImportMonthHeatmapRows(data)
   const hasImports = (data || []).length > 0
 
   if (!hasImports) {
@@ -732,10 +750,7 @@ function DailyImportsCalendar({ data }) {
             >
               <span className="day-sales-heatmap__day">{cell.dayNum}</span>
               {cell.hasImport && (
-                <span className="day-sales-heatmap__value">
-                  {cell.importCount}
-                  ×
-                </span>
+                <span className="day-sales-heatmap__value">{formatHeatmapCount(cell.totalStock)}</span>
               )}
             </div>
           )
@@ -750,8 +765,8 @@ function DailyImportsCalendar({ data }) {
           ))}
         </div>
         <span>
-          More imports
-          {maxImports > 0 ? ` (${formatCount(maxImports)} max/day)` : ''}
+          More stock
+          {maxStock > 0 ? ` (${formatHeatmapCount(maxStock)} max/day)` : ''}
         </span>
       </div>
     </div>

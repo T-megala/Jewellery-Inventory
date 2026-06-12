@@ -111,7 +111,12 @@ export default function Stock() {
         )}
 
         {loading ? (
-          <p className="stock-loading">Loading stock…</p>
+          <div className="stock-loading" role="status" aria-live="polite" aria-label="Loading stock">
+            <div className="stock-loading__spinner" aria-hidden="true">
+              <span className="stock-loading__ring" />
+            </div>
+            <p className="stock-loading__text">Loading stock…</p>
+          </div>
         ) : rows.length === 0 ? (
           <p className="stock-empty">
             {search ? 'No products found for your search.' : 'No stock records found.'}
