@@ -143,6 +143,14 @@ export const refreshDailySalesSummary = async (batchId, connection = pool) => {
     soldQty: auditSummary.soldQty,
     auditDurationMs: auditSummary.durationMs,
   });
+
+  return {
+    previousBatchId,
+    soldBarcodes: auditSummary.soldBarcodes,
+    soldQty: auditSummary.soldQty,
+    removedBarcodes: auditSummary.removedBarcodes,
+    qtyReductions: auditSummary.qtyReductions,
+  };
 };
 
 export const backfillAllDailySalesSummaries = async () => {

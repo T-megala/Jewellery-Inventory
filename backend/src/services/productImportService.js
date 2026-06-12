@@ -1,7 +1,6 @@
 import pool from '../config/database.js';
 import ApiError from '../utils/ApiError.js';
 import { parseStockExcel } from '../utils/excelParser.js';
-import { hasProductChanged } from '../utils/productBatchHelper.js';
 import { resolveActiveBatch } from '../services/productBatchService.js';
 import importJobStore from './importJobStore.js';
 import { refreshDailySalesSummary } from './dailySalesSummaryService.js';
@@ -9,11 +8,6 @@ import { refreshDailySalesSummary } from './dailySalesSummaryService.js';
 const BATCH_SIZE = Math.max(
   500,
   Number.parseInt(process.env.IMPORT_BATCH_SIZE ?? '5000', 10) || 5000
-);
-
-const FAST_REIMPORT_THRESHOLD = Math.max(
-  1000,
-  Number.parseInt(process.env.IMPORT_FAST_REIMPORT_THRESHOLD ?? '5000', 10) || 5000
 );
 
 const logImport = (message, meta = undefined) => {
@@ -24,8 +18,6 @@ const logImport = (message, meta = undefined) => {
 
   console.info(`[product-import] ${message}`, meta);
 };
-
-const COMPARE_FIELDS = ['barcode', 'item_description', 'closing_bal_qty'];
 
 const rowToValues = (batchId, row) => [
   batchId,
@@ -88,101 +80,6 @@ const bulkInsert = async (connection, batchId, rows) => {
      VALUES ${placeholders}`,
     values
   );
-};
-
-const bulkUpsert = async (connection, batchId, rows) => {
-  if (rows.length === 0) {
-    return;
-  }
-
-  const placeholders = buildPlaceholders(rows.length, 4);
-  const values = rows.flatMap((row) => rowToValues(batchId, row));
-
-  await connection.query(
-    `INSERT INTO products
-      (batch_id, barcode, item_description, closing_bal_qty)
-     VALUES ${placeholders}
-     ON DUPLICATE KEY UPDATE
-       item_description = VALUES(item_description),
-       closing_bal_qty = VALUES(closing_bal_qty)`,
-    values
-  );
-};
-
-const classifyRowsViaDatabase = async (connection, batchId, rows) => {
-  const toInsert = [];
-  const toUpsert = [];
-  let unchanged = 0;
-
-  const barcodes = rows
-    .map((r) => String(r.barcode ?? '').trim())
-    .filter(Boolean);
-
-  if (barcodes.length === 0) {
-    return { toInsert: rows, toUpsert: [], unchanged };
-  }
-
-  const placeholders = barcodes.map(() => '?').join(', ');
-  const [existingRows] = await connection.query(
-    `SELECT ${COMPARE_FIELDS.join(', ')}
-     FROM products
-     WHERE batch_id = ? AND barcode IN (${placeholders})`,
-    [batchId, ...barcodes]
-  );
-
-  const existingMap = new Map();
-  for (const row of existingRows) {
-    const barcode = String(row.barcode ?? '').trim();
-    if (barcode) {
-      existingMap.set(barcode, row);
-    }
-  }
-
-  for (const row of rows) {
-    const barcode = String(row.barcode).trim();
-    const existing = existingMap.get(barcode);
-
-    if (!existing) {
-      toInsert.push(row);
-    } else if (hasProductChanged(existing, row)) {
-      toUpsert.push(row);
-    } else {
-      unchanged += 1;
-    }
-  }
-
-  return { toInsert, toUpsert, unchanged };
-};
-
-const loadExistingBarcodes = async (connection, batchId) => {
-  const [rows] = await connection.query(
-    `SELECT barcode
-     FROM products
-     WHERE batch_id = ?
-       AND barcode IS NOT NULL
-       AND TRIM(barcode) != ''`,
-    [batchId]
-  );
-
-  return new Set(
-    rows.map((row) => String(row.barcode).trim()).filter(Boolean)
-  );
-};
-
-const countInsertVsExisting = (validRows, existingBarcodes) => {
-  let inserted = 0;
-  let updated = 0;
-
-  for (const row of validRows) {
-    const barcode = String(row.barcode).trim();
-    if (existingBarcodes.has(barcode)) {
-      updated += 1;
-    } else {
-      inserted += 1;
-    }
-  }
-
-  return { inserted, updated };
 };
 
 const runChunked = async (rows, handler, onProgress, progressStart, progressEnd) => {
@@ -277,173 +174,53 @@ const importProductsFromExcel = async (
       processed: 0,
     });
 
-    const { batchId, isNewBatch } = await resolveActiveBatch(
+    const { batchId, isNewBatch, previousBatchId } = await resolveActiveBatch(
       connection,
-      uploadedBy
+      uploadedBy,
     );
 
-    const existingBarcodes = await loadExistingBarcodes(connection, batchId);
-    const isFirstImport = existingBarcodes.size === 0;
-    const useFastReimport =
-      !isFirstImport &&
-      !isNewBatch &&
-      validRows.length >= FAST_REIMPORT_THRESHOLD;
+    reportProgress({
+      phase: 'inserting',
+      progress: 15,
+      message: 'Bulk inserting products',
+      total: validRows.length,
+      processed: 0,
+    });
 
-    let inserted = 0;
-    let updated = 0;
-    let unchanged = 0;
-    let fastPath = false;
-    let fastReimport = false;
+    const insertStartedAt = Date.now();
+    logImport('bulk insert started', {
+      batchId,
+      previousBatchId,
+      rows: validRows.length,
+      batchSize: BATCH_SIZE,
+    });
 
-    if (isFirstImport) {
-      fastPath = true;
-
-      reportProgress({
-        phase: 'inserting',
-        progress: 15,
-        message: 'Bulk inserting products',
-        total: validRows.length,
-        processed: 0,
-      });
-
-      const insertStartedAt = Date.now();
-      logImport('bulk insert started', {
-        batchId,
-        rows: validRows.length,
-        batchSize: BATCH_SIZE,
-      });
-
-      await runChunked(
-        validRows,
-        (chunk) => bulkInsert(connection, batchId, chunk),
-        ({ processed, total, percent }) =>
-          reportProgress({
-            phase: 'inserting',
-            message: 'Bulk inserting products',
-            progress: 15 + Math.round((percent / 100) * 75),
-            processed,
-            total,
-          }),
-        0,
-        100
-      );
-
-      inserted = validRows.length;
-      logImport('bulk insert completed', {
-        batchId,
-        inserted,
-        durationMs: Date.now() - insertStartedAt,
-      });
-    } else if (useFastReimport) {
-      fastReimport = true;
-
-      reportProgress({
-        phase: 'upserting',
-        progress: 15,
-        message: 'Fast bulk upserting products',
-        total: validRows.length,
-        processed: 0,
-      });
-
-      const upsertStartedAt = Date.now();
-      logImport('fast bulk upsert started', {
-        batchId,
-        rows: validRows.length,
-        batchSize: BATCH_SIZE,
-      });
-
-      await runChunked(
-        validRows,
-        (chunk) => bulkUpsert(connection, batchId, chunk),
-        ({ processed, total, percent }) =>
-          reportProgress({
-            phase: 'upserting',
-            message: 'Fast bulk upserting products',
-            progress: 15 + Math.round((percent / 100) * 75),
-            processed,
-            total,
-          }),
-        0,
-        100
-      );
-
-      const counts = countInsertVsExisting(validRows, existingBarcodes);
-      inserted = counts.inserted;
-      updated = counts.updated;
-      logImport('fast bulk upsert completed', {
-        batchId,
-        inserted,
-        updated,
-        durationMs: Date.now() - upsertStartedAt,
-      });
-    } else {
-      const classified = await classifyRowsViaDatabase(connection, batchId, validRows);
-      const { toInsert, toUpsert } = classified;
-      unchanged = classified.unchanged;
-      inserted = toInsert.length;
-      updated = toUpsert.length;
-
-      const writeRows = [...toInsert, ...toUpsert];
-
-      reportProgress({
-        phase: 'upserting',
-        progress: 15,
-        message: 'Bulk upserting products',
-        total: writeRows.length,
-        processed: 0,
-      });
-
-      if (writeRows.length > 0) {
-        const upsertStartedAt = Date.now();
-        logImport('bulk upsert started', {
-          batchId,
-          rows: writeRows.length,
-          inserted,
-          updated,
-          unchanged,
-          batchSize: BATCH_SIZE,
-        });
-
-        await runChunked(
-          writeRows,
-          (chunk) => bulkUpsert(connection, batchId, chunk),
-          ({ processed, total, percent }) =>
-            reportProgress({
-              phase: 'upserting',
-              message: 'Bulk upserting products',
-              progress: 15 + Math.round((percent / 100) * 75),
-              processed,
-              total,
-            }),
-          0,
-          100
-        );
-
-        logImport('bulk upsert completed', {
-          batchId,
-          inserted,
-          updated,
-          unchanged,
-          durationMs: Date.now() - upsertStartedAt,
-        });
-      } else {
-        logImport('bulk upsert skipped', {
-          batchId,
-          unchanged,
-        });
-
+    await runChunked(
+      validRows,
+      (chunk) => bulkInsert(connection, batchId, chunk),
+      ({ processed, total, percent }) =>
         reportProgress({
-          phase: 'complete',
-          progress: 100,
-          message: 'No database changes required',
-          processed: validRows.length,
-          total: validRows.length,
-        });
-      }
-    }
+          phase: 'inserting',
+          message: 'Bulk inserting products',
+          progress: 15 + Math.round((percent / 100) * 75),
+          processed,
+          total,
+        }),
+      0,
+      100,
+    );
+
+    const inserted = validRows.length;
+    logImport('bulk insert completed', {
+      batchId,
+      inserted,
+      durationMs: Date.now() - insertStartedAt,
+    });
 
     await disableBulkSession(connection);
     await connection.commit();
+
+    let salesSummary = null;
 
     reportProgress({
       phase: 'completed',
@@ -453,20 +230,8 @@ const importProductsFromExcel = async (
       total: validRows.length,
     });
 
-    logImport('import completed', {
-      batchId,
-      isNewBatch,
-      fastPath,
-      fastReimport,
-      totalRowsInFile,
-      skipped,
-      inserted,
-      updated,
-      unchanged,
-    });
-
     try {
-      await refreshDailySalesSummary(batchId, connection);
+      salesSummary = await refreshDailySalesSummary(batchId, connection);
     } catch (summaryError) {
       console.error('[product-import] daily sales summary refresh failed', {
         batchId,
@@ -474,16 +239,32 @@ const importProductsFromExcel = async (
       });
     }
 
-    return {
+    logImport('import completed', {
       batchId,
+      previousBatchId: salesSummary?.previousBatchId ?? previousBatchId,
       isNewBatch,
       totalRowsInFile,
       skipped,
       inserted,
-      updated,
-      unchanged,
-      fastPath,
-      fastReimport,
+      soldBarcodes: salesSummary?.soldBarcodes ?? 0,
+      soldQty: salesSummary?.soldQty ?? 0,
+      removedBarcodes: salesSummary?.removedBarcodes ?? 0,
+      qtyReductions: salesSummary?.qtyReductions ?? 0,
+    });
+
+    return {
+      batchId,
+      previousBatchId: salesSummary?.previousBatchId ?? previousBatchId,
+      isNewBatch,
+      totalRowsInFile,
+      skipped,
+      inserted,
+      updated: 0,
+      unchanged: 0,
+      soldBarcodes: salesSummary?.soldBarcodes ?? 0,
+      soldQty: salesSummary?.soldQty ?? 0,
+      removedBarcodes: salesSummary?.removedBarcodes ?? 0,
+      qtyReductions: salesSummary?.qtyReductions ?? 0,
     };
   } catch (error) {
     await disableBulkSession(connection).catch(() => {});

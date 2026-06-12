@@ -16,29 +16,32 @@ export const getActiveBatchId = async (connection = pool) => {
   return rows[0]?.id ?? null;
 };
 
+/** Each import creates a new batch; the prior active batch is deactivated for sales comparison. */
 export const resolveActiveBatch = async (connection, uploadedBy = null) => {
-  const [todayRows] = await connection.execute(
+  const [previousRows] = await connection.execute(
     `SELECT id FROM product_upload_batches
-     WHERE batch_date = CURDATE() AND is_active = 1
+     WHERE is_active = 1
      ORDER BY id DESC
-     LIMIT 1`
+     LIMIT 1`,
   );
 
-  if (todayRows.length > 0) {
-    return { batchId: todayRows[0].id, isNewBatch: false };
-  }
+  const previousBatchId = previousRows[0]?.id ?? null;
 
   await connection.execute(
-    `UPDATE product_upload_batches SET is_active = 0 WHERE is_active = 1`
+    `UPDATE product_upload_batches SET is_active = 0 WHERE is_active = 1`,
   );
 
   const [insertResult] = await connection.execute(
     `INSERT INTO product_upload_batches (batch_date, uploaded_at, uploaded_by, is_active)
      VALUES (CURDATE(), NOW(), ?, 1)`,
-    [uploadedBy]
+    [uploadedBy],
   );
 
-  return { batchId: insertResult.insertId, isNewBatch: true };
+  return {
+    batchId: insertResult.insertId,
+    isNewBatch: true,
+    previousBatchId,
+  };
 };
 
 export const listBatches = async () => {
