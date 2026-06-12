@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx'
 
 export const STOCK_TEMPLATE_PATH = '/sample_excel_format/Tag Product List (1).xlsx'
-export const STOCK_TEMPLATE_FILENAME = 'Jeyachandran_Tag_Stock_Format.xlsx'
+export const STOCK_TEMPLATE_FILENAME = 'BrandFactory_Stock_Format.xlsx'
 
 const SIMPLE_COLUMN_KEYS = {
   name: ['product name', 'product', 'name', 'item name', 'item'],

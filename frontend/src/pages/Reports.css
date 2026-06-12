@@ -169,7 +169,9 @@
   cursor: not-allowed;
 }
 
-.report-field input[type='date'] {
+.report-field input[type='date'],
+.report-field input[type='search'],
+.report-field input[type='text'] {
   width: 100%;
   padding: 10px 14px;
   border: 1px solid #e8dfd3;
@@ -181,12 +183,20 @@
   transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
 
-.report-field input[type='date']:hover:not(:read-only) {
+.report-field input[type='search'] {
+  padding: 11px 14px;
+}
+
+.report-field input[type='date']:hover:not(:read-only),
+.report-field input[type='search']:hover:not(:disabled),
+.report-field input[type='text']:hover:not(:disabled) {
   border-color: rgba(184, 134, 11, 0.35);
   background: #fff;
 }
 
-.report-field input[type='date']:focus {
+.report-field input[type='date']:focus,
+.report-field input[type='search']:focus,
+.report-field input[type='text']:focus {
   outline: none;
   border-color: rgba(184, 134, 11, 0.55);
   background: #fff;

@@ -33,14 +33,14 @@ export async function fetchTopSoldProducts({ period = 'all' } = {}) {
   const data = await apiFetch(`/dashboard/top-sold-products?${query}`);
 
   return (data || []).map((row) => ({
-    productName: row.productName ?? row.name ?? '',
-    soldTags: Number(row.soldTags ?? 0),
-    soldCount: Number(row.soldCount ?? 0),
+    itemDescription: row.itemDescription ?? row.productName ?? row.name ?? '',
+    soldBarcodes: Number(row.soldBarcodes ?? row.soldTags ?? 0),
+    soldQty: Number(row.soldQty ?? row.soldCount ?? 0),
   }));
 }
 
-export async function fetchDayWiseSales({ period = 'week', counter = 'all' } = {}) {
-  const query = buildQueryString({ period, counter });
+export async function fetchDayWiseSales({ period = 'week' } = {}) {
+  const query = buildQueryString({ period });
   const res = await fetch(apiUrl(`/dashboard/day-wise-sales?${query}`), {
     method: 'GET',
     headers: {
@@ -62,18 +62,18 @@ export async function fetchDayWiseSales({ period = 'week', counter = 'all' } = {
 
   return {
     period: json.period ?? period,
-    counter: json.counter ?? counter,
-    totalSoldPieces: Number(json.totalSoldPieces ?? 0),
+    totalSoldQty: Number(json.totalSoldQty ?? json.totalSoldPieces ?? 0),
     data: (json.data || []).map((row) => ({
       date: row.date,
       day: row.day,
-      soldPieces: Number(row.soldPieces ?? 0),
+      soldQty: Number(row.soldQty ?? row.soldPieces ?? 0),
+      soldBarcodes: Number(row.soldBarcodes ?? 0),
     })),
   };
 }
 
-export async function fetchDailyImports({ period = 'week', counter = 'ALL' } = {}) {
-  const query = buildQueryString({ period, counter });
+export async function fetchDailyImports({ period = 'week' } = {}) {
+  const query = buildQueryString({ period });
   const res = await fetch(apiUrl(`/dashboard/daily-imports?${query}`), {
     method: 'GET',
     headers: {
@@ -95,13 +95,14 @@ export async function fetchDailyImports({ period = 'week', counter = 'ALL' } = {
 
   return {
     period: json.period ?? period,
-    counter: json.counter ?? counter,
     data: (json.data || []).map((row) => ({
       batchId: Number(row.batchId ?? 0),
       date: row.date,
       day: row.day,
-      totalStock: Number(row.totalStock ?? 0),
-      estimatedSold: Number(row.estimatedSold ?? 0),
+      totalBarcodes: Number(row.totalBarcodes ?? row.totalStock ?? 0),
+      totalQty: Number(row.totalQty ?? row.totalStockPieces ?? 0),
+      soldQty: Number(row.soldQty ?? row.estimatedSold ?? 0),
+      soldBarcodes: Number(row.soldBarcodes ?? 0),
     })),
   };
 }

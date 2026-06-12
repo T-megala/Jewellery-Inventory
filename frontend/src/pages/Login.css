@@ -6,14 +6,22 @@
   overflow: hidden;
 }
 
-/* ── Left hero — jewellery background image ── */
+/* ── Left hero — retail dress shop theme ── */
 .login-hero {
   position: relative;
   display: flex;
   align-items: flex-end;
   justify-content: flex-start;
   height: 100%;
-  background: #1a1008 url('/images/hero-bg.jpg') center center / cover no-repeat;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(15, 8, 4, 0.35) 0%,
+      rgba(120, 12, 22, 0.72) 55%,
+      rgba(15, 8, 4, 0.94) 100%
+    ),
+    url('/images/hero-retail.jpg') center center / cover no-repeat;
+  background-color: #1a1008;
   overflow: hidden;
 }
 
@@ -22,9 +30,9 @@
   inset: 0;
   background: linear-gradient(
     180deg,
-    rgba(15, 8, 4, 0.15) 0%,
-    rgba(15, 8, 4, 0.45) 45%,
-    rgba(15, 8, 4, 0.88) 100%
+    rgba(15, 8, 4, 0.08) 0%,
+    rgba(15, 8, 4, 0.28) 40%,
+    rgba(15, 8, 4, 0.82) 100%
   );
   pointer-events: none;
 }
@@ -51,12 +59,12 @@
   height: 52px;
   object-fit: contain;
   flex-shrink: 0;
-  padding: 0;
-  background: transparent;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.95);
   border: none;
-  border-radius: 0;
-  box-shadow: none;
-  mix-blend-mode: screen;
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  mix-blend-mode: normal;
 }
 
 .hero-header-text {

@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
-import { fetchReportFilterOptions } from '../services/products.js'
+import { useMemo, useState } from 'react'
 import {
   downloadReportExport,
   fetchStockVerificationReport,
@@ -151,14 +150,10 @@ function getTodayDate() {
 }
 
 export default function Reports() {
-  const [barcode, setBarcode] = useState('')
-  const [itemDescription, setItemDescription] = useState('')
+  const [barcodeSearch, setBarcodeSearch] = useState('')
   const [status, setStatus] = useState('')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
-
-  const [barcodes, setBarcodes] = useState([])
-  const [itemDescriptions, setItemDescriptions] = useState([])
 
   const [rows, setRows] = useState([])
   const [summary, setSummary] = useState(null)
@@ -167,46 +162,16 @@ export default function Reports() {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [hasSearched, setHasSearched] = useState(false)
 
-  const [loadingFilters, setLoadingFilters] = useState(true)
   const [loadingReport, setLoadingReport] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState('')
-  const [filtersNotice, setFiltersNotice] = useState('')
 
   const filterParams = useMemo(() => ({
-    productName: itemDescription || undefined,
-    barcode: barcode || undefined,
+    search: barcodeSearch.trim() || undefined,
     status: status || undefined,
     fromDate: fromDate || undefined,
     toDate: toDate || undefined,
-  }), [barcode, itemDescription, status, fromDate, toDate])
-
-  useEffect(() => {
-    let cancelled = false
-
-    async function loadFilterOptions() {
-      setLoadingFilters(true)
-      setFiltersNotice('')
-
-      try {
-        const data = await fetchReportFilterOptions()
-        if (!cancelled) {
-          setBarcodes(data.barcodes)
-          setItemDescriptions(data.itemDescriptions)
-          if (!data.barcodes.length && !data.itemDescriptions.length) {
-            setFiltersNotice('No active inventory batch found. Upload Excel on the Import page first.')
-          }
-        }
-      } catch (err) {
-        if (!cancelled) setError(err.message || 'Failed to load filter options')
-      } finally {
-        if (!cancelled) setLoadingFilters(false)
-      }
-    }
-
-    loadFilterOptions()
-    return () => { cancelled = true }
-  }, [])
+  }), [barcodeSearch, status, fromDate, toDate])
 
   function validateDates() {
     if (!fromDate && !toDate) {
@@ -266,8 +231,7 @@ export default function Reports() {
   }
 
   function handleReset() {
-    setBarcode('')
-    setItemDescription('')
+    setBarcodeSearch('')
     setStatus('')
     setFromDate('')
     setToDate('')
@@ -346,30 +310,12 @@ export default function Reports() {
 
             <label className="report-field">
               <span>Barcode</span>
-              <select
-                value={barcode}
-                onChange={(e) => setBarcode(e.target.value)}
-                disabled={loadingFilters}
-              >
-                <option value="">All Barcodes</option>
-                {barcodes.map((item) => (
-                  <option key={item.id} value={item.name}>{item.name}</option>
-                ))}
-              </select>
-            </label>
-
-            <label className="report-field">
-              <span>Item Description</span>
-              <select
-                value={itemDescription}
-                onChange={(e) => setItemDescription(e.target.value)}
-                disabled={loadingFilters}
-              >
-                <option value="">All Items</option>
-                {itemDescriptions.map((item) => (
-                  <option key={item.id} value={item.name}>{item.name}</option>
-                ))}
-              </select>
+              <input
+                type="search"
+                value={barcodeSearch}
+                placeholder="Search by barcode"
+                onChange={(e) => setBarcodeSearch(e.target.value)}
+              />
             </label>
 
             <label className="report-field">
@@ -385,10 +331,6 @@ export default function Reports() {
             </label>
 
           </div>
-
-          {filtersNotice && (
-            <p className="report-alert report-alert--info" role="status">{filtersNotice}</p>
-          )}
 
           {error && (
             <p className="report-alert report-alert--error" role="alert">{error}</p>
@@ -406,7 +348,7 @@ export default function Reports() {
             <button
               type="submit"
               className={`report-btn report-btn--primary${loadingReport ? ' report-btn--loading' : ''}`}
-              disabled={loadingReport || loadingFilters || exporting}
+              disabled={loadingReport || exporting}
             >
               {loadingReport && <span className="report-btn__spin" aria-hidden="true" />}
               Generate Report

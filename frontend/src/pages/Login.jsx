@@ -68,21 +68,21 @@ export default function Login() {
           <header className="hero-header">
             <img
               src="/images/logo.png"
-              alt="Jeyachandran Gold House"
+              alt="Brand Factory"
               className="hero-logo"
             />
             <div className="hero-header-text">
-              <h1 className="hero-title">Jeyachandran Gold House</h1>
-              <p className="hero-tagline">Jewellery &amp; Gold Inventory System</p>
+              <h1 className="hero-title">Brand Factory</h1>
+              <p className="hero-tagline">From Gujarat &mdash; Retail Dress Shop Inventory</p>
             </div>
           </header>
 
           <p className="hero-message">
-            Manage your showroom stock, sales and gold inventory — all in one place.
+            Manage your store stock, sales and dress inventory — all in one place.
           </p>
 
           <footer className="hero-footer">
-            &copy; {new Date().getFullYear()} Jeyachandran Gold House
+            &copy; {new Date().getFullYear()} Brand Factory
           </footer>
         </div>
       </aside>

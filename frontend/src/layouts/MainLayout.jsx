@@ -18,10 +18,10 @@ const ADMIN_NAV_ITEMS = [
 ]
 
 const PAGE_META = {
-  '/dashboard': { title: 'Dashboard', subtitle: 'Your showroom at a glance' },
-  '/import': { title: 'Import', subtitle: 'Upload tag-wise stock Excel file' },
-  '/stock': { title: 'Stock', subtitle: 'All products in your showroom' },
-  '/reports': { title: 'Reports', subtitle: 'Stock verification by product, counter and status' },
+  '/dashboard': { title: 'Dashboard', subtitle: 'Your store at a glance' },
+  '/import': { title: 'Import', subtitle: 'Upload stock Excel file' },
+  '/stock': { title: 'Stock', subtitle: 'All dress items in your store' },
+  '/reports': { title: 'Reports', subtitle: 'Stock verification by product and status' },
   '/users': { title: 'Users', subtitle: 'Add, edit and manage user accounts' },
 }
 
@@ -151,11 +151,11 @@ export default function MainLayout() {
 
         <div className="sidebar-brand">
           <div className="sidebar-logo-wrap">
-            <img src="/images/logo.png" alt="Jeyachandran Gold House" className="sidebar-logo" />
+            <img src="/images/logo.png" alt="Brand Factory" className="sidebar-logo" />
           </div>
           <div className="sidebar-brand__text">
-            <p className="sidebar-name">Jeyachandran</p>
-            <p className="sidebar-tagline">Gold House</p>
+            <p className="sidebar-name">Brand Factory</p>
+            <p className="sidebar-tagline">From Gujarat</p>
             <span className="sidebar-brand__line" aria-hidden="true" />
           </div>
           <button

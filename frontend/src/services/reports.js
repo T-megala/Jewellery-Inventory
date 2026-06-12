@@ -4,10 +4,7 @@ function buildReportParams(filters = {}) {
   return {
     page: filters.page ?? 1,
     limit: filters.limit ?? 10,
-    productName: filters.productName,
-    barcode: filters.barcode,
-    subProductName: filters.subProductName,
-    centerName: filters.centerName,
+    search: filters.search,
     status: filters.status,
     fromDate: filters.fromDate,
     toDate: filters.toDate,

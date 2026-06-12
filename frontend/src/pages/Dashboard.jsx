@@ -8,6 +8,8 @@ import {
   ComposedChart,
   LabelList,
   Line,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -27,19 +29,6 @@ const CHART_COLORS = ['#b8860b', '#d4af37', '#c9a227', '#a67c00', '#e8c547', '#9
 const DAY_SALES_PERIODS = [
   { value: 'week', label: 'Week' },
   { value: 'month', label: 'Month' },
-]
-
-const DAY_SALES_COUNTERS = [
-  { value: 'all', label: 'All counters' },
-  { value: 'showroom', label: 'Showroom' },
-  { value: 'safe', label: 'Safe' },
-]
-
-const DAILY_IMPORT_COUNTERS = [
-  { value: 'ALL', label: 'All counters' },
-  { value: 'SHOWROOM STOCK', label: 'Showroom' },
-  { value: 'SAFE STOCK', label: 'Safe' },
-  { value: 'Unassigned', label: 'Unassigned' },
 ]
 
 const WEEKDAY_HEADERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -71,7 +60,7 @@ function buildWeekChartRows(apiData) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const todayKey = toDateKey(today)
-  const byDate = Object.fromEntries((apiData || []).map((row) => [row.date, row.soldPieces]))
+  const byDate = Object.fromEntries((apiData || []).map((row) => [row.date, row.soldQty ?? row.soldPieces ?? 0]))
 
   return Array.from({ length: 7 }, (_, index) => {
     const date = new Date(today)
@@ -88,17 +77,17 @@ function buildWeekChartRows(apiData) {
       day: isToday ? 'Today' : `${weekday} ${dayNum} ${month}`,
       dayShort: isToday ? 'Today' : weekday,
       dayMedium: isToday ? 'Today' : `${dayNum} ${month}`,
-      soldPieces: byDate[dateKey] ?? 0,
+      soldQty: byDate[dateKey] ?? 0,
       dayType,
       isToday,
     }
   })
 }
 
-function getHeatLevel(soldPieces, max) {
-  if (!soldPieces) return 0
+function getHeatLevel(soldQty, max) {
+  if (!soldQty) return 0
   if (!max) return 1
-  const ratio = soldPieces / max
+  const ratio = soldQty / max
   if (ratio >= 0.8) return 5
   if (ratio >= 0.6) return 4
   if (ratio >= 0.4) return 3
@@ -110,28 +99,28 @@ function buildMonthHeatmapRows(apiData) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const todayKey = toDateKey(today)
-  const byDate = Object.fromEntries((apiData || []).map((row) => [row.date, row.soldPieces]))
+  const byDate = Object.fromEntries((apiData || []).map((row) => [row.date, row.soldQty ?? row.soldPieces ?? 0]))
 
   const days = Array.from({ length: 30 }, (_, index) => {
     const date = new Date(today)
     date.setDate(today.getDate() - (29 - index))
     const dateKey = toDateKey(date)
-    const soldPieces = byDate[dateKey] ?? 0
+    const soldQty = byDate[dateKey] ?? 0
 
     return {
       date: dateKey,
       dayNum: date.getDate(),
       weekday: date.getDay(),
-      soldPieces,
+      soldQty,
       isToday: dateKey === todayKey,
       empty: false,
     }
   })
 
-  const maxSold = Math.max(...days.map((row) => row.soldPieces), 0)
+  const maxSold = Math.max(...days.map((row) => row.soldQty), 0)
   const enrichedDays = days.map((row) => ({
     ...row,
-    heatLevel: getHeatLevel(row.soldPieces, maxSold),
+    heatLevel: getHeatLevel(row.soldQty, maxSold),
   }))
 
   const leading = Array.from({ length: enrichedDays[0].weekday }, () => ({ empty: true }))
@@ -146,6 +135,12 @@ function buildMonthHeatmapRows(apiData) {
 
 function formatCount(value) {
   return Number(value || 0).toLocaleString('en-IN')
+}
+
+function formatQty(value) {
+  const numeric = Number(value ?? 0)
+  if (!Number.isFinite(numeric)) return '0.00'
+  return numeric.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 function formatHeatmapCount(value) {
@@ -175,83 +170,6 @@ function pct(part, whole) {
   const total = Number(whole)
   if (!total) return '0'
   return ((Number(part) / total) * 100).toFixed(1)
-}
-
-function CounterSplitIcon({ type }) {
-  if (type === 'safe') {
-    return (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.8" />
-        <path d="M8 11V8a4 4 0 118 0v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      </svg>
-    )
-  }
-
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M3 9h18M5 9V19a1 1 0 001 1h3v-6h6v6h3a1 1 0 001-1V9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
-function buildCounterSplitRows(byCounter) {
-  let showroomCount = 0
-  let safeCount = 0
-
-  byCounter.forEach((row) => {
-    const count = Number(row.tagCount ?? row.subProductCount ?? 0)
-    if (/safe/i.test(String(row.name || ''))) {
-      safeCount += count
-    } else {
-      showroomCount += count
-    }
-  })
-
-  return [
-    {
-      key: 'showroom',
-      label: 'Showroom stock',
-      count: showroomCount,
-      variant: 'showroom',
-    },
-    {
-      key: 'safe',
-      label: 'Safe stock',
-      count: safeCount,
-      variant: 'safe',
-    },
-  ]
-}
-
-function CounterSplitChart({ data }) {
-  if (!data.length) return <p className="analytics-empty">No counter data available.</p>
-
-  const total = Math.max(...data.map((row) => row.count), 1)
-
-  return (
-    <div className="counter-split">
-      {data.map((row) => {
-        const width = Math.max((row.count / total) * 100, row.count > 0 ? 2 : 0)
-        return (
-          <div key={row.key} className={`counter-split__row counter-split__row--${row.variant}`}>
-            <div className="counter-split__meta">
-              <span className={`counter-split__badge counter-split__badge--${row.variant}`}>
-                <CounterSplitIcon type={row.variant} />
-                {row.label}
-              </span>
-              <strong className="counter-split__value">{formatCount(row.count)}</strong>
-            </div>
-            <div className="counter-split__track" aria-hidden="true">
-              <span
-                className={`counter-split__fill counter-split__fill--${row.variant}`}
-                style={{ width: `${width}%` }}
-              />
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
 }
 
 function TrendLineXTick({ x, y, payload, chartData, labelKey = 'dayShort', index }) {
@@ -323,7 +241,7 @@ function TrendLineValueLabel({ x, y, value, index, chartData, dataKey, dotOnImpo
   )
 }
 
-function JewelleryTrendLineChart({
+function RetailTrendLineChart({
   chartData,
   period = 'week',
   dataKey,
@@ -434,9 +352,9 @@ function DaySalesTooltip({ active, payload }) {
       <p className="chart-tip__title">{item?.day || item?.date}</p>
       {item?.date && <p className="chart-tip__meta">{item.date}</p>}
       <p className="chart-tip__value">
-        {formatCount(item?.soldPieces ?? 0)}
+        {formatQty(item?.soldQty ?? item?.soldPieces ?? 0)}
         {' '}
-        sold pieces
+        closing qty sold
       </p>
     </div>
   )
@@ -444,7 +362,7 @@ function DaySalesTooltip({ active, payload }) {
 
 function DayWiseSalesBarChart({ data }) {
   const chartData = buildWeekChartRows(data)
-  const hasSales = chartData.some((row) => row.soldPieces > 0)
+  const hasSales = chartData.some((row) => row.soldQty > 0)
 
   if (!hasSales) return <p className="analytics-empty">No sales data for this period.</p>
 
@@ -468,12 +386,12 @@ function DayWiseSalesBarChart({ data }) {
             width={44}
           />
           <Tooltip content={<DaySalesTooltip />} cursor={{ fill: 'rgba(184, 134, 11, 0.08)' }} />
-          <Bar dataKey="soldPieces" radius={[10, 10, 0, 0]} maxBarSize={48}>
+          <Bar dataKey="soldQty" radius={[10, 10, 0, 0]} maxBarSize={48}>
             {chartData.map((entry) => (
               <Cell key={entry.date} fill={DAY_SALES_BAR_COLORS[entry.dayType]} />
             ))}
             <LabelList
-              dataKey="soldPieces"
+              dataKey="soldQty"
               position="top"
               formatter={(value) => (value > 0 ? formatCount(value) : '')}
               fill="#8b6914"
@@ -487,7 +405,7 @@ function DayWiseSalesBarChart({ data }) {
       <div className="day-sales-legend">
         <span className="day-sales-legend__item">
           <i className="day-sales-legend__swatch day-sales-legend__swatch--weekday" />
-          Sold (pieces)
+          Sold (closing qty)
         </span>
         <span className="day-sales-legend__item">
           <i className="day-sales-legend__swatch day-sales-legend__swatch--saturday" />
@@ -504,7 +422,7 @@ function DayWiseSalesBarChart({ data }) {
 
 function DayWiseSalesHeatmap({ data }) {
   const { cells, maxSold } = buildMonthHeatmapRows(data)
-  const hasSales = cells.some((cell) => !cell.empty && cell.soldPieces > 0)
+  const hasSales = cells.some((cell) => !cell.empty && cell.soldQty > 0)
 
   if (!hasSales) return <p className="analytics-empty">No sales data for this period.</p>
 
@@ -526,11 +444,11 @@ function DayWiseSalesHeatmap({ data }) {
             <div
               key={cell.date}
               className={`day-sales-heatmap__cell day-sales-heatmap__cell--level-${cell.heatLevel}${cell.isToday ? ' day-sales-heatmap__cell--today' : ''}`}
-              title={`${cell.date}: ${formatCount(cell.soldPieces)} pieces`}
+              title={`${cell.date}: ${formatQty(cell.soldQty)} closing qty`}
             >
               <span className="day-sales-heatmap__day">{cell.dayNum}</span>
-              {cell.soldPieces > 0 && (
-                <span className="day-sales-heatmap__value">{cell.soldPieces}p</span>
+              {cell.soldQty > 0 && (
+                <span className="day-sales-heatmap__value">{formatQty(cell.soldQty)}</span>
               )}
             </div>
           )
@@ -591,7 +509,7 @@ function buildDailyImportDayRows(apiData, dayCount) {
     const hasImport = Boolean(batchRow)
 
     if (hasImport) {
-      lastStock = Number(batchRow.totalStock ?? 0)
+      lastStock = Number(batchRow.totalBarcodes ?? batchRow.totalStock ?? 0)
     }
 
     return {
@@ -599,8 +517,8 @@ function buildDailyImportDayRows(apiData, dayCount) {
       day: isToday ? 'Today' : `${weekday} ${dayNum} ${month}`,
       dayShort: isToday ? 'Today' : weekday,
       dayMedium: isToday ? 'Today' : `${dayNum} ${month}`,
-      totalStock: lastStock,
-      estimatedSold: hasImport ? Number(batchRow.estimatedSold ?? 0) : 0,
+      totalBarcodes: lastStock,
+      soldQty: hasImport ? Number(batchRow.soldQty ?? batchRow.estimatedSold ?? 0) : 0,
       batchId: hasImport ? batchRow.batchId : null,
       importCount: dayGroup?.count ?? 0,
       hasImport,
@@ -627,24 +545,24 @@ function buildDailyImportMonthHeatmapRows(apiData) {
     const dayGroup = byDate[dateKey]
     const hasImport = Boolean(dayGroup)
     const importCount = dayGroup?.count ?? 0
-    const totalStock = hasImport ? Number(dayGroup.latest.totalStock ?? 0) : 0
+      const totalBarcodes = hasImport ? Number(dayGroup.latest.totalBarcodes ?? dayGroup.latest.totalStock ?? 0) : 0
 
     return {
       date: dateKey,
       dayNum: date.getDate(),
       weekday: date.getDay(),
       importCount,
-      totalStock,
+      totalBarcodes,
       hasImport,
       isToday: dateKey === todayKey,
       empty: false,
     }
   })
 
-  const maxStock = Math.max(...days.map((row) => row.totalStock), 0)
+  const maxStock = Math.max(...days.map((row) => row.totalBarcodes), 0)
   const enrichedDays = days.map((row) => ({
     ...row,
-    heatLevel: row.hasImport ? getHeatLevel(row.totalStock, maxStock) : 0,
+    heatLevel: row.hasImport ? getHeatLevel(row.totalBarcodes, maxStock) : 0,
   }))
 
   const leading = Array.from({ length: enrichedDays[0].weekday }, () => ({ empty: true }))
@@ -677,19 +595,19 @@ function DailyImportTooltip({ active, payload }) {
           {item.batchId}
         </p>
       )}
-      {!item?.hasImport && item?.totalStock > 0 && (
+      {!item?.hasImport && item?.totalBarcodes > 0 && (
         <p className="chart-tip__meta">No new import — carried stock</p>
       )}
       <p className="chart-tip__value">
-        {formatCount(item?.totalStock ?? 0)}
+        {formatCount(item?.totalBarcodes ?? item?.totalStock ?? 0)}
         {' '}
-        total stock
+        barcodes
       </p>
       {item?.hasImport && (
         <p className="chart-tip__meta">
-          Est. sold:
+          Est. sold qty:
           {' '}
-          {formatCount(item?.estimatedSold ?? 0)}
+          {formatQty(item?.soldQty ?? item?.estimatedSold ?? 0)}
         </p>
       )}
     </div>
@@ -705,12 +623,12 @@ function DailyImportsLineChart({ data }) {
   }
 
   return (
-    <JewelleryTrendLineChart
+    <RetailTrendLineChart
       chartData={chartData}
       period="week"
-      dataKey="totalStock"
+      dataKey="totalBarcodes"
       tooltip={DailyImportTooltip}
-      legendPrimaryLabel="Stock per batch"
+      legendPrimaryLabel="Barcodes per batch"
       dotOnImportOnly
     />
   )
@@ -739,7 +657,7 @@ function DailyImportsCalendar({ data }) {
           }
 
           const title = cell.hasImport
-            ? `${cell.date}: ${cell.importCount} import${cell.importCount === 1 ? '' : 's'} · ${formatCount(cell.totalStock)} stock`
+            ? `${cell.date}: ${cell.importCount} import${cell.importCount === 1 ? '' : 's'} · ${formatCount(cell.totalBarcodes)} barcodes`
             : `${cell.date}: no import`
 
           return (
@@ -750,7 +668,7 @@ function DailyImportsCalendar({ data }) {
             >
               <span className="day-sales-heatmap__day">{cell.dayNum}</span>
               {cell.hasImport && (
-                <span className="day-sales-heatmap__value">{formatHeatmapCount(cell.totalStock)}</span>
+                <span className="day-sales-heatmap__value">{formatHeatmapCount(cell.totalBarcodes)}</span>
               )}
             </div>
           )
@@ -765,7 +683,7 @@ function DailyImportsCalendar({ data }) {
           ))}
         </div>
         <span>
-          More stock
+          More barcodes
           {maxStock > 0 ? ` (${formatHeatmapCount(maxStock)} max/day)` : ''}
         </span>
       </div>
@@ -775,34 +693,19 @@ function DailyImportsCalendar({ data }) {
 
 function DailyImportsCard({
   period,
-  counter,
   onPeriodChange,
-  onCounterChange,
   loading,
   error,
   data,
 }) {
-  const totalStock = data.reduce((sum, row) => sum + (row.totalStock ?? 0), 0)
+  const totalBarcodes = data.reduce((sum, row) => sum + (row.totalBarcodes ?? row.totalStock ?? 0), 0)
   const importCount = data.length
 
   return (
     <article className="analytics-tile analytics-tile--wide day-sales-card">
       <header className="day-sales-card__head">
         <div className="day-sales-card__title-wrap">
-          <h3>Daily imports — stock per batch</h3>
-          <div className="day-sales-pills">
-            {DAILY_IMPORT_COUNTERS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className={`day-sales-pill${counter === option.value ? ' day-sales-pill--active' : ''}`}
-                onClick={() => onCounterChange(option.value)}
-                disabled={loading}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          <h3>Daily imports — barcodes per batch</h3>
         </div>
 
         <div className="day-sales-card__actions">
@@ -824,9 +727,9 @@ function DailyImportsCard({
             {' '}
             imports ·
             {' '}
-            <strong>{formatCount(totalStock)}</strong>
+            <strong>{formatCount(totalBarcodes)}</strong>
             {' '}
-            stock
+            barcodes
           </span>
         </div>
       </header>
@@ -843,32 +746,17 @@ function DailyImportsCard({
 
 function DayWiseSalesCard({
   period,
-  counter,
   onPeriodChange,
-  onCounterChange,
   loading,
   error,
   data,
-  totalSoldPieces,
+  totalSoldQty,
 }) {
   return (
     <article className="analytics-tile analytics-tile--wide day-sales-card">
       <header className="day-sales-card__head">
         <div className="day-sales-card__title-wrap">
-          <h3>Day-wise sales — pieces sold</h3>
-          <div className="day-sales-pills">
-            {DAY_SALES_COUNTERS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className={`day-sales-pill${counter === option.value ? ' day-sales-pill--active' : ''}`}
-                onClick={() => onCounterChange(option.value)}
-                disabled={loading}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          <h3>Day-wise sales — closing qty sold</h3>
         </div>
 
         <div className="day-sales-card__actions">
@@ -888,9 +776,9 @@ function DayWiseSalesCard({
           <span className="day-sales-total">
             Total:
             {' '}
-            <strong>{formatCount(totalSoldPieces)}</strong>
+            <strong>{formatQty(totalSoldQty)}</strong>
             {' '}
-            pieces
+            closing qty
           </span>
         </div>
       </header>
@@ -905,28 +793,112 @@ function DayWiseSalesCard({
   )
 }
 
-function ProductCategoryBreakdown({ data, totalPieces }) {
+function buildQtyShareSlices(data, maxSlices = 5) {
+  const rows = [...(data || [])]
+    .map((row) => ({
+      name: String(row.name ?? '').trim(),
+      value: Number(row.qtySum ?? row.pieceCount ?? 0),
+    }))
+    .filter((row) => row.name && row.value > 0)
+    .sort((left, right) => right.value - left.value)
+
+  if (!rows.length) {
+    return []
+  }
+
+  const topRows = rows.slice(0, maxSlices)
+  const othersValue = rows.slice(maxSlices).reduce((sum, row) => sum + row.value, 0)
+
+  if (othersValue > 0) {
+    topRows.push({ name: 'Others', value: othersValue })
+  }
+
+  return topRows
+}
+
+function QtyShareDonut({ data, totalQty }) {
+  const slices = buildQtyShareSlices(data)
+  const total = Number(totalQty) || slices.reduce((sum, row) => sum + row.value, 0)
+
+  if (!slices.length) {
+    return <p className="analytics-empty">No quantity share data available.</p>
+  }
+
+  return (
+    <div className="analytics-donut">
+      <div className="analytics-donut__chart">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={slices}
+              dataKey="value"
+              nameKey="name"
+              cx="50%"
+              cy="50%"
+              innerRadius="58%"
+              outerRadius="88%"
+              paddingAngle={2}
+              stroke="#fff"
+              strokeWidth={2}
+            >
+              {slices.map((entry, index) => (
+                <Cell key={entry.name} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+              ))}
+            </Pie>
+            <Tooltip
+              formatter={(value) => formatQty(value)}
+              contentStyle={{
+                borderRadius: 10,
+                border: '1px solid #ebe3d6',
+                fontSize: 12,
+              }}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="analytics-donut__center">
+          <strong>{formatQty(total)}</strong>
+          <span>Total Qty</span>
+        </div>
+      </div>
+
+      <ul className="analytics-donut__legend">
+        {slices.map((row, index) => (
+          <li key={row.name}>
+            <span
+              className="analytics-donut__dot"
+              style={{ background: CHART_COLORS[index % CHART_COLORS.length] }}
+            />
+            <span className="analytics-donut__name" title={row.name}>{truncate(row.name, 32)}</span>
+            <span className="analytics-donut__pct">{pct(row.value, total)}%</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function ItemDescriptionBreakdown({ data, totalQty }) {
   const rows = [...(data || [])]
     .map((row) => ({
       name: truncate(row.name, 24),
       fullName: row.name,
-      count: Number(row.pieceCount ?? 0),
-      tagCount: Number(row.tagCount ?? 0),
+      count: Number(row.qtySum ?? row.pieceCount ?? 0),
+      barcodeCount: Number(row.barcodeCount ?? row.tagCount ?? 0),
     }))
     .filter((row) => row.count > 0)
     .sort((a, b) => b.count - a.count)
 
-  if (!rows.length) return <p className="analytics-empty">No product category data available.</p>
+  if (!rows.length) return <p className="analytics-empty">No item description data available.</p>
 
   const max = Math.max(...rows.map((row) => row.count), 1)
-  const total = Number(totalPieces) || rows.reduce((sum, row) => sum + row.count, 0)
+  const total = Number(totalQty) || rows.reduce((sum, row) => sum + row.count, 0)
 
   return (
     <div className="product-category-breakdown">
       <div className="product-category-breakdown__columns" aria-hidden="true">
-        <span>Category</span>
+        <span>Item Description</span>
         <span />
-        <span>Pieces</span>
+        <span>Closing Bal.Qty</span>
         <span>Share</span>
       </div>
 
@@ -945,7 +917,7 @@ function ProductCategoryBreakdown({ data, totalPieces }) {
                   }}
                 />
               </div>
-              <span className="product-category-breakdown__count">{formatCount(row.count)}</span>
+              <span className="product-category-breakdown__count">{formatQty(row.count)}</span>
               <span className="product-category-breakdown__pct">{pct(row.count, total)}%</span>
             </li>
           )
@@ -977,7 +949,7 @@ function ProductBarChart({ data }) {
                 }}
               />
             </div>
-            <span className="product-bar-chart__value">{formatCount(row.count)}</span>
+            <span className="product-bar-chart__value">{formatQty(row.count)}</span>
           </li>
         )
       })}
@@ -1028,14 +1000,14 @@ function DashboardNavCard({ to, title, label, icon }) {
   )
 }
 
-function AnalyticsTile({ title, subtitle, children, wide = false }) {
+function AnalyticsTile({ title, subtitle, children, wide = false, paired = false, bodyClassName = '' }) {
   return (
-    <article className={`analytics-tile${wide ? ' analytics-tile--wide' : ''}`}>
+    <article className={`analytics-tile${wide ? ' analytics-tile--wide' : ''}${paired ? ' analytics-tile--paired' : ''}`}>
       <header className="analytics-tile__head">
         <h3>{title}</h3>
         <p>{subtitle}</p>
       </header>
-      <div className="analytics-tile__body">{children}</div>
+      <div className={`analytics-tile__body${bodyClassName ? ` ${bodyClassName}` : ''}`}>{children}</div>
     </article>
   )
 }
@@ -1091,22 +1063,22 @@ function StatIcon({ type }) {
 function buildStats(totals) {
   return [
     {
-      label: 'Total Products',
-      value: formatCount(totals.productGroups),
-      hint: 'Distinct product groups in stock',
+      label: 'Item Descriptions',
+      value: formatCount(totals.itemDescriptions ?? totals.productGroups ?? 0),
+      hint: 'Distinct item descriptions in stock',
       icon: <StatIcon type="product" />,
     },
     {
-      label: 'Total Sub Products',
-      value: formatCount(totals.subProducts),
-      hint: 'Sub-products across all products',
-      icon: <StatIcon type="subproduct" />,
+      label: 'Total Barcodes',
+      value: formatCount(totals.totalBarcodes ?? totals.totalTags ?? 0),
+      hint: 'Barcode rows in active batch',
+      icon: <StatIcon type="groups" />,
     },
     {
-      label: 'Total Tags',
-      value: formatCount(totals.totalTags),
-      hint: 'Tag / packet rows in active batch',
-      icon: <StatIcon type="tags" />,
+      label: 'Total Closing Bal.Qty',
+      value: formatQty(totals.totalQty ?? totals.totalPieces ?? 0),
+      hint: 'Sum of closing balance quantity',
+      icon: <StatIcon type="pieces" />,
     },
   ]
 }
@@ -1171,12 +1143,10 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [topSoldLoading, setTopSoldLoading] = useState(true)
   const [salesPeriod, setSalesPeriod] = useState('week')
-  const [salesCounter, setSalesCounter] = useState('all')
-  const [dayWiseSales, setDayWiseSales] = useState({ data: [], totalSoldPieces: 0 })
+  const [dayWiseSales, setDayWiseSales] = useState({ data: [], totalSoldQty: 0 })
   const [dayWiseLoading, setDayWiseLoading] = useState(true)
   const [dayWiseError, setDayWiseError] = useState('')
   const [importPeriod, setImportPeriod] = useState('week')
-  const [importCounter, setImportCounter] = useState('ALL')
   const [dailyImports, setDailyImports] = useState({ data: [] })
   const [dailyImportsLoading, setDailyImportsLoading] = useState(true)
   const [dailyImportsError, setDailyImportsError] = useState('')
@@ -1221,13 +1191,13 @@ export default function Dashboard() {
         if (!cancelled) {
           setTopSoldProducts(products)
           if (!products.length) {
-            setTopSoldNotice('No sold products recorded yet across import batches.')
+            setTopSoldNotice('No sold items recorded yet across import batches.')
           }
         }
       } catch (err) {
         if (!cancelled) {
           setTopSoldProducts([])
-          setTopSoldNotice(err.message || 'Top sold products are not available yet.')
+          setTopSoldNotice(err.message || 'Top sold items are not available yet.')
         }
       } finally {
         if (!cancelled) setTopSoldLoading(false)
@@ -1248,7 +1218,6 @@ export default function Dashboard() {
       try {
         const result = await fetchDayWiseSales({
           period: salesPeriod,
-          counter: salesCounter,
         })
 
         if (!cancelled) {
@@ -1256,7 +1225,7 @@ export default function Dashboard() {
         }
       } catch (err) {
         if (!cancelled) {
-          setDayWiseSales({ data: [], totalSoldPieces: 0 })
+          setDayWiseSales({ data: [], totalSoldQty: 0 })
           setDayWiseError(err.message || 'Failed to load day-wise sales.')
         }
       } finally {
@@ -1269,7 +1238,7 @@ export default function Dashboard() {
     }
 
     return () => { cancelled = true }
-  }, [loading, summary, salesPeriod, salesCounter])
+  }, [loading, summary, salesPeriod])
 
   useEffect(() => {
     let cancelled = false
@@ -1281,7 +1250,6 @@ export default function Dashboard() {
       try {
         const result = await fetchDailyImports({
           period: importPeriod,
-          counter: importCounter,
         })
 
         if (!cancelled) {
@@ -1302,34 +1270,28 @@ export default function Dashboard() {
     }
 
     return () => { cancelled = true }
-  }, [loading, summary, importPeriod, importCounter])
+  }, [loading, summary, importPeriod])
 
   const totals = summary?.totals ?? {
+    totalBarcodes: 0,
+    totalQty: 0,
+    itemDescriptions: 0,
     totalTags: 0,
     totalPieces: 0,
-    totalGrossWt: 0,
-    totalNetWt: 0,
     productGroups: 0,
     subProducts: 0,
-    counters: 0,
   }
 
   const stats = buildStats(totals)
-  const byProduct = summary?.byProduct ?? []
-  const byCounter = summary?.byCounter ?? []
+  const byDescription = summary?.byDescription ?? summary?.byProduct ?? []
   const batch = summary?.batch
   const topSoldBarData = useMemo(
     () => topSoldProducts.slice(0, 10).map((row) => ({
-      name: truncate(row.productName, 22),
-      fullName: row.productName,
-      count: row.soldCount ?? 0,
+      name: truncate(row.itemDescription, 22),
+      fullName: row.itemDescription,
+      count: row.soldQty ?? 0,
     })),
     [topSoldProducts],
-  )
-
-  const counterSplitData = useMemo(
-    () => buildCounterSplitRows(byCounter),
-    [byCounter],
   )
 
   if (loading) {
@@ -1348,14 +1310,16 @@ export default function Dashboard() {
     )
   }
 
-  if (!batch || totals.totalTags === 0) {
+  const totalBarcodes = Number(totals.totalBarcodes ?? totals.totalTags ?? 0)
+
+  if (!batch || totalBarcodes === 0) {
     return (
       <div className="dashboard">
         <div className="dashboard-empty">
           <h2>No stock data yet</h2>
-          <p>Import your Tag Wise Stock Excel file from the Import page to see inventory metrics here.</p>
+          <p>Import your stock Excel file from the Import page to see inventory metrics here.</p>
           <p className="dashboard-empty__hint">
-            Expected columns: TranNo, Product, SubProduct, Tag/PacketNo, Pieces, Counter
+            Expected columns: Barcode, Item Description, Closing Bal.Qty
           </p>
         </div>
       </div>
@@ -1374,11 +1338,11 @@ export default function Dashboard() {
             Live Demo Preview
           </span>
           <h2 className="dashboard-hero__title">
-            Welcome to <span className="dashboard-hero__brand">Jeyachandran Gold House</span>
+            Welcome to <span className="dashboard-hero__brand">Brand Factory</span>
           </h2>
           <p className="dashboard-hero__subtitle">
-            Your premium jewellery inventory dashboard — track stock, sales, gold rates
-            and showroom performance at a glance.
+            Track dress barcodes, item descriptions, closing balance quantity,
+            sales trends and import batches at a glance.
           </p>
         </div>
         <div className="dashboard-hero__rates">
@@ -1391,10 +1355,10 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="dashboard-rate-card">
-            <span className="dashboard-rate-card__icon">SP</span>
+            <span className="dashboard-rate-card__icon">IT</span>
             <div className="dashboard-rate-card__info">
-              <strong>{formatCount(totals.subProducts)}</strong>
-              <span>sub-products</span>
+              <strong>{formatCount(totals.itemDescriptions ?? totals.productGroups ?? 0)}</strong>
+              <span>item descriptions</span>
             </div>
           </div>
         </div>
@@ -1431,39 +1395,45 @@ export default function Dashboard() {
 
         <div className="analytics-grid">
           <AnalyticsTile
-            title="Product Category Breakdown"
-            subtitle={`${formatCount(totals.totalPieces)} total pieces across ${formatCount(byProduct.length)} product groups`}
+            title="Item Description Breakdown"
+            subtitle={`${formatQty(totals.totalQty ?? totals.totalPieces ?? 0)} total closing qty across ${formatCount(byDescription.length)} item descriptions`}
+            paired
+            bodyClassName="analytics-tile__body--breakdown"
           >
-            <ProductCategoryBreakdown data={byProduct} totalPieces={totals.totalPieces} />
+            <ItemDescriptionBreakdown data={byDescription} totalQty={totals.totalQty ?? totals.totalPieces ?? 0} />
           </AnalyticsTile>
 
-          <AnalyticsTile title="Counter split" subtitle="Tag count in showroom vs safe storage">
-            <CounterSplitChart data={counterSplitData} />
+          <AnalyticsTile
+            title="Stock Snapshot"
+            subtitle="Closing qty share by item description"
+            paired
+            bodyClassName="analytics-tile__body--donut"
+          >
+            <QtyShareDonut
+              data={byDescription}
+              totalQty={totals.totalQty ?? totals.totalPieces ?? 0}
+            />
           </AnalyticsTile>
 
           <DayWiseSalesCard
             period={salesPeriod}
-            counter={salesCounter}
             onPeriodChange={setSalesPeriod}
-            onCounterChange={setSalesCounter}
             loading={dayWiseLoading}
             error={dayWiseError}
             data={dayWiseSales.data}
-            totalSoldPieces={dayWiseSales.totalSoldPieces}
+            totalSoldQty={dayWiseSales.totalSoldQty}
           />
 
           <DailyImportsCard
             period={importPeriod}
-            counter={importCounter}
             onPeriodChange={setImportPeriod}
-            onCounterChange={setImportCounter}
             loading={dailyImportsLoading}
             error={dailyImportsError}
             data={dailyImports.data}
           />
 
-          <AnalyticsTile title="Top Sold Products" subtitle="Overall sold pieces across all stock import batches" wide>
-            {topSoldLoading && <p className="analytics-empty">Loading sold products…</p>}
+          <AnalyticsTile title="Top Sold Items" subtitle="Overall sold closing qty across all stock import batches" wide>
+            {topSoldLoading && <p className="analytics-empty">Loading sold items…</p>}
             {!topSoldLoading && topSoldNotice && !topSoldBarData.length && (
               <p className="analytics-empty">{topSoldNotice}</p>
             )}
@@ -1485,19 +1455,19 @@ export default function Dashboard() {
           <DashboardNavCard
             to="/import"
             title="Import Stock"
-            label="Upload tag-wise Excel"
+            label="Upload stock Excel"
             icon="import"
           />
           <DashboardNavCard
             to="/stock"
             title="View Stock"
-            label={`${formatCount(totals.totalTags)} rows · search & browse`}
+            label={`${formatCount(totalBarcodes)} barcodes · search & browse`}
             icon="stock"
           />
           <DashboardNavCard
             to="/reports"
             title="Verification Reports"
-            label="Found, missing & new tags"
+            label="Found, missing & new barcodes"
             icon="reports"
           />
       </div>

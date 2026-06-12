@@ -250,7 +250,7 @@ const drawPdfHeaderBand = (doc, summary, totalRows, dbTime) => {
     .fillColor(PDF_THEME.headerText)
     .font("Helvetica-Bold")
     .fontSize(PDF_LAYOUT.titleFontSize);
-  doc.text("Jewellery Stock Verification Report", left + 16, top + 6, {
+  doc.text("Brand Factory Stock Verification Report", left + 16, top + 6, {
     width: width - 32,
   });
 
@@ -388,7 +388,7 @@ const drawPageFooters = (doc) => {
       .stroke();
 
     doc.font("Helvetica").fontSize(7).fillColor(PDF_THEME.muted);
-    doc.text("Jewellery Inventory — Stock Verification Report", left, footerY, {
+    doc.text("Brand Factory — Stock Verification Report", left, footerY, {
       width: width / 2,
       lineBreak: false,
       height: PDF_LAYOUT.footerHeight,
