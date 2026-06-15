@@ -88,6 +88,281 @@ const formatRelativeStocktakeTime = (value) => {
   return formatDateTime(date);
 };
 
+const MONTHS_SHORT = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+const STOCKTAKE_HISTORY_LIMIT = Math.max(
+  1,
+  Number.parseInt(process.env.DASHBOARD_STOCKTAKE_HISTORY_LIMIT ?? "6", 10) || 6,
+);
+
+const formatShortStocktakeDay = (value) => {
+  const date = value instanceof Date ? value : new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return String(value ?? "");
+  }
+
+  return `${date.getDate()} ${MONTHS_SHORT[date.getMonth()]}`;
+};
+
+const calculateAccuracyPercent = (foundCount, totalExpected) => {
+  if (!totalExpected || totalExpected <= 0) {
+    return 0;
+  }
+
+  return Number(((foundCount / totalExpected) * 100).toFixed(1));
+};
+
+const isAllScopeRow = (row) =>
+  row.product_name === ALL_PRODUCTS &&
+  row.sub_product_name === ALL_SUB_PRODUCTS &&
+  row.center_name === ALL_CENTERS;
+
+const pickPreferredStocktakeRow = (rows) => {
+  if (!rows.length) {
+    return null;
+  }
+
+  const sorted = [...rows].sort((left, right) => {
+    const leftPriority = isAllScopeRow(left) ? 0 : 1;
+    const rightPriority = isAllScopeRow(right) ? 0 : 1;
+
+    if (leftPriority !== rightPriority) {
+      return leftPriority - rightPriority;
+    }
+
+    return new Date(right.verification_date) - new Date(left.verification_date);
+  });
+
+  return sorted[0];
+};
+
+const formatStocktakeFrequency = (averageDays) => {
+  if (averageDays === null || !Number.isFinite(averageDays)) {
+    return null;
+  }
+
+  const rounded = Math.round(averageDays);
+
+  if (rounded >= 4 && rounded <= 5) {
+    return "Every 4–5 days";
+  }
+
+  if (rounded === 7) {
+    return "Weekly";
+  }
+
+  if (rounded === 1) {
+    return "Daily";
+  }
+
+  return `Every ${rounded} days`;
+};
+
+const emptyStocktakeHistory = () => ({
+  sessions: [],
+  sessionCount: 0,
+  averageAccuracyPercent: 0,
+  averageDurationMinutes: 0,
+  frequencyLabel: null,
+  averageFrequencyDays: null,
+});
+
+const fetchDurationMinutesByVerificationIds = async (verificationIds) => {
+  if (verificationIds.length === 0) {
+    return new Map();
+  }
+
+  const placeholders = verificationIds.map(() => "?").join(", ");
+  const [detailRows, headerRows] = await Promise.all([
+    pool.execute(
+      `SELECT
+         verification_id,
+         GREATEST(TIMESTAMPDIFF(MINUTE, MIN(created_at), MAX(created_at)), 0) AS duration_minutes
+       FROM stock_verification_details
+       WHERE verification_id IN (${placeholders})
+       GROUP BY verification_id`,
+      verificationIds,
+    ),
+    pool.execute(
+      `SELECT
+         id AS verification_id,
+         GREATEST(
+           TIMESTAMPDIFF(MINUTE, created_at, COALESCE(updated_at, verification_date)),
+           0
+         ) AS duration_minutes
+       FROM stock_verification
+       WHERE id IN (${placeholders})`,
+      verificationIds,
+    ),
+  ]);
+
+  const map = new Map();
+
+  for (const row of headerRows[0]) {
+    map.set(Number(row.verification_id), Number(row.duration_minutes ?? 0));
+  }
+
+  for (const row of detailRows[0]) {
+    const id = Number(row.verification_id);
+    const detailDuration = Number(row.duration_minutes ?? 0);
+    const headerDuration = map.get(id) ?? 0;
+    map.set(id, Math.max(headerDuration, detailDuration));
+  }
+
+  return map;
+};
+
+const getStocktakeHistory = async () => {
+  const [rows] = await pool.execute(
+    `SELECT
+       id,
+       verification_day,
+       verification_date,
+       total_expected,
+       found_count,
+       total_scanned,
+       missing_count,
+       new_count,
+       product_name,
+       sub_product_name,
+       center_name,
+       created_at,
+       updated_at
+     FROM stock_verification
+     ORDER BY verification_day DESC, verification_date DESC
+     LIMIT 100`,
+  );
+
+  if (rows.length === 0) {
+    return emptyStocktakeHistory();
+  }
+
+  const rowsByDay = new Map();
+
+  for (const row of rows) {
+    const dayKey = formatDate(row.verification_day);
+
+    if (!rowsByDay.has(dayKey)) {
+      rowsByDay.set(dayKey, []);
+    }
+
+    rowsByDay.get(dayKey).push(row);
+  }
+
+  const dayKeys = [...rowsByDay.keys()].sort((left, right) =>
+    right.localeCompare(left),
+  );
+  const selectedDays = dayKeys.slice(0, STOCKTAKE_HISTORY_LIMIT);
+  const sessions = selectedDays
+    .map((dayKey) => pickPreferredStocktakeRow(rowsByDay.get(dayKey)))
+    .filter(Boolean);
+
+  const verificationIds = sessions.map((row) => Number(row.id));
+  const durationMap = await fetchDurationMinutesByVerificationIds(verificationIds);
+
+  const historySessions = sessions
+    .map((row) => {
+      const totalExpected = Number(row.total_expected ?? 0);
+      const foundCount = Number(row.found_count ?? 0);
+      const durationMinutes =
+        durationMap.get(Number(row.id)) ??
+        Math.max(
+          0,
+          Math.round(
+            (new Date(row.updated_at ?? row.verification_date) -
+              new Date(row.created_at ?? row.verification_date)) /
+              60_000,
+          ),
+        );
+
+      return {
+        verificationId: Number(row.id),
+        date: formatDate(row.verification_day),
+        label: formatShortStocktakeDay(row.verification_day),
+        accuracyPercent: calculateAccuracyPercent(foundCount, totalExpected),
+        itemsScanned: Number(row.total_scanned ?? 0),
+        totalExpected,
+        foundCount,
+        discrepancies:
+          Number(row.missing_count ?? 0) + Number(row.new_count ?? 0),
+        durationMinutes,
+        completedAt: formatDateTime(row.verification_date),
+      };
+    })
+    .sort((left, right) => left.date.localeCompare(right.date));
+
+  const accuracyValues = historySessions
+    .map((session) => session.accuracyPercent)
+    .filter((value) => value > 0);
+  const durationValues = historySessions
+    .map((session) => session.durationMinutes)
+    .filter((value) => value > 0);
+
+  const averageAccuracyPercent =
+    accuracyValues.length > 0
+      ? Number(
+          (
+            accuracyValues.reduce((sum, value) => sum + value, 0) /
+            accuracyValues.length
+          ).toFixed(1),
+        )
+      : 0;
+
+  const averageDurationMinutes =
+    durationValues.length > 0
+      ? Math.round(
+          durationValues.reduce((sum, value) => sum + value, 0) /
+            durationValues.length,
+        )
+      : 0;
+
+  const dayTimestamps = historySessions
+    .map((session) => new Date(`${session.date}T00:00:00`).getTime())
+    .filter((value) => Number.isFinite(value))
+    .sort((left, right) => left - right);
+
+  const frequencyGaps = [];
+
+  for (let index = 1; index < dayTimestamps.length; index += 1) {
+    frequencyGaps.push(
+      (dayTimestamps[index] - dayTimestamps[index - 1]) / 86_400_000,
+    );
+  }
+
+  const averageFrequencyDays =
+    frequencyGaps.length > 0
+      ? Number(
+          (
+            frequencyGaps.reduce((sum, value) => sum + value, 0) /
+            frequencyGaps.length
+          ).toFixed(1),
+        )
+      : null;
+
+  return {
+    sessions: historySessions,
+    sessionCount: historySessions.length,
+    averageAccuracyPercent,
+    averageDurationMinutes,
+    frequencyLabel: formatStocktakeFrequency(averageFrequencyDays),
+    averageFrequencyDays,
+  };
+};
+
 const emptyStocktakeSummary = () => ({
   itemsScanned: 0,
   scanRatePercent: 0,
@@ -100,6 +375,7 @@ const emptyStocktakeSummary = () => ({
   missingCount: 0,
   newCount: 0,
   verificationDay: null,
+  history: emptyStocktakeHistory(),
 });
 
 const getLatestStocktakeRow = async () => {
@@ -138,7 +414,7 @@ const getLatestStocktakeRow = async () => {
 };
 
 const getStocktakeSummary = async () => {
-  const [monthResult, latestRow] = await Promise.all([
+  const [monthResult, latestRow, history] = await Promise.all([
     pool.execute(
       `SELECT COUNT(DISTINCT verification_day) AS stocktakesThisMonth
        FROM stock_verification
@@ -146,6 +422,7 @@ const getStocktakeSummary = async () => {
          AND MONTH(verification_day) = MONTH(CURDATE())`,
     ),
     getLatestStocktakeRow(),
+    getStocktakeHistory(),
   ]);
 
   const stocktakesThisMonth = Number(monthResult[0][0]?.stocktakesThisMonth ?? 0);
@@ -154,6 +431,7 @@ const getStocktakeSummary = async () => {
     return {
       ...emptyStocktakeSummary(),
       stocktakesThisMonth,
+      history,
     };
   }
 
@@ -186,6 +464,7 @@ const getStocktakeSummary = async () => {
       subProduct: latestRow.sub_product_name,
       center: latestRow.center_name,
     },
+    history,
   };
 };
 
@@ -607,4 +886,5 @@ export default {
   getDayWiseSales,
   getDailyImports,
   getStocktakeSummary,
+  getStocktakeHistory,
 };
