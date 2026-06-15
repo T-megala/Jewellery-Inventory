@@ -66,3 +66,17 @@ export const getDailyImports = async (req, res) => {
     data: result.data,
   });
 };
+
+export const getStockMovement = async (req, res) => {
+  const slowDays = getRequestParam(req, 'slowDays');
+  const fastDays = getRequestParam(req, 'fastDays');
+  const limit = getRequestParam(req, 'limit');
+
+  const result = await dashboardService.getStockMovement({
+    slowDays,
+    fastDays,
+    limit,
+  });
+
+  sendSuccess(res, result, 'Stock movement fetched successfully');
+};

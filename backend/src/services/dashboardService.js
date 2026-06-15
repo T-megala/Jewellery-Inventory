@@ -1001,6 +1001,153 @@ const getDailyImports = async ({
   };
 };
 
+const parsePositiveInt = (value, fallback) => {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+
+  return parsed;
+};
+
+const getStockMovement = async ({
+  slowDays = 60,
+  fastDays = 30,
+  limit = 10,
+} = {}) => {
+  const thresholdDays = parsePositiveInt(slowDays, 60);
+  const periodDays = parsePositiveInt(fastDays, 30);
+  const resultLimit = Math.min(parsePositiveInt(limit, 10), 50);
+  const batchId = await getActiveBatchId();
+
+  const emptyResponse = {
+    slowMovers: {
+      thresholdDays,
+      items: [],
+    },
+    fastMovers: {
+      periodDays,
+      items: [],
+    },
+  };
+
+  if (!batchId) {
+    return emptyResponse;
+  }
+
+  const [[slowRows], [newTagRows], [pieceIncreaseRows]] = await Promise.all([
+    pool.execute(
+      `SELECT
+         product AS productName,
+         COALESCE(SUM(COALESCE(pieces, 0)), 0) AS pieceCount,
+         ROUND(AVG(DATEDIFF(CURDATE(), tran_date))) AS avgDaysSinceMovement
+       ${batchProductsFrom}
+         AND tran_date IS NOT NULL
+         AND product IS NOT NULL
+         AND TRIM(product) != ''
+       GROUP BY product
+       HAVING avgDaysSinceMovement >= ?
+       ORDER BY pieceCount DESC, avgDaysSinceMovement DESC, product ASC
+       LIMIT ${resultLimit}`,
+      [batchId, thresholdDays],
+    ),
+    pool.execute(
+      `SELECT
+         curr.product AS productName,
+         COUNT(*) AS restockedTags,
+         COALESCE(SUM(COALESCE(curr.pieces, 0)), 0) AS restockedPieces
+       FROM products curr
+       INNER JOIN product_upload_batches b ON b.id = curr.batch_id
+       LEFT JOIN products prev
+         ON prev.batch_id = (
+           SELECT MAX(pb.id)
+           FROM product_upload_batches pb
+           WHERE pb.id < curr.batch_id
+         )
+        AND prev.tag_packet_no = curr.tag_packet_no
+        AND prev.tag_packet_no IS NOT NULL
+        AND TRIM(prev.tag_packet_no) != ''
+       WHERE b.batch_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+         AND curr.tag_packet_no IS NOT NULL
+         AND TRIM(curr.tag_packet_no) != ''
+         AND curr.product IS NOT NULL
+         AND TRIM(curr.product) != ''
+         AND prev.id IS NULL
+       GROUP BY curr.product`,
+      [periodDays],
+    ),
+    pool.execute(
+      `SELECT
+         curr.product AS productName,
+         COUNT(*) AS restockedTags,
+         COALESCE(
+           SUM(COALESCE(curr.pieces, 0) - COALESCE(prev.pieces, 0)),
+           0
+         ) AS restockedPieces
+       FROM products curr
+       INNER JOIN product_upload_batches b ON b.id = curr.batch_id
+       INNER JOIN products prev
+         ON prev.batch_id = (
+           SELECT MAX(pb.id)
+           FROM product_upload_batches pb
+           WHERE pb.id < curr.batch_id
+         )
+        AND prev.tag_packet_no = curr.tag_packet_no
+        AND prev.tag_packet_no IS NOT NULL
+        AND TRIM(prev.tag_packet_no) != ''
+       WHERE b.batch_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+         AND curr.product IS NOT NULL
+         AND TRIM(curr.product) != ''
+         AND COALESCE(curr.pieces, 0) > COALESCE(prev.pieces, 0)
+       GROUP BY curr.product`,
+      [periodDays],
+    ),
+  ]);
+
+  const restockByProduct = new Map();
+
+  for (const row of [...newTagRows, ...pieceIncreaseRows]) {
+    const productName = row.productName;
+    const existing = restockByProduct.get(productName) ?? {
+      productName,
+      restockedTags: 0,
+      restockedPieces: 0,
+    };
+
+    existing.restockedTags += Number(row.restockedTags ?? 0);
+    existing.restockedPieces += Number(row.restockedPieces ?? 0);
+    restockByProduct.set(productName, existing);
+  }
+
+  const fastMoverItems = [...restockByProduct.values()]
+    .filter(
+      (item) => item.restockedPieces > 0 || item.restockedTags > 0,
+    )
+    .sort(
+      (left, right) =>
+        right.restockedPieces - left.restockedPieces ||
+        right.restockedTags - left.restockedTags ||
+        left.productName.localeCompare(right.productName),
+    )
+    .slice(0, resultLimit);
+
+  return {
+    slowMovers: {
+      thresholdDays,
+      items: slowRows.map((row) => ({
+        productName: row.productName,
+        pieceCount: Number(row.pieceCount ?? 0),
+        avgDaysSinceMovement: Number(row.avgDaysSinceMovement ?? 0),
+      })),
+    },
+    fastMovers: {
+      periodDays,
+      items: fastMoverItems,
+    },
+  };
+};
+
 export default {
   getInventorySummary,
   getVerificationSummary,
@@ -1011,4 +1158,5 @@ export default {
   getStocktakeSummary,
   getStocktakeHistory,
   getCounterAccuracy,
+  getStockMovement,
 };
