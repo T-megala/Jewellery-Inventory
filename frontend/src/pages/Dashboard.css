@@ -44,10 +44,10 @@
     linear-gradient(
       105deg,
       rgba(28, 20, 16, 0.92) 0%,
-      rgba(120, 12, 22, 0.72) 42%,
+      rgba(38, 28, 18, 0.72) 42%,
       rgba(28, 20, 16, 0.45) 100%
     ),
-    url('/images/hero-fashion.jpg') center / cover no-repeat;
+    url('/images/hero-retail.jpg') center / cover no-repeat;
   background-color: #1c1410;
 }
 

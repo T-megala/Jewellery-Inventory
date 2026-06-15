@@ -6,7 +6,7 @@
   overflow: hidden;
 }
 
-/* ── Left hero — retail dress shop theme ── */
+/* ── Left hero — men's & boys' dress shop theme ── */
 .login-hero {
   position: relative;
   display: flex;
@@ -16,12 +16,12 @@
   background:
     linear-gradient(
       180deg,
-      rgba(15, 8, 4, 0.35) 0%,
-      rgba(120, 12, 22, 0.72) 55%,
-      rgba(15, 8, 4, 0.94) 100%
+      rgba(15, 12, 8, 0.3) 0%,
+      rgba(38, 28, 18, 0.68) 55%,
+      rgba(15, 12, 8, 0.92) 100%
     ),
     url('/images/hero-retail.jpg') center center / cover no-repeat;
-  background-color: #1a1008;
+  background-color: #1a1408;
   overflow: hidden;
 }
 

@@ -7,7 +7,7 @@ export default defineConfig({
     port: 5174,
     proxy: {
       '/api': {
-        target: 'https://devjeweltrack.2cqr.in',
+        target: 'https://devbrandfactory.2cqr.in',
         changeOrigin: true,
         secure: true,
       },

@@ -73,12 +73,12 @@ export default function Login() {
             />
             <div className="hero-header-text">
               <h1 className="hero-title">Brand Factory</h1>
-              <p className="hero-tagline">From Gujarat &mdash; Retail Dress Shop Inventory</p>
+              <p className="hero-tagline">From Gujarat &mdash; Men&apos;s &amp; Boys&apos; Dress Shop</p>
             </div>
           </header>
 
           <p className="hero-message">
-            Manage your store stock, sales and dress inventory — all in one place.
+            Manage your men&apos;s and boys&apos; dress stock, sales and inventory — all in one place.
           </p>
 
           <footer className="hero-footer">
