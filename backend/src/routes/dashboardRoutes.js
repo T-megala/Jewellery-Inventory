@@ -10,6 +10,7 @@ router.get('/dashboard/top-sold-products', asyncHandler(dashboardController.getT
 router.get('/dashboard/day-wise-sales', asyncHandler(dashboardController.getDayWiseSales));
 router.get('/dashboard/daily-imports', asyncHandler(dashboardController.getDailyImports));
 router.get('/dashboard/stock-movement', asyncHandler(dashboardController.getStockMovement));
+router.get('/dashboard/branch-comparison', asyncHandler(dashboardController.getBranchComparison));
 router.get('/dashboard', asyncHandler(dashboardController.getDashboard));
 
 export default router;

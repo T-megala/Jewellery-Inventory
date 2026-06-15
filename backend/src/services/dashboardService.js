@@ -1148,6 +1148,114 @@ const getStockMovement = async ({
   };
 };
 
+const resolveCurrentBranch = () => {
+  const name =
+    String(process.env.STORE_BRANCH_NAME ?? "Mylapore").trim() || "Mylapore";
+  const configuredCode = String(process.env.STORE_BRANCH_CODE ?? "").trim();
+  const code =
+    configuredCode ||
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") ||
+    "mylapore";
+
+  return {
+    code,
+    name,
+    isMain: process.env.STORE_BRANCH_IS_MAIN !== "false",
+  };
+};
+
+const emptyBranchStocktake = () => ({
+  verificationDay: null,
+  lastStocktakeAt: null,
+  lastStocktakeLabel: null,
+  itemsScanned: 0,
+  totalExpected: 0,
+  foundCount: 0,
+  missingCount: 0,
+  newCount: 0,
+  accuracyPercent: 0,
+  discrepancies: 0,
+});
+
+const getBranchComparison = async () => {
+  const currentBranch = resolveCurrentBranch();
+  const latestRow = await getLatestStocktakeRow();
+
+  if (!latestRow) {
+    return {
+      mode: "single",
+      currentBranch,
+      lastStocktake: emptyBranchStocktake(),
+      branches: [
+        {
+          ...currentBranch,
+          ...emptyBranchStocktake(),
+        },
+      ],
+      erpVsPhysical: {
+        erp: 0,
+        physical: 0,
+        matched: 0,
+        difference: 0,
+        missing: 0,
+        new: 0,
+      },
+    };
+  }
+
+  const totalExpected = Number(latestRow.total_expected ?? 0);
+  const itemsScanned = Number(latestRow.total_scanned ?? 0);
+  const foundCount = Number(latestRow.found_count ?? 0);
+  const missingCount = Number(latestRow.missing_count ?? 0);
+  const newCount = Number(latestRow.new_count ?? 0);
+  const accuracyPercent =
+    totalExpected > 0
+      ? Number(((foundCount / totalExpected) * 100).toFixed(2))
+      : 0;
+  const verificationDay = toDateKey(latestRow.verification_day);
+  const lastStocktakeAt = formatDateTime(latestRow.verification_date);
+  const lastStocktakeLabel = formatRelativeStocktakeTime(
+    latestRow.verification_date,
+  );
+
+  const stocktake = {
+    verificationDay,
+    lastStocktakeAt,
+    lastStocktakeLabel,
+    itemsScanned,
+    totalExpected,
+    foundCount,
+    missingCount,
+    newCount,
+    accuracyPercent,
+    discrepancies: missingCount + newCount,
+  };
+
+  return {
+    mode: "single",
+    currentBranch,
+    lastStocktake: stocktake,
+    branches: [
+      {
+        ...currentBranch,
+        ...stocktake,
+        itemCount: totalExpected,
+      },
+    ],
+    erpVsPhysical: {
+      erp: totalExpected,
+      physical: itemsScanned,
+      matched: foundCount,
+      difference: totalExpected - itemsScanned,
+      missing: missingCount,
+      new: newCount,
+    },
+  };
+};
+
 export default {
   getInventorySummary,
   getVerificationSummary,
@@ -1159,4 +1267,5 @@ export default {
   getStocktakeHistory,
   getCounterAccuracy,
   getStockMovement,
+  getBranchComparison,
 };

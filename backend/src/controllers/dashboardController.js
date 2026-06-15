@@ -80,3 +80,8 @@ export const getStockMovement = async (req, res) => {
 
   sendSuccess(res, result, 'Stock movement fetched successfully');
 };
+
+export const getBranchComparison = async (req, res) => {
+  const data = await dashboardService.getBranchComparison();
+  sendSuccess(res, data, 'Branch comparison fetched successfully');
+};
