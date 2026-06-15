@@ -7,6 +7,71 @@ const EMPTY_VERIFICATION = {
   totalTags: 0,
 };
 
+const EMPTY_STOCKTAKE_HISTORY = {
+  sessions: [],
+  sessionCount: 0,
+  averageAccuracyPercent: 0,
+  averageDurationMinutes: 0,
+  frequencyLabel: null,
+  averageFrequencyDays: null,
+};
+
+export const EMPTY_STOCKTAKE = {
+  itemsScanned: 0,
+  scanRatePercent: 0,
+  discrepancies: 0,
+  stocktakesThisMonth: 0,
+  lastStocktakeAt: null,
+  lastStocktakeLabel: null,
+  totalExpected: 0,
+  foundCount: 0,
+  missingCount: 0,
+  newCount: 0,
+  verificationDay: null,
+  history: { ...EMPTY_STOCKTAKE_HISTORY },
+};
+
+function normalizeStocktakeHistory(history = {}) {
+  return {
+    sessions: (history.sessions || []).map((session) => ({
+      verificationId: session.verificationId ?? null,
+      date: session.date ?? '',
+      label: session.label ?? '',
+      accuracyPercent: Number(session.accuracyPercent ?? 0),
+      itemsScanned: Number(session.itemsScanned ?? 0),
+      totalExpected: Number(session.totalExpected ?? 0),
+      foundCount: Number(session.foundCount ?? 0),
+      discrepancies: Number(session.discrepancies ?? 0),
+      durationMinutes: Number(session.durationMinutes ?? 0),
+      completedAt: session.completedAt ?? null,
+    })),
+    sessionCount: Number(history.sessionCount ?? 0),
+    averageAccuracyPercent: Number(history.averageAccuracyPercent ?? 0),
+    averageDurationMinutes: Number(history.averageDurationMinutes ?? 0),
+    frequencyLabel: history.frequencyLabel ?? null,
+    averageFrequencyDays: history.averageFrequencyDays ?? null,
+  };
+}
+
+function normalizeStocktake(stocktake = {}) {
+  return {
+    ...EMPTY_STOCKTAKE,
+    itemsScanned: Number(stocktake.itemsScanned ?? 0),
+    scanRatePercent: Number(stocktake.scanRatePercent ?? 0),
+    discrepancies: Number(stocktake.discrepancies ?? 0),
+    stocktakesThisMonth: Number(stocktake.stocktakesThisMonth ?? 0),
+    lastStocktakeAt: stocktake.lastStocktakeAt ?? null,
+    lastStocktakeLabel: stocktake.lastStocktakeLabel ?? null,
+    totalExpected: Number(stocktake.totalExpected ?? 0),
+    foundCount: Number(stocktake.foundCount ?? 0),
+    missingCount: Number(stocktake.missingCount ?? 0),
+    newCount: Number(stocktake.newCount ?? 0),
+    verificationDay: stocktake.verificationDay ?? null,
+    scope: stocktake.scope ?? null,
+    history: normalizeStocktakeHistory(stocktake.history),
+  };
+}
+
 export function fetchInventorySummary() {
   return apiFetch('/products/summary');
 }
@@ -21,10 +86,15 @@ export async function fetchVerificationSummary() {
 
 export async function fetchDashboard() {
   const data = await apiFetch('/dashboard');
+  const verification = data.verification ?? { ...EMPTY_VERIFICATION };
 
   return {
     inventory: data.inventory ?? null,
-    verification: data.verification ?? { ...EMPTY_VERIFICATION },
+    verification: {
+      ...EMPTY_VERIFICATION,
+      ...verification,
+      stocktake: normalizeStocktake(verification.stocktake),
+    },
   };
 }
 

@@ -14,6 +14,7 @@ import {
   YAxis,
 } from 'recharts'
 import {
+  EMPTY_STOCKTAKE,
   fetchDailyImports,
   fetchDashboard,
   fetchDayWiseSales,
@@ -175,6 +176,217 @@ function pct(part, whole) {
   const total = Number(whole)
   if (!total) return '0'
   return ((Number(part) / total) * 100).toFixed(1)
+}
+
+function formatStocktakeDate(dateStr) {
+  if (!dateStr) return '—'
+  const date = new Date(`${String(dateStr).slice(0, 10)}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return String(dateStr)
+  return date.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
+function formatAccuracyPercent(value) {
+  const num = Number(value ?? 0)
+  if (!num) return '0'
+  const rounded = Math.round(num * 100) / 100
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2).replace(/\.?0+$/, '')
+}
+
+function getStocktakeAccuracyTone(percent) {
+  const value = Number(percent ?? 0)
+  if (value >= 99) return 'green'
+  if (value >= 98.5) return 'gold'
+  if (value >= 98) return 'orange'
+  return 'red'
+}
+
+function getLatestStocktakeSession(stocktake) {
+  const sessions = stocktake?.history?.sessions ?? []
+  if (!sessions.length) return null
+  return sessions[sessions.length - 1]
+}
+
+function LastStocktakeFindings({ stocktake }) {
+  const hasData = Boolean(stocktake?.verificationDay || stocktake?.lastStocktakeAt)
+  const accuracy = Number(stocktake?.scanRatePercent ?? 0)
+  const latestSession = getLatestStocktakeSession(stocktake)
+  const durationMinutes = latestSession?.durationMinutes ?? 0
+
+  const findings = [
+    {
+      key: 'matched',
+      label: 'Matched (ERP = physical)',
+      value: stocktake?.foundCount ?? 0,
+      tone: 'matched',
+      prefix: '',
+    },
+    {
+      key: 'surplus',
+      label: 'Surplus (extra items found)',
+      value: stocktake?.newCount ?? 0,
+      tone: 'surplus',
+      prefix: '+',
+      hideWhenZero: false,
+    },
+    {
+      key: 'missing',
+      label: 'Missing (in ERP, not found)',
+      value: stocktake?.missingCount ?? 0,
+      tone: 'missing',
+      prefix: '-',
+    },
+    {
+      key: 'unverified',
+      label: 'Unverified (no ERP record)',
+      value: Math.max(
+        0,
+        Number(stocktake?.itemsScanned ?? 0)
+          - Number(stocktake?.foundCount ?? 0)
+          - Number(stocktake?.newCount ?? 0),
+      ),
+      tone: 'unverified',
+      prefix: '',
+      hideWhenZero: true,
+    },
+  ].filter((row) => !row.hideWhenZero || Number(row.value) > 0)
+
+  return (
+    <article className="stocktake-card">
+      <header className="stocktake-card__head">
+        <span className="stocktake-card__accent" aria-hidden="true" />
+        <h3>Last stocktake findings</h3>
+      </header>
+
+      <div className="stocktake-card__body">
+        {!hasData && (
+          <p className="analytics-empty">No stock verification sessions recorded yet.</p>
+        )}
+
+        {hasData && (
+          <>
+            <div className="stocktake-accuracy">
+              <div className="stocktake-accuracy__meta">
+                <span className="stocktake-accuracy__label">Accuracy</span>
+                <strong className="stocktake-accuracy__value dashboard-num">
+                  {formatAccuracyPercent(accuracy)}
+                  %
+                </strong>
+              </div>
+              <div className="stocktake-accuracy__track" aria-hidden="true">
+                <span
+                  className="stocktake-accuracy__fill"
+                  style={{ width: `${Math.min(Math.max(accuracy, 0), 100)}%` }}
+                />
+              </div>
+            </div>
+
+            <ul className="stocktake-findings">
+              {findings.map((row) => (
+                <li key={row.key} className="stocktake-findings__row">
+                  <span className="stocktake-findings__label">{row.label}</span>
+                  <span className={`stocktake-findings__badge stocktake-findings__badge--${row.tone} dashboard-num`}>
+                    {row.prefix}
+                    {formatCount(row.value)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+
+            <footer className="stocktake-card__footer">
+              {durationMinutes > 0 && (
+                <>
+                  Duration:
+                  {' '}
+                  {durationMinutes}
+                  {' '}
+                  min
+                  {' · '}
+                </>
+              )}
+              {formatStocktakeDate(stocktake.verificationDay || latestSession?.date)}
+            </footer>
+          </>
+        )}
+      </div>
+    </article>
+  )
+}
+
+function StocktakeHistory({ stocktake }) {
+  const history = stocktake?.history ?? EMPTY_STOCKTAKE.history
+  const sessions = history.sessions ?? []
+
+  return (
+    <article className="stocktake-card">
+      <header className="stocktake-card__head">
+        <span className="stocktake-card__accent" aria-hidden="true" />
+        <div>
+          <h3>Stocktake history</h3>
+          <p className="stocktake-card__subtitle">Last 6 sessions — accuracy %</p>
+        </div>
+      </header>
+
+      <div className="stocktake-card__body">
+        {!sessions.length && (
+          <p className="analytics-empty">Stocktake history will appear after verification sessions.</p>
+        )}
+
+        {sessions.length > 0 && (
+          <>
+            <ul className="stocktake-history">
+              {sessions.map((session) => {
+                const tone = getStocktakeAccuracyTone(session.accuracyPercent)
+                const width = Math.min(Math.max(Number(session.accuracyPercent ?? 0), 0), 100)
+
+                return (
+                  <li key={`${session.date}-${session.verificationId}`} className="stocktake-history__row">
+                    <span className={`stocktake-history__dot stocktake-history__dot--${tone}`} aria-hidden="true" />
+                    <span className="stocktake-history__label">{session.label || formatStocktakeDate(session.date)}</span>
+                    <div className="stocktake-history__track" aria-hidden="true">
+                      <span
+                        className={`stocktake-history__fill stocktake-history__fill--${tone}`}
+                        style={{ width: `${width}%` }}
+                      />
+                    </div>
+                    <span className={`stocktake-history__value dashboard-num stocktake-history__value--${tone}`}>
+                      {formatAccuracyPercent(session.accuracyPercent)}
+                      %
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+
+            <div className="stocktake-history__summary">
+              <div className="stocktake-history__stat">
+                <span>Average accuracy</span>
+                <strong className="dashboard-num">
+                  {formatAccuracyPercent(history.averageAccuracyPercent)}
+                  %
+                </strong>
+              </div>
+              <div className="stocktake-history__stat">
+                <span>Avg. duration</span>
+                <strong className="dashboard-num">
+                  {history.averageDurationMinutes > 0
+                    ? `${history.averageDurationMinutes} min`
+                    : '—'}
+                </strong>
+              </div>
+              <div className="stocktake-history__stat">
+                <span>Frequency</span>
+                <strong>{history.frequencyLabel || '—'}</strong>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </article>
+  )
 }
 
 function CounterSplitIcon({ type }) {
@@ -1040,75 +1252,90 @@ function AnalyticsTile({ title, subtitle, children, wide = false }) {
   )
 }
 
-function StatIcon({ type }) {
-  if (type === 'product') {
+function buildMetricCards(totals, stocktake, batch) {
+  const erpTotal = Number(stocktake?.totalExpected ?? 0) > 0
+    ? stocktake.totalExpected
+    : totals.totalTags
+  const scanRate = Number(stocktake?.scanRatePercent ?? 0)
+  const discrepancies = Number(stocktake?.discrepancies ?? 0)
+
+  return [
+    {
+      key: 'categories',
+      label: 'Categories',
+      value: formatCount(totals.productGroups),
+      hint: 'Product types',
+      variant: 'gold',
+    },
+    {
+      key: 'subproducts',
+      label: 'Sub-products',
+      value: formatCount(totals.subProducts),
+      hint: 'Variants',
+      variant: 'blue',
+    },
+    {
+      key: 'erp',
+      label: 'Total items (ERP)',
+      value: formatCount(erpTotal),
+      hint: batch?.batchDate ? `EOD sync · ${formatStocktakeDate(batch.batchDate)}` : 'EOD sync',
+      variant: 'teal',
+    },
+    {
+      key: 'scanned',
+      label: 'Items scanned',
+      value: formatCount(stocktake?.itemsScanned ?? 0),
+      hint: `${formatAccuracyPercent(scanRate)}% scan rate`,
+      variant: 'green',
+      hintTone: scanRate > 0 ? 'success' : null,
+    },
+    {
+      key: 'discrepancies',
+      label: 'Discrepancies',
+      value: formatCount(discrepancies),
+      hint: 'Review needed',
+      variant: 'red',
+      hintTone: discrepancies > 0 ? 'danger' : null,
+    },
+    {
+      key: 'stocktakes',
+      label: 'Stocktakes / month',
+      value: formatCount(stocktake?.stocktakesThisMonth ?? 0),
+      hint: stocktake?.lastStocktakeLabel
+        ? `Last: ${stocktake.lastStocktakeLabel}`
+        : 'No stocktake yet',
+      variant: 'purple',
+    },
+  ]
+}
+
+function MetricTrendIcon({ direction }) {
+  if (direction === 'up') {
     return (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-14L4 7m8 4v10M4 7v10l8 4" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     )
   }
-  if (type === 'subproduct') {
-    return (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M4 7l8-4 8 4-8 4-8-4z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-        <path d="M4 12l8 4 8-4M4 17l8 4 8-4" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-      </svg>
-    )
-  }
-  if (type === 'pieces') {
-    return (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <rect x="4" y="4" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
-        <rect x="13" y="4" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
-        <rect x="4" y="13" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
-        <rect x="13" y="13" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
-      </svg>
-    )
-  }
-  if (type === 'groups') {
-    return (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M4 7l8-4 8 4-8 4-8-4z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-        <path d="M4 12l8 4 8-4M4 17l8 4 8-4" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-      </svg>
-    )
-  }
-  if (type === 'counter') {
-    return (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M3 9h18M5 9V19a1 1 0 001 1h3v-6h6v6h3a1 1 0 001-1V9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    )
-  }
+
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-14L4 7m8 4v10M4 7v10l8 4" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 5v14M5 12l7 7 7-7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
 
-function buildStats(totals) {
-  return [
-    {
-      label: 'Total Products',
-      value: formatCount(totals.productGroups),
-      hint: 'Distinct product groups in stock',
-      icon: <StatIcon type="product" />,
-    },
-    {
-      label: 'Total Sub Products',
-      value: formatCount(totals.subProducts),
-      hint: 'Sub-products across all products',
-      icon: <StatIcon type="subproduct" />,
-    },
-    {
-      label: 'Total Tags',
-      value: formatCount(totals.totalTags),
-      hint: 'Tag / packet rows in active batch',
-      icon: <StatIcon type="tags" />,
-    },
-  ]
+function MetricCard({ label, value, hint, variant, hintTone }) {
+  return (
+    <div className={`dashboard-metric dashboard-metric--${variant}`}>
+      <p className="dashboard-metric__label">{label}</p>
+      <p className="dashboard-metric__value dashboard-num">{value}</p>
+      <p className={`dashboard-metric__hint${hintTone ? ` dashboard-metric__hint--${hintTone}` : ''}`}>
+        {hintTone && <MetricTrendIcon direction={hintTone === 'success' ? 'up' : 'down'} />}
+        {hint}
+      </p>
+    </div>
+  )
 }
 
 function DashboardSkeleton() {
@@ -1148,15 +1375,12 @@ function DashboardSkeleton() {
       </div>
 
       {/* Stat cards skeleton */}
-      <div className="skeleton-stats" aria-hidden="true">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="skeleton-stat">
-            <div className="skeleton-stat__top">
-              <span className="skeleton skeleton-stat__icon" />
-              <span className="skeleton skeleton-stat__label" />
-            </div>
-            <span className="skeleton skeleton-stat__value" />
-            <span className="skeleton skeleton-stat__hint" />
+      <div className="skeleton-metrics" aria-hidden="true">
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="skeleton-metric">
+            <span className="skeleton skeleton-metric__label" />
+            <span className="skeleton skeleton-metric__value" />
+            <span className="skeleton skeleton-metric__hint" />
           </div>
         ))}
       </div>
@@ -1166,6 +1390,7 @@ function DashboardSkeleton() {
 
 export default function Dashboard() {
   const [summary, setSummary] = useState(null)
+  const [stocktake, setStocktake] = useState(EMPTY_STOCKTAKE)
   const [topSoldProducts, setTopSoldProducts] = useState([])
   const [topSoldNotice, setTopSoldNotice] = useState('')
   const [loading, setLoading] = useState(true)
@@ -1190,15 +1415,17 @@ export default function Dashboard() {
       setError('')
 
       try {
-        const { inventory } = await fetchDashboard()
+        const { inventory, verification } = await fetchDashboard()
 
         if (!cancelled) {
           setSummary(inventory)
+          setStocktake(verification?.stocktake ?? EMPTY_STOCKTAKE)
         }
       } catch (err) {
         if (!cancelled) {
           setError(err.message || 'Failed to load inventory summary.')
           setSummary(null)
+          setStocktake(EMPTY_STOCKTAKE)
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -1314,10 +1541,10 @@ export default function Dashboard() {
     counters: 0,
   }
 
-  const stats = buildStats(totals)
+  const batch = summary?.batch
+  const metricCards = buildMetricCards(totals, stocktake, batch)
   const byProduct = summary?.byProduct ?? []
   const byCounter = summary?.byCounter ?? []
-  const batch = summary?.batch
   const topSoldBarData = useMemo(
     () => topSoldProducts.slice(0, 10).map((row) => ({
       name: truncate(row.productName, 22),
@@ -1408,18 +1635,32 @@ export default function Dashboard() {
         <span className="module-header__badge">Live Data</span>
       </div>
 
-      <div className="dashboard-stats">
-        {stats.map((stat) => (
-          <div key={stat.label} className="dashboard-stat">
-            <div className="dashboard-stat__top">
-              <div className="dashboard-stat__icon">{stat.icon}</div>
-              <p className="dashboard-stat__label">{stat.label}</p>
-            </div>
-            <p className="dashboard-stat__value">{stat.value}</p>
-            <p className="dashboard-stat__hint">{stat.hint}</p>
-          </div>
+      <div className="dashboard-metrics">
+        {metricCards.map((card) => (
+          <MetricCard key={card.key} {...card} />
         ))}
       </div>
+
+      {/* Stocktake */}
+      <section className="dashboard-stocktake">
+        <div className="module-header">
+          <div className="module-header__main">
+            <h2>Stock Verification</h2>
+          </div>
+          {stocktake.stocktakesThisMonth > 0 && (
+            <span className="module-header__badge">
+              {stocktake.stocktakesThisMonth}
+              {' '}
+              this month
+            </span>
+          )}
+        </div>
+
+        <div className="stocktake-grid">
+          <LastStocktakeFindings stocktake={stocktake} />
+          <StocktakeHistory stocktake={stocktake} />
+        </div>
+      </section>
 
       {/* Analytics */}
       <section className="dashboard-analytics">
