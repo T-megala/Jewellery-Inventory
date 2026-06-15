@@ -2,6 +2,7 @@ import pool from "../config/database.js";
 import ApiError from "../utils/ApiError.js";
 import { getActiveBatchId } from "./productBatchService.js";
 import dailySalesSummaryService from "./dailySalesSummaryService.js";
+import { batchProductsFrom } from "../utils/productQueryHelper.js";
 
 const PRODUCT_TAG_FILTER = `
   tag_packet_no IS NOT NULL
@@ -34,6 +35,159 @@ const emptyTotals = () => ({
   subProducts: 0,
   counters: 0,
 });
+
+const ALL_PRODUCTS = "All Products";
+const ALL_SUB_PRODUCTS = "All Sub Products";
+const ALL_CENTERS = "All Centers";
+
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+const formatTime12h = (date) => {
+  const hours = date.getHours();
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const period = hours >= 12 ? "PM" : "AM";
+  const hour12 = hours % 12 || 12;
+  return `${hour12}:${minutes} ${period}`;
+};
+
+const formatRelativeStocktakeTime = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfThatDay = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+  );
+  const dayDiff = Math.round(
+    (startOfToday.getTime() - startOfThatDay.getTime()) / 86_400_000,
+  );
+  const timeLabel = formatTime12h(date);
+
+  if (dayDiff === 0) {
+    return `Today ${timeLabel}`;
+  }
+
+  if (dayDiff === 1) {
+    return `Yesterday ${timeLabel}`;
+  }
+
+  if (dayDiff > 1 && dayDiff < 7) {
+    return `${DAY_LABELS[date.getDay()]} ${timeLabel}`;
+  }
+
+  return formatDateTime(date);
+};
+
+const emptyStocktakeSummary = () => ({
+  itemsScanned: 0,
+  scanRatePercent: 0,
+  discrepancies: 0,
+  stocktakesThisMonth: 0,
+  lastStocktakeAt: null,
+  lastStocktakeLabel: null,
+  totalExpected: 0,
+  foundCount: 0,
+  missingCount: 0,
+  newCount: 0,
+  verificationDay: null,
+});
+
+const getLatestStocktakeRow = async () => {
+  const [rows] = await pool.execute(
+    `SELECT
+       id,
+       verification_date,
+       verification_day,
+       total_expected,
+       total_scanned,
+       found_count,
+       missing_count,
+       new_count,
+       product_name,
+       sub_product_name,
+       center_name
+     FROM stock_verification
+     WHERE verification_day = (
+       SELECT MAX(verification_day) FROM stock_verification
+     )
+     ORDER BY
+       CASE
+         WHEN product_name = ?
+          AND sub_product_name = ?
+          AND center_name = ?
+         THEN 0
+         ELSE 1
+       END,
+       verification_date DESC,
+       id DESC
+     LIMIT 1`,
+    [ALL_PRODUCTS, ALL_SUB_PRODUCTS, ALL_CENTERS],
+  );
+
+  return rows[0] ?? null;
+};
+
+const getStocktakeSummary = async () => {
+  const [monthResult, latestRow] = await Promise.all([
+    pool.execute(
+      `SELECT COUNT(DISTINCT verification_day) AS stocktakesThisMonth
+       FROM stock_verification
+       WHERE YEAR(verification_day) = YEAR(CURDATE())
+         AND MONTH(verification_day) = MONTH(CURDATE())`,
+    ),
+    getLatestStocktakeRow(),
+  ]);
+
+  const stocktakesThisMonth = Number(monthResult[0][0]?.stocktakesThisMonth ?? 0);
+
+  if (!latestRow) {
+    return {
+      ...emptyStocktakeSummary(),
+      stocktakesThisMonth,
+    };
+  }
+
+  const totalExpected = Number(latestRow.total_expected ?? 0);
+  const itemsScanned = Number(latestRow.total_scanned ?? 0);
+  const foundCount = Number(latestRow.found_count ?? 0);
+  const missingCount = Number(latestRow.missing_count ?? 0);
+  const newCount = Number(latestRow.new_count ?? 0);
+  const discrepancies = missingCount + newCount;
+  const scanRatePercent =
+    totalExpected > 0
+      ? Number(((foundCount / totalExpected) * 100).toFixed(2))
+      : 0;
+  const lastStocktakeAt = formatDateTime(latestRow.verification_date);
+
+  return {
+    itemsScanned,
+    scanRatePercent,
+    discrepancies,
+    stocktakesThisMonth,
+    lastStocktakeAt,
+    lastStocktakeLabel: formatRelativeStocktakeTime(latestRow.verification_date),
+    totalExpected,
+    foundCount,
+    missingCount,
+    newCount,
+    verificationDay: formatDate(latestRow.verification_day),
+    scope: {
+      product: latestRow.product_name,
+      subProduct: latestRow.sub_product_name,
+      center: latestRow.center_name,
+    },
+  };
+};
 
 const getBatchInfo = async (batchId) => {
   const [rows] = await pool.execute(
@@ -71,67 +225,62 @@ const getInventorySummary = async () => {
   }
 
   const batch = await getBatchInfo(batchId);
-  const baseWhere = `batch_id = ?
-    AND tag_packet_no IS NOT NULL
-    AND TRIM(tag_packet_no) != ''`;
   const counterNameExpr = `CASE
     WHEN counter_name IS NULL OR TRIM(counter_name) = '' THEN 'Unassigned'
     ELSE TRIM(counter_name)
   END`;
 
-  const [[totalsRow]] = await pool.execute(
-    `SELECT
-       COUNT(*) AS totalTags,
-       COALESCE(SUM(pieces), 0) AS totalPieces,
-       COALESCE(SUM(gross_wt), 0) AS totalGrossWt,
-       COALESCE(SUM(net_wt), 0) AS totalNetWt,
-       COUNT(DISTINCT product) AS productGroups,
-       COUNT(DISTINCT CONCAT(product, '|', sub_product)) AS subProducts,
-       COUNT(DISTINCT ${counterNameExpr}) AS counters
-     FROM products
-     WHERE ${baseWhere}`,
-    [batchId],
-  );
+  const [[totalsRows], [byProductRows], [byCounterRows], [recentRows]] =
+    await Promise.all([
+      pool.execute(
+        `SELECT
+           COUNT(*) AS totalTags,
+           COALESCE(SUM(pieces), 0) AS totalPieces,
+           COALESCE(SUM(gross_wt), 0) AS totalGrossWt,
+           COALESCE(SUM(net_wt), 0) AS totalNetWt,
+           COUNT(DISTINCT product) AS productGroups,
+           COUNT(DISTINCT CONCAT(product, '|', sub_product)) AS subProducts,
+           COUNT(DISTINCT ${counterNameExpr}) AS counters
+         ${batchProductsFrom}`,
+        [batchId],
+      ),
+      pool.execute(
+        `SELECT
+           product AS name,
+           COUNT(DISTINCT sub_product) AS subProductCount,
+           COUNT(*) AS tagCount,
+           COALESCE(SUM(pieces), 0) AS pieceCount
+         ${batchProductsFrom}
+         GROUP BY product
+         ORDER BY pieceCount DESC, product ASC`,
+        [batchId],
+      ),
+      pool.execute(
+        `SELECT
+           ${counterNameExpr} AS name,
+           COUNT(DISTINCT CONCAT(product, '|', sub_product)) AS subProductCount,
+           COUNT(DISTINCT product) AS productCount,
+           COUNT(*) AS tagCount
+         ${batchProductsFrom}
+         GROUP BY ${counterNameExpr}
+         ORDER BY subProductCount DESC, name ASC`,
+        [batchId],
+      ),
+      pool.execute(
+        `SELECT
+           id,
+           product,
+           sub_product AS subProduct,
+           counter_name AS counterName,
+           tag_packet_no AS tagPacketNo
+         ${batchProductsFrom}
+         ORDER BY id DESC
+         LIMIT 10`,
+        [batchId],
+      ),
+    ]);
 
-  const [byProductRows] = await pool.execute(
-    `SELECT
-       product AS name,
-       COUNT(DISTINCT sub_product) AS subProductCount,
-       COUNT(*) AS tagCount,
-       COALESCE(SUM(pieces), 0) AS pieceCount
-     FROM products
-     WHERE ${baseWhere}
-     GROUP BY product
-     ORDER BY pieceCount DESC, product ASC`,
-    [batchId],
-  );
-
-  const [byCounterRows] = await pool.execute(
-    `SELECT
-       ${counterNameExpr} AS name,
-       COUNT(DISTINCT CONCAT(product, '|', sub_product)) AS subProductCount,
-       COUNT(DISTINCT product) AS productCount,
-       COUNT(*) AS tagCount
-     FROM products
-     WHERE ${baseWhere}
-     GROUP BY ${counterNameExpr}
-     ORDER BY subProductCount DESC, name ASC`,
-    [batchId],
-  );
-
-  const [recentRows] = await pool.execute(
-    `SELECT
-       id,
-       product,
-       sub_product AS subProduct,
-       counter_name AS counterName,
-       tag_packet_no AS tagPacketNo
-     FROM products
-     WHERE batch_id = ?
-     ORDER BY id DESC
-     LIMIT 10`,
-    [batchId],
-  );
+  const totalsRow = totalsRows[0];
 
   return {
     batch,
@@ -167,22 +316,26 @@ const getInventorySummary = async () => {
 };
 
 const getVerificationSummary = async () => {
-  const [rows] = await pool.execute(
-    `SELECT
-       COALESCE(SUM(found_count), 0) AS foundCount,
-       COALESCE(SUM(missing_count), 0) AS missingCount,
-       COALESCE(SUM(new_count), 0) AS newCount,
-       COALESCE(SUM(found_count + missing_count + new_count), 0) AS totalRecords
-     FROM stock_verification`,
-  );
+  const [sumResult, stocktake] = await Promise.all([
+    pool.execute(
+      `SELECT
+         COALESCE(SUM(found_count), 0) AS foundCount,
+         COALESCE(SUM(missing_count), 0) AS missingCount,
+         COALESCE(SUM(new_count), 0) AS newCount,
+         COALESCE(SUM(found_count + missing_count + new_count), 0) AS totalRecords
+       FROM stock_verification`,
+    ),
+    getStocktakeSummary(),
+  ]);
 
-  const row = rows[0] ?? {};
+  const row = sumResult[0][0] ?? {};
 
   return {
     totalFound: Number(row.foundCount ?? 0),
     totalMissing: Number(row.missingCount ?? 0),
     totalNew: Number(row.newCount ?? 0),
     totalTags: Number(row.totalRecords ?? 0),
+    stocktake,
   };
 };
 
@@ -263,8 +416,6 @@ const getTopSoldProducts = async ({ period = "all" } = {}) => {
     })),
   };
 };
-
-const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const toDateKey = (value) => {
   if (value instanceof Date) {
@@ -455,4 +606,5 @@ export default {
   getTopSoldProducts,
   getDayWiseSales,
   getDailyImports,
+  getStocktakeSummary,
 };

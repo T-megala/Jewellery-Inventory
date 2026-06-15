@@ -10,6 +10,7 @@ import authRoutes from "./src/routes/authRoutes.js";
 import userRoutes from "./src/routes/userRoutes.js";
 import { authenticateApi } from "./src/middleware/authMiddleware.js";
 import { errorHandler } from "./src/middleware/errorHandler.js";
+import androidReportsRoutes from "./src/routes/androidReportsRoutes.js";
 
 const app = express();
 
@@ -50,6 +51,7 @@ app.get("/", (req, res) => {
 app.use("/api/v1", authRoutes);
 app.use("/api/v1", productRoutes);
 app.use("/api/v1", stockVerificationRoutes);
+app.use("/api/v1", androidReportsRoutes);
 app.use("/api/v1", authenticateApi);
 app.use("/api/v1", stockVerificationReportRoutes);
 app.use("/api/v1", dropdownRoutes);

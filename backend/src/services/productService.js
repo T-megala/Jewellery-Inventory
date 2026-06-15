@@ -1,6 +1,7 @@
 import pool from "../config/database.js";
 import { getActiveBatchId } from "./productBatchService.js";
 import inventoryDropdownService from "./inventoryDropdownService.js";
+import { batchProductsWhere } from "../utils/productQueryHelper.js";
 
 const formatDateTime = (value) => {
   if (!value) return null;
@@ -46,13 +47,13 @@ const buildSearchClause = (search) => {
 
   return {
     clause: `AND (
-      product LIKE ?
-      OR sub_product LIKE ?
-      OR tag_packet_no LIKE ?
-      OR counter_name LIKE ?
-      OR CAST(tran_no AS CHAR) LIKE ?
-      OR size LIKE ?
-      OR tag_type LIKE ?
+      p.product LIKE ?
+      OR p.sub_product LIKE ?
+      OR p.tag_packet_no LIKE ?
+      OR p.counter_name LIKE ?
+      OR CAST(p.tran_no AS CHAR) LIKE ?
+      OR p.size LIKE ?
+      OR p.tag_type LIKE ?
     )`,
     params: [term, term, term, term, term, term, term],
   };
@@ -73,8 +74,8 @@ const getProductList = async ({ search, page, limit, offset, batchId = null }) =
     buildSearchClause(search);
 
   const baseFrom = `
-    FROM products
-    WHERE batch_id = ?
+    FROM products p
+    WHERE ${batchProductsWhere.replace("batch_id = ?", "p.batch_id = ?")}
     ${searchClause}
   `;
 
@@ -88,11 +89,11 @@ const getProductList = async ({ search, page, limit, offset, batchId = null }) =
 
   const [rows] = await pool.execute(
     `SELECT
-       id, batch_id, tran_no, tran_date, product, sub_product, tag_packet_no,
-       pieces, gross_wt, net_wt, counter_name, size, tag_type,
-       item_pieces, weight_gram, weight_carat, created_at
+       p.id, p.batch_id, p.tran_no, p.tran_date, p.product, p.sub_product, p.tag_packet_no,
+       p.pieces, p.gross_wt, p.net_wt, p.counter_name, p.size, p.tag_type,
+       p.item_pieces, p.weight_gram, p.weight_carat, p.created_at
      ${baseFrom}
-     ORDER BY id DESC
+     ORDER BY p.id DESC
      LIMIT ${limit} OFFSET ${offset}`,
     [activeBatchId, ...searchParams],
   );

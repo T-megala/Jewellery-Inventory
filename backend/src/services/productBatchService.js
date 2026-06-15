@@ -1,5 +1,6 @@
 import pool from '../config/database.js';
 import { hasProductChanged } from '../utils/productBatchHelper.js';
+import { batchProductsWhere } from '../utils/productQueryHelper.js';
 
 const formatDateTime = (value) => {
   if (!value) return null;
@@ -16,29 +17,32 @@ export const getActiveBatchId = async (connection = pool) => {
   return rows[0]?.id ?? null;
 };
 
+/** Every import creates a new active batch; prior batch is deactivated. */
 export const resolveActiveBatch = async (connection, uploadedBy = null) => {
-  const [todayRows] = await connection.execute(
+  const [activeRows] = await connection.execute(
     `SELECT id FROM product_upload_batches
-     WHERE batch_date = CURDATE() AND is_active = 1
+     WHERE is_active = 1
      ORDER BY id DESC
-     LIMIT 1`
+     LIMIT 1`,
   );
 
-  if (todayRows.length > 0) {
-    return { batchId: todayRows[0].id, isNewBatch: false };
-  }
+  const previousBatchId = activeRows[0]?.id ?? null;
 
   await connection.execute(
-    `UPDATE product_upload_batches SET is_active = 0 WHERE is_active = 1`
+    `UPDATE product_upload_batches SET is_active = 0 WHERE is_active = 1`,
   );
 
   const [insertResult] = await connection.execute(
     `INSERT INTO product_upload_batches (batch_date, uploaded_at, uploaded_by, is_active)
      VALUES (CURDATE(), NOW(), ?, 1)`,
-    [uploadedBy]
+    [uploadedBy],
   );
 
-  return { batchId: insertResult.insertId, isNewBatch: true };
+  return {
+    batchId: insertResult.insertId,
+    isNewBatch: true,
+    previousBatchId,
+  };
 };
 
 export const listBatches = async () => {
@@ -98,7 +102,7 @@ export const getBatchProducts = async (batchId, { search, page, limit, offset })
 
   const baseFrom = `
     FROM products p
-    WHERE p.batch_id = ?
+    WHERE ${batchProductsWhere.replace('batch_id = ?', 'p.batch_id = ?')}
     ${searchClause}
   `;
 
@@ -111,7 +115,9 @@ export const getBatchProducts = async (batchId, { search, page, limit, offset })
   const totalPages = totalRecords === 0 ? 0 : Math.ceil(totalRecords / limit);
 
   const [rows] = await pool.execute(
-    `SELECT p.*
+    `SELECT p.id, p.batch_id, p.tran_no, p.tran_date, p.product, p.sub_product,
+            p.tag_packet_no, p.pieces, p.gross_wt, p.net_wt, p.counter_name,
+            p.size, p.tag_type, p.item_pieces, p.weight_gram, p.weight_carat, p.created_at
      ${baseFrom}
      ORDER BY p.id DESC
      LIMIT ${limit} OFFSET ${offset}`,
