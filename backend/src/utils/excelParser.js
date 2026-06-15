@@ -465,7 +465,7 @@ const isDataRow = (row) => {
   const tagNo = String(row.tagPacketNo ?? "").trim();
   const product = String(row.product ?? "").trim();
 
-  if (!tranNo || !tagNo || !product) {
+  if (!tranNo || !product) {
     return false;
   }
 
@@ -473,7 +473,7 @@ const isDataRow = (row) => {
     return false;
   }
 
-  if (/^\d+$/.test(tagNo)) {
+  if (tagNo && /^\d+$/.test(tagNo)) {
     return false;
   }
 
@@ -497,22 +497,26 @@ const mapRawRow = (rawRow, columnMap) => ({
   weightCarat: getCell(rawRow, columnMap.weightCarat),
 });
 
-const toDbRow = (row) => ({
-  tran_no: String(row.tranNo ?? "").trim() || null,
-  tran_date: formatDate(row.tranDate),
-  product: String(row.product).trim(),
-  sub_product: String(row.subProduct).trim(),
-  tag_packet_no: String(row.tagPacketNo).trim(),
-  pieces: toNumber(row.pieces),
-  gross_wt: toNumber(row.grossWt),
-  net_wt: toNumber(row.netWt),
-  counter_name: String(row.counter).trim(),
-  size: String(row.size ?? "").trim() || null,
-  tag_type: String(row.tagType ?? "").trim() || null,
-  item_pieces: toNumber(row.stonePieces),
-  weight_gram: toNumber(row.weightGram),
-  weight_carat: toNumber(row.weightCarat),
-});
+const toDbRow = (row) => {
+  const tagPacketNo = String(row.tagPacketNo ?? "").trim();
+
+  return {
+    tran_no: String(row.tranNo ?? "").trim() || null,
+    tran_date: formatDate(row.tranDate),
+    product: String(row.product).trim(),
+    sub_product: String(row.subProduct ?? "").trim(),
+    tag_packet_no: tagPacketNo || null,
+    pieces: toNumber(row.pieces),
+    gross_wt: toNumber(row.grossWt),
+    net_wt: toNumber(row.netWt),
+    counter_name: String(row.counter ?? "").trim(),
+    size: String(row.size ?? "").trim() || null,
+    tag_type: String(row.tagType ?? "").trim() || null,
+    item_pieces: toNumber(row.stonePieces),
+    weight_gram: toNumber(row.weightGram),
+    weight_carat: toNumber(row.weightCarat),
+  };
+};
 
 export const parseStockExcel = async (buffer) => {
   const fileBuffer = normalizeExcelBuffer(buffer);

@@ -43,17 +43,47 @@ const rowToValues = (batchId, row) => [
 const buildPlaceholders = (rowCount, columnCount) =>
   Array.from({ length: rowCount }, () => `(${Array(columnCount).fill('?').join(', ')})`).join(', ');
 
-const dedupeRowsByTag = (rows) => {
-  const byTag = new Map();
+const buildUntaggedRowKey = (row) =>
+  [
+    row.tran_no,
+    row.product,
+    row.sub_product,
+    row.counter_name,
+  ]
+    .map((value) => String(value ?? "").trim().toLowerCase())
+    .join("|");
+
+const countImportRowTypes = (rows) => {
+  let taggedRows = 0;
+  let untaggedRows = 0;
 
   for (const row of rows) {
-    const tag = String(row.tag_packet_no ?? '').trim();
-    if (tag) {
-      byTag.set(tag, row);
+    if (String(row.tag_packet_no ?? "").trim()) {
+      taggedRows += 1;
+    } else {
+      untaggedRows += 1;
     }
   }
 
-  return [...byTag.values()];
+  return { taggedRows, untaggedRows };
+};
+
+const dedupeImportRows = (rows) => {
+  const byTag = new Map();
+  const byUntaggedKey = new Map();
+
+  for (const row of rows) {
+    const tag = String(row.tag_packet_no ?? "").trim();
+
+    if (tag) {
+      byTag.set(tag.toUpperCase(), row);
+      continue;
+    }
+
+    byUntaggedKey.set(buildUntaggedRowKey(row), row);
+  }
+
+  return [...byTag.values(), ...byUntaggedKey.values()];
 };
 
 /** Keep unique_checks enabled so uk_batch_tag prevents duplicate tags. */
@@ -82,7 +112,7 @@ const bulkInsert = async (connection, batchId, rows) => {
     return;
   }
 
-  const deduped = dedupeRowsByTag(rows);
+  const deduped = dedupeImportRows(rows);
   if (deduped.length === 0) {
     return;
   }
@@ -179,13 +209,16 @@ const importProductsFromExcel = async (
     throw new ApiError(400, error.message);
   }
 
-  const validRows = dedupeRowsByTag(parsed.validRows);
+  const validRows = dedupeImportRows(parsed.validRows);
   const { totalRowsInFile, skipped } = parsed;
+  const { taggedRows, untaggedRows } = countImportRowTypes(validRows);
 
   logImport('excel parse completed', {
     durationMs: Date.now() - parseStartedAt,
     totalRowsInFile,
     validRows: validRows.length,
+    taggedRows,
+    untaggedRows,
     skipped,
   });
 
@@ -199,6 +232,8 @@ const importProductsFromExcel = async (
       batchId: null,
       isNewBatch: false,
       previousBatchId: null,
+      taggedRows: 0,
+      untaggedRows: 0,
     };
   }
 
@@ -277,6 +312,8 @@ const importProductsFromExcel = async (
       totalRowsInFile,
       skipped,
       inserted,
+      taggedRows,
+      untaggedRows,
     });
 
     schedulePostProcessing(batchId, deferPostProcessing);
@@ -291,6 +328,8 @@ const importProductsFromExcel = async (
       updated: 0,
       unchanged: 0,
       validRows: validRows.length,
+      taggedRows,
+      untaggedRows,
       postProcessingDeferred: deferPostProcessing,
     };
   } catch (error) {

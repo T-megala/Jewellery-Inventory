@@ -1,7 +1,7 @@
 import pool from "../config/database.js";
 import { getActiveBatchId } from "./productBatchService.js";
 import inventoryDropdownService from "./inventoryDropdownService.js";
-import { batchProductsWhere } from "../utils/productQueryHelper.js";
+import { batchAllProductsWhere } from "../utils/productQueryHelper.js";
 
 const formatDateTime = (value) => {
   if (!value) return null;
@@ -75,7 +75,7 @@ const getProductList = async ({ search, page, limit, offset, batchId = null }) =
 
   const baseFrom = `
     FROM products p
-    WHERE ${batchProductsWhere.replace("batch_id = ?", "p.batch_id = ?")}
+    WHERE ${batchAllProductsWhere.replace("batch_id = ?", "p.batch_id = ?")}
     ${searchClause}
   `;
 

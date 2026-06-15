@@ -11,6 +11,7 @@ router.get('/dashboard/day-wise-sales', asyncHandler(dashboardController.getDayW
 router.get('/dashboard/daily-imports', asyncHandler(dashboardController.getDailyImports));
 router.get('/dashboard/stock-movement', asyncHandler(dashboardController.getStockMovement));
 router.get('/dashboard/branch-comparison', asyncHandler(dashboardController.getBranchComparison));
+router.get('/dashboard/smart-alerts', asyncHandler(dashboardController.getSmartAlerts));
 router.get('/dashboard', asyncHandler(dashboardController.getDashboard));
 
 export default router;

@@ -4,10 +4,21 @@ export const TAG_FILTER = `
   AND TRIM(tag_packet_no) != ''
 `;
 
+/** Any importable inventory row in a batch (tagged or untagged). */
+export const BATCH_ROW_FILTER = `
+  product IS NOT NULL
+  AND TRIM(product) != ''
+`;
+
 /** Fast path: one row per tag when uk_batch_tag is enforced (post-import fix). */
 export const batchProductsWhere = `
   batch_id = ?
   AND ${TAG_FILTER}
+`;
+
+export const batchAllProductsWhere = `
+  batch_id = ?
+  AND ${BATCH_ROW_FILTER}
 `;
 
 export const batchProductsFrom = `
@@ -15,8 +26,16 @@ export const batchProductsFrom = `
   WHERE ${batchProductsWhere}
 `;
 
+export const batchAllProductsFrom = `
+  FROM products
+  WHERE ${batchAllProductsWhere}
+`;
+
 export default {
   TAG_FILTER,
+  BATCH_ROW_FILTER,
   batchProductsWhere,
+  batchAllProductsWhere,
   batchProductsFrom,
+  batchAllProductsFrom,
 };

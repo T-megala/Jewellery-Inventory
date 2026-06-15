@@ -1,4 +1,5 @@
 import dashboardService from '../services/dashboardService.js';
+import smartAlertsService from '../services/smartAlertsService.js';
 import { getRequestParam } from '../utils/requestParams.js';
 
 const sendSuccess = (res, data, message = 'Data fetched successfully') => {
@@ -84,4 +85,18 @@ export const getStockMovement = async (req, res) => {
 export const getBranchComparison = async (req, res) => {
   const data = await dashboardService.getBranchComparison();
   sendSuccess(res, data, 'Branch comparison fetched successfully');
+};
+
+export const getSmartAlerts = async (req, res) => {
+  const consecutiveStocktakes = getRequestParam(req, 'consecutiveStocktakes');
+  const accuracyDropThreshold = getRequestParam(req, 'accuracyDropThreshold');
+  const limit = getRequestParam(req, 'limit');
+
+  const result = await smartAlertsService.getSmartAlerts({
+    consecutiveStocktakes,
+    accuracyDropThreshold,
+    limit,
+  });
+
+  sendSuccess(res, result, 'Smart alerts fetched successfully');
 };

@@ -2,7 +2,7 @@ import pool from "../config/database.js";
 import ApiError from "../utils/ApiError.js";
 import { getActiveBatchId } from "./productBatchService.js";
 import dailySalesSummaryService from "./dailySalesSummaryService.js";
-import { batchProductsFrom } from "../utils/productQueryHelper.js";
+import { batchProductsFrom, batchAllProductsFrom } from "../utils/productQueryHelper.js";
 import { TAG_EXPR } from "../utils/verificationScope.js";
 
 const PRODUCT_TAG_FILTER = `
@@ -38,6 +38,8 @@ const toDateKey = (value) => {
 
 const emptyTotals = () => ({
   totalTags: 0,
+  taggedTags: 0,
+  untaggedTags: 0,
   totalPieces: 0,
   totalGrossWt: 0,
   totalNetWt: 0,
@@ -644,13 +646,25 @@ const getInventorySummary = async () => {
       pool.execute(
         `SELECT
            COUNT(*) AS totalTags,
+           SUM(
+             CASE
+               WHEN tag_packet_no IS NOT NULL AND TRIM(tag_packet_no) != '' THEN 1
+               ELSE 0
+             END
+           ) AS taggedTags,
+           SUM(
+             CASE
+               WHEN tag_packet_no IS NULL OR TRIM(tag_packet_no) = '' THEN 1
+               ELSE 0
+             END
+           ) AS untaggedTags,
            COALESCE(SUM(pieces), 0) AS totalPieces,
            COALESCE(SUM(gross_wt), 0) AS totalGrossWt,
            COALESCE(SUM(net_wt), 0) AS totalNetWt,
            COUNT(DISTINCT product) AS productGroups,
            COUNT(DISTINCT CONCAT(product, '|', sub_product)) AS subProducts,
            COUNT(DISTINCT ${counterNameExpr}) AS counters
-         ${batchProductsFrom}`,
+         ${batchAllProductsFrom}`,
         [batchId],
       ),
       pool.execute(
@@ -659,7 +673,7 @@ const getInventorySummary = async () => {
            COUNT(DISTINCT sub_product) AS subProductCount,
            COUNT(*) AS tagCount,
            COALESCE(SUM(pieces), 0) AS pieceCount
-         ${batchProductsFrom}
+         ${batchAllProductsFrom}
          GROUP BY product
          ORDER BY pieceCount DESC, product ASC`,
         [batchId],
@@ -670,7 +684,7 @@ const getInventorySummary = async () => {
            COUNT(DISTINCT CONCAT(product, '|', sub_product)) AS subProductCount,
            COUNT(DISTINCT product) AS productCount,
            COUNT(*) AS tagCount
-         ${batchProductsFrom}
+         ${batchAllProductsFrom}
          GROUP BY ${counterNameExpr}
          ORDER BY subProductCount DESC, name ASC`,
         [batchId],
@@ -682,7 +696,7 @@ const getInventorySummary = async () => {
            sub_product AS subProduct,
            counter_name AS counterName,
            tag_packet_no AS tagPacketNo
-         ${batchProductsFrom}
+         ${batchAllProductsFrom}
          ORDER BY id DESC
          LIMIT 10`,
         [batchId],
@@ -695,6 +709,8 @@ const getInventorySummary = async () => {
     batch,
     totals: {
       totalTags: Number(totalsRow.totalTags ?? 0),
+      taggedTags: Number(totalsRow.taggedTags ?? 0),
+      untaggedTags: Number(totalsRow.untaggedTags ?? 0),
       totalPieces: Number(totalsRow.totalPieces ?? 0),
       totalGrossWt: Number(totalsRow.totalGrossWt ?? 0),
       totalNetWt: Number(totalsRow.totalNetWt ?? 0),
