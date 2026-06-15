@@ -143,6 +143,78 @@ function formatQty(value) {
   return numeric.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+function formatLastStocktake(value) {
+  if (!value) return 'No stocktake yet'
+
+  const normalized = String(value).includes('T') ? value : String(value).replace(' ', 'T')
+  const date = new Date(normalized)
+  if (Number.isNaN(date.getTime())) return 'No stocktake yet'
+
+  const now = new Date()
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  const diffDays = Math.round((startOfToday - startOfDate) / 86400000)
+
+  const time = date.toLocaleTimeString('en-IN', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+
+  let dayLabel
+  if (diffDays === 0) dayLabel = 'today'
+  else if (diffDays === 1) dayLabel = 'yesterday'
+  else dayLabel = date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+
+  return `Last: ${dayLabel} ${time}`
+}
+
+function buildOverviewCards(overview = {}) {
+  const scanRate = Number(overview.scanRate ?? 0)
+  const discrepancies = Number(overview.discrepancies ?? 0)
+
+  return [
+    {
+      label: 'Categories',
+      value: formatCount(overview.categories ?? 0),
+      hint: 'Product types',
+      accent: 'gold-light',
+    },
+    {
+      label: 'Sub-products',
+      value: formatCount(overview.subProducts ?? 0),
+      hint: 'Variants',
+      accent: 'gold-medium',
+    },
+    {
+      label: 'Total items (ERP)',
+      value: formatCount(overview.totalItemsErp ?? 0),
+      hint: 'EOD sync',
+      accent: 'gold-dark',
+    },
+    {
+      label: 'Items scanned',
+      value: formatCount(overview.itemsScanned ?? 0),
+      hint: scanRate > 0 ? `▲ ${scanRate.toFixed(2)}% scan rate` : 'No scan yet',
+      hintTone: scanRate > 0 ? 'positive' : 'neutral',
+      accent: 'gold',
+    },
+    {
+      label: 'Discrepancies',
+      value: formatCount(discrepancies),
+      hint: discrepancies > 0 ? '▼ Review needed' : 'All matched',
+      hintTone: discrepancies > 0 ? 'negative' : 'positive',
+      accent: 'gold-deep',
+    },
+    {
+      label: 'Stocktakes / month',
+      value: formatCount(overview.stocktakesThisMonth ?? 0),
+      hint: formatLastStocktake(overview.lastStocktakeAt),
+      accent: 'gold-rich',
+    },
+  ]
+}
+
 function formatHeatmapCount(value) {
   const num = Number(value || 0)
   if (!num) return '0'
@@ -1012,77 +1084,6 @@ function AnalyticsTile({ title, subtitle, children, wide = false, paired = false
   )
 }
 
-function StatIcon({ type }) {
-  if (type === 'product') {
-    return (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-14L4 7m8 4v10M4 7v10l8 4" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-      </svg>
-    )
-  }
-  if (type === 'subproduct') {
-    return (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M4 7l8-4 8 4-8 4-8-4z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-        <path d="M4 12l8 4 8-4M4 17l8 4 8-4" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-      </svg>
-    )
-  }
-  if (type === 'pieces') {
-    return (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <rect x="4" y="4" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
-        <rect x="13" y="4" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
-        <rect x="4" y="13" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
-        <rect x="13" y="13" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
-      </svg>
-    )
-  }
-  if (type === 'groups') {
-    return (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M4 7l8-4 8 4-8 4-8-4z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-        <path d="M4 12l8 4 8-4M4 17l8 4 8-4" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-      </svg>
-    )
-  }
-  if (type === 'counter') {
-    return (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M3 9h18M5 9V19a1 1 0 001 1h3v-6h6v6h3a1 1 0 001-1V9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    )
-  }
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-14L4 7m8 4v10M4 7v10l8 4" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
-function buildStats(totals) {
-  return [
-    {
-      label: 'Item Descriptions',
-      value: formatCount(totals.itemDescriptions ?? totals.productGroups ?? 0),
-      hint: 'Distinct item descriptions in stock',
-      icon: <StatIcon type="product" />,
-    },
-    {
-      label: 'Total Barcodes',
-      value: formatCount(totals.totalBarcodes ?? totals.totalTags ?? 0),
-      hint: 'Barcode rows in active batch',
-      icon: <StatIcon type="groups" />,
-    },
-    {
-      label: 'Total Closing Bal.Qty',
-      value: formatQty(totals.totalQty ?? totals.totalPieces ?? 0),
-      hint: 'Sum of closing balance quantity',
-      icon: <StatIcon type="pieces" />,
-    },
-  ]
-}
-
 function DashboardSkeleton() {
   return (
     <div className="dashboard">
@@ -1113,22 +1114,18 @@ function DashboardSkeleton() {
         </div>
       </section>
 
-      {/* Section header skeleton */}
+      {/* Overview skeleton */}
       <div className="skeleton-section-header" aria-hidden="true">
         <span className="skeleton skeleton-section-header__title" />
         <span className="skeleton skeleton-section-header__badge" />
       </div>
 
-      {/* Stat cards skeleton */}
-      <div className="skeleton-stats" aria-hidden="true">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="skeleton-stat">
-            <div className="skeleton-stat__top">
-              <span className="skeleton skeleton-stat__icon" />
-              <span className="skeleton skeleton-stat__label" />
-            </div>
-            <span className="skeleton skeleton-stat__value" />
-            <span className="skeleton skeleton-stat__hint" />
+      <div className="skeleton-overview" aria-hidden="true">
+        {Array.from({ length: 6 }, (_, i) => (
+          <div key={i} className="skeleton-overview-card">
+            <span className="skeleton skeleton-overview-card__label" />
+            <span className="skeleton skeleton-overview-card__value" />
+            <span className="skeleton skeleton-overview-card__hint" />
           </div>
         ))}
       </div>
@@ -1138,6 +1135,7 @@ function DashboardSkeleton() {
 
 export default function Dashboard() {
   const [summary, setSummary] = useState(null)
+  const [overview, setOverview] = useState(null)
   const [topSoldProducts, setTopSoldProducts] = useState([])
   const [topSoldNotice, setTopSoldNotice] = useState('')
   const [loading, setLoading] = useState(true)
@@ -1160,15 +1158,17 @@ export default function Dashboard() {
       setError('')
 
       try {
-        const { inventory } = await fetchDashboard()
+        const { inventory, overview: overviewData } = await fetchDashboard()
 
         if (!cancelled) {
           setSummary(inventory)
+          setOverview(overviewData)
         }
       } catch (err) {
         if (!cancelled) {
           setError(err.message || 'Failed to load inventory summary.')
           setSummary(null)
+          setOverview(null)
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -1282,7 +1282,7 @@ export default function Dashboard() {
     subProducts: 0,
   }
 
-  const stats = buildStats(totals)
+  const overviewCards = buildOverviewCards(overview ?? {})
   const byDescription = summary?.byDescription ?? summary?.byProduct ?? []
   const batch = summary?.batch
   const topSoldBarData = useMemo(
@@ -1364,28 +1364,30 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* Key Metrics */}
+      {/* Overview — 6 key metrics from backend */}
       <div className="module-header">
         <div className="module-header__main">
-          <h2>Inventory Overview</h2>
+          <h2>Overview</h2>
         </div>
         <span className="module-header__badge">Live Data</span>
       </div>
 
-      <div className="dashboard-stats">
-        {stats.map((stat) => (
-          <div key={stat.label} className="dashboard-stat">
-            <div className="dashboard-stat__top">
-              <div className="dashboard-stat__icon">{stat.icon}</div>
-              <p className="dashboard-stat__label">{stat.label}</p>
-            </div>
-            <p className="dashboard-stat__value">{stat.value}</p>
-            <p className="dashboard-stat__hint">{stat.hint}</p>
+      <div className="dashboard-overview">
+        {overviewCards.map((card) => (
+          <div
+            key={card.label}
+            className={`dashboard-overview-card dashboard-overview-card--${card.accent}`}
+          >
+            <p className="dashboard-overview-card__label">{card.label}</p>
+            <p className="dashboard-overview-card__value">{card.value}</p>
+            <p className={`dashboard-overview-card__hint${card.hintTone ? ` dashboard-overview-card__hint--${card.hintTone}` : ''}`}>
+              {card.hint}
+            </p>
           </div>
         ))}
       </div>
 
-      {/* Analytics */}
+      {/* Stock Analytics charts */}
       <section className="dashboard-analytics">
         <div className="module-header">
           <div className="module-header__main">

@@ -7,6 +7,17 @@ const EMPTY_VERIFICATION = {
   totalTags: 0,
 };
 
+const EMPTY_OVERVIEW = {
+  categories: 0,
+  subProducts: 0,
+  totalItemsErp: 0,
+  itemsScanned: 0,
+  discrepancies: 0,
+  stocktakesThisMonth: 0,
+  scanRate: 0,
+  lastStocktakeAt: null,
+};
+
 export function fetchInventorySummary() {
   return apiFetch('/products/summary');
 }
@@ -25,6 +36,7 @@ export async function fetchDashboard() {
   return {
     inventory: data.inventory ?? null,
     verification: data.verification ?? { ...EMPTY_VERIFICATION },
+    overview: data.overview ?? { ...EMPTY_OVERVIEW },
   };
 }
 
