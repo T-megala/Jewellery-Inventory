@@ -946,6 +946,14 @@
   filter: drop-shadow(0 2px 6px rgba(184, 134, 11, 0.14));
 }
 
+.trend-line-chart--filled .recharts-line-curve {
+  filter: none;
+}
+
+.trend-line-chart--filled .recharts-cartesian-grid-horizontal line {
+  stroke: #ebe4d8;
+}
+
 .trend-line-chart .recharts-label-list text {
   fill: #8b6914 !important;
   font-size: 11px !important;

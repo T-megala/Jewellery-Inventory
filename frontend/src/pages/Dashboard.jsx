@@ -4,6 +4,7 @@ import {
   Area,
   Bar,
   BarChart,
+  CartesianGrid,
   Cell,
   ComposedChart,
   LabelList,
@@ -501,9 +502,12 @@ function TrendLineXTick({ x, y, payload, chartData, labelKey = 'dayShort', index
   )
 }
 
-function TrendLineDot({ cx, cy, payload, dotOnImportOnly = false }) {
+function TrendLineDot({ cx, cy, payload, dotOnImportOnly = false, uniformDots = false }) {
   if (cx == null || cy == null || !payload) return null
   if (dotOnImportOnly && !payload.hasImport) return null
+  if (uniformDots) {
+    return <circle cx={cx} cy={cy} r={5} fill="#d4af37" />
+  }
   const color = DAY_SALES_BAR_COLORS[payload.dayType] || DAY_SALES_BAR_COLORS.weekday
   const radius = payload.isToday ? 7 : 6
   return <circle cx={cx} cy={cy} r={radius} fill={color} stroke="#fff" strokeWidth={2.5} />
@@ -543,6 +547,7 @@ function JewelleryTrendLineChart({
   legendPrimaryLabel,
   showValueLabels,
   showArea = false,
+  uniformDots = false,
   dotOnImportOnly = false,
 }) {
   const isMonth = period === 'month'
@@ -550,9 +555,10 @@ function JewelleryTrendLineChart({
   const showLabels = showValueLabels ?? !isMonth
   const xTickInterval = isMonth ? Math.max(0, Math.floor(chartData.length / 6) - 1) : 0
   const gradientId = `trend-fill-${dataKey}`
+  const curveType = showArea ? 'natural' : 'monotone'
 
   return (
-    <div className="trend-line-chart">
+    <div className={`trend-line-chart${showArea ? ' trend-line-chart--filled' : ''}`}>
       <ResponsiveContainer width="100%" height={280}>
         <ComposedChart
           data={chartData}
@@ -561,15 +567,19 @@ function JewelleryTrendLineChart({
           {showArea && (
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#d4af37" stopOpacity={0.16} />
-                <stop offset="100%" stopColor="#d4af37" stopOpacity={0} />
+                <stop offset="0%" stopColor="#d4af37" stopOpacity={0.32} />
+                <stop offset="85%" stopColor="#f5ecd4" stopOpacity={0.12} />
+                <stop offset="100%" stopColor="#faf7ef" stopOpacity={0} />
               </linearGradient>
             </defs>
+          )}
+          {showArea && (
+            <CartesianGrid stroke="#ebe4d8" vertical={false} horizontal />
           )}
           <XAxis
             dataKey={xLabelKey}
             tick={(props) => <TrendLineXTick {...props} chartData={chartData} labelKey={xLabelKey} />}
-            axisLine={false}
+            axisLine={showArea ? { stroke: '#e0d8cc' } : false}
             tickLine={false}
             interval={xTickInterval}
             height={36}
@@ -589,7 +599,7 @@ function JewelleryTrendLineChart({
           />
           {showArea && (
             <Area
-              type="monotone"
+              type={curveType}
               dataKey={dataKey}
               fill={`url(#${gradientId})`}
               stroke="none"
@@ -597,12 +607,12 @@ function JewelleryTrendLineChart({
             />
           )}
           <Line
-            type="monotone"
+            type={curveType}
             dataKey={dataKey}
-            stroke="#c9a227"
-            strokeWidth={2}
-            dot={<TrendLineDot dotOnImportOnly={dotOnImportOnly} />}
-            activeDot={{ r: 8, stroke: '#fff', strokeWidth: 2.5, fill: '#b8860b' }}
+            stroke="#d4af37"
+            strokeWidth={showArea ? 2.5 : 2}
+            dot={<TrendLineDot dotOnImportOnly={dotOnImportOnly} uniformDots={uniformDots} />}
+            activeDot={{ r: 7, stroke: '#fff', strokeWidth: 2, fill: '#d4af37' }}
           >
             {showLabels && (
               <LabelList
@@ -654,63 +664,22 @@ function DaySalesTooltip({ active, payload }) {
   )
 }
 
-function DayWiseSalesBarChart({ data }) {
+function DayWiseSalesLineChart({ data }) {
   const chartData = buildWeekChartRows(data)
   const hasSales = chartData.some((row) => row.soldPieces > 0)
 
   if (!hasSales) return <p className="analytics-empty">No sales data for this period.</p>
 
   return (
-    <div className="day-sales-bar-chart">
-      <ResponsiveContainer width="100%" height={280}>
-        <BarChart data={chartData} margin={{ top: 28, right: 8, left: 0, bottom: 8 }}>
-          <XAxis
-            dataKey="dayShort"
-            tick={(props) => <TrendLineXTick {...props} chartData={chartData} labelKey="dayShort" />}
-            axisLine={false}
-            tickLine={false}
-            interval={0}
-            height={36}
-          />
-          <YAxis
-            tick={{ fontSize: 11, fill: '#9a8b78' }}
-            axisLine={false}
-            tickLine={false}
-            allowDecimals={false}
-            width={44}
-          />
-          <Tooltip content={<DaySalesTooltip />} cursor={{ fill: 'rgba(184, 134, 11, 0.08)' }} />
-          <Bar dataKey="soldPieces" radius={[10, 10, 0, 0]} maxBarSize={48}>
-            {chartData.map((entry) => (
-              <Cell key={entry.date} fill={DAY_SALES_BAR_COLORS[entry.dayType]} />
-            ))}
-            <LabelList
-              dataKey="soldPieces"
-              position="top"
-              formatter={(value) => (value > 0 ? formatCount(value) : '')}
-              fill="#8b6914"
-              fontSize={11}
-              fontWeight={700}
-            />
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-
-      <div className="day-sales-legend">
-        <span className="day-sales-legend__item">
-          <i className="day-sales-legend__swatch day-sales-legend__swatch--weekday" />
-          Sold (pieces)
-        </span>
-        <span className="day-sales-legend__item">
-          <i className="day-sales-legend__swatch day-sales-legend__swatch--saturday" />
-          Saturday
-        </span>
-        <span className="day-sales-legend__item">
-          <i className="day-sales-legend__swatch day-sales-legend__swatch--today" />
-          Today
-        </span>
-      </div>
-    </div>
+    <JewelleryTrendLineChart
+      chartData={chartData}
+      period="week"
+      dataKey="soldPieces"
+      tooltip={DaySalesTooltip}
+      legendPrimaryLabel="Sold (pieces)"
+      showArea
+      uniformDots
+    />
   )
 }
 
@@ -908,8 +877,11 @@ function DailyImportTooltip({ active, payload }) {
   )
 }
 
-function DailyImportsLineChart({ data }) {
-  const chartData = buildDailyImportWeekRows(data)
+function DailyImportsBarChart({ data }) {
+  const chartData = buildDailyImportWeekRows(data).map((row) => ({
+    ...row,
+    barStock: row.hasImport ? row.totalStock : 0,
+  }))
   const hasImports = (data || []).length > 0
 
   if (!hasImports) {
@@ -917,14 +889,56 @@ function DailyImportsLineChart({ data }) {
   }
 
   return (
-    <JewelleryTrendLineChart
-      chartData={chartData}
-      period="week"
-      dataKey="totalStock"
-      tooltip={DailyImportTooltip}
-      legendPrimaryLabel="Stock per batch"
-      dotOnImportOnly
-    />
+    <div className="day-sales-bar-chart">
+      <ResponsiveContainer width="100%" height={280}>
+        <BarChart data={chartData} margin={{ top: 28, right: 8, left: 0, bottom: 8 }}>
+          <XAxis
+            dataKey="dayShort"
+            tick={(props) => <TrendLineXTick {...props} chartData={chartData} labelKey="dayShort" />}
+            axisLine={false}
+            tickLine={false}
+            interval={0}
+            height={36}
+          />
+          <YAxis
+            tick={{ fontSize: 11, fill: '#9a8b78' }}
+            axisLine={false}
+            tickLine={false}
+            allowDecimals={false}
+            width={52}
+          />
+          <Tooltip content={<DailyImportTooltip />} cursor={{ fill: 'rgba(184, 134, 11, 0.08)' }} />
+          <Bar dataKey="barStock" radius={[10, 10, 0, 0]} maxBarSize={48}>
+            {chartData.map((entry) => (
+              <Cell key={entry.date} fill={DAY_SALES_BAR_COLORS[entry.dayType]} />
+            ))}
+            <LabelList
+              dataKey="barStock"
+              position="top"
+              formatter={(value) => (value > 0 ? formatCount(value) : '')}
+              fill="#8b6914"
+              fontSize={11}
+              fontWeight={700}
+            />
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+
+      <div className="day-sales-legend">
+        <span className="day-sales-legend__item">
+          <i className="day-sales-legend__swatch day-sales-legend__swatch--weekday" />
+          Stock per batch
+        </span>
+        <span className="day-sales-legend__item">
+          <i className="day-sales-legend__swatch day-sales-legend__swatch--saturday" />
+          Saturday
+        </span>
+        <span className="day-sales-legend__item">
+          <i className="day-sales-legend__swatch day-sales-legend__swatch--today" />
+          Today
+        </span>
+      </div>
+    </div>
   )
 }
 
@@ -1046,7 +1060,7 @@ function DailyImportsCard({
       <div className="analytics-tile__body day-sales-card__body">
         {loading && <p className="analytics-empty">Loading daily imports…</p>}
         {!loading && error && <p className="analytics-empty">{error}</p>}
-        {!loading && !error && period === 'week' && <DailyImportsLineChart data={data} />}
+        {!loading && !error && period === 'week' && <DailyImportsBarChart data={data} />}
         {!loading && !error && period === 'month' && <DailyImportsCalendar data={data} />}
       </div>
     </article>
@@ -1110,7 +1124,7 @@ function DayWiseSalesCard({
       <div className="analytics-tile__body day-sales-card__body">
         {loading && <p className="analytics-empty">Loading day-wise sales…</p>}
         {!loading && error && <p className="analytics-empty">{error}</p>}
-        {!loading && !error && period === 'week' && <DayWiseSalesBarChart data={data} />}
+        {!loading && !error && period === 'week' && <DayWiseSalesLineChart data={data} />}
         {!loading && !error && period === 'month' && <DayWiseSalesHeatmap data={data} />}
       </div>
     </article>

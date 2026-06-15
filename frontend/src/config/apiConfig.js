@@ -5,7 +5,7 @@
  *   'live'  → https://devjeweltrack.2cqr.in/api/v1
  */
 
-export const API_MODE = 'live' // 'local' or 'live'
+export const API_MODE = 'local' // 'local' or 'live'
 
 const API_ORIGINS = {
   local: 'http://localhost:5005',
