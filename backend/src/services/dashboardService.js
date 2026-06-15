@@ -3,6 +3,7 @@ import ApiError from "../utils/ApiError.js";
 import { getActiveBatchId } from "./productBatchService.js";
 import dailySalesSummaryService from "./dailySalesSummaryService.js";
 import { batchProductsFrom } from "../utils/productQueryHelper.js";
+import { TAG_EXPR } from "../utils/verificationScope.js";
 
 const PRODUCT_TAG_FILTER = `
   tag_packet_no IS NOT NULL
@@ -24,6 +25,15 @@ const formatDate = (value) => {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
   return date.toISOString().slice(0, 10);
+};
+
+const toDateKey = (value) => {
+  if (value instanceof Date) {
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+  }
+
+  return String(value).slice(0, 10);
 };
 
 const emptyTotals = () => ({
@@ -124,6 +134,126 @@ const calculateAccuracyPercent = (foundCount, totalExpected) => {
   }
 
   return Number(((foundCount / totalExpected) * 100).toFixed(1));
+};
+
+const LOCATION_NAME_EXPR = `CASE
+  WHEN counter_name IS NULL OR TRIM(counter_name) = '' THEN 'Unassigned'
+  ELSE TRIM(counter_name)
+END`;
+
+const buildLocationLabel = (locationName, categoryName) => {
+  if (!categoryName || categoryName === locationName) {
+    return locationName;
+  }
+
+  return `${locationName} — ${categoryName}`;
+};
+
+const pickDominantProductByLocation = (rows) => {
+  const map = new Map();
+
+  for (const row of rows) {
+    const location = row.location;
+    const tagCount = Number(row.tagCount ?? 0);
+    const existing = map.get(location);
+
+    if (!existing || tagCount > existing.tagCount) {
+      map.set(location, {
+        product: row.product,
+        tagCount,
+      });
+    }
+  }
+
+  return map;
+};
+
+const emptyCounterAccuracy = () => ({
+  verificationDay: null,
+  locations: [],
+});
+
+const getCounterAccuracy = async () => {
+  const [batchId, latestDayRows] = await Promise.all([
+    getActiveBatchId(),
+    pool.execute(
+      `SELECT MAX(verification_day) AS verificationDay
+       FROM stock_verification`,
+    ),
+  ]);
+
+  const verificationDay = latestDayRows[0][0]?.verificationDay ?? null;
+
+  if (!batchId || !verificationDay) {
+    return emptyCounterAccuracy();
+  }
+
+  const verificationDayKey = toDateKey(verificationDay);
+
+  const [[expectedRows], [foundRows], [productRows]] = await Promise.all([
+    pool.execute(
+      `SELECT
+         ${LOCATION_NAME_EXPR} AS location,
+         COUNT(DISTINCT ${TAG_EXPR}) AS expected
+       ${batchProductsFrom}
+       GROUP BY ${LOCATION_NAME_EXPR}
+       ORDER BY expected DESC, location ASC`,
+      [batchId],
+    ),
+    pool.execute(
+      `SELECT
+         CASE
+           WHEN svd.center_name IS NULL OR TRIM(svd.center_name) = '' THEN 'Unassigned'
+           ELSE TRIM(svd.center_name)
+         END AS location,
+         COUNT(DISTINCT svd.tag_no) AS found
+       FROM stock_verification_details svd
+       INNER JOIN stock_verification sv ON sv.id = svd.verification_id
+       WHERE sv.verification_day = ?
+         AND svd.status = 'FOUND'
+       GROUP BY location
+       ORDER BY found DESC, location ASC`,
+      [verificationDay],
+    ),
+    pool.execute(
+      `SELECT
+         ${LOCATION_NAME_EXPR} AS location,
+         product,
+         COUNT(*) AS tagCount
+       ${batchProductsFrom}
+       GROUP BY ${LOCATION_NAME_EXPR}, product
+       ORDER BY location ASC, tagCount DESC`,
+      [batchId],
+    ),
+  ]);
+
+  const foundByLocation = new Map(
+    foundRows.map((row) => [row.location, Number(row.found ?? 0)]),
+  );
+  const dominantProductByLocation = pickDominantProductByLocation(productRows);
+
+  const locations = expectedRows.map((row) => {
+    const name = row.location;
+    const expected = Number(row.expected ?? 0);
+    const found = foundByLocation.get(name) ?? 0;
+    const missing = Math.max(expected - found, 0);
+    const dominantProduct = dominantProductByLocation.get(name)?.product ?? null;
+
+    return {
+      name,
+      label: buildLocationLabel(name, dominantProduct),
+      category: dominantProduct,
+      expected,
+      found,
+      missing,
+      accuracyPercent: calculateAccuracyPercent(found, expected),
+    };
+  });
+
+  return {
+    verificationDay: verificationDayKey,
+    locations,
+  };
 };
 
 const isAllScopeRow = (row) =>
@@ -595,7 +725,7 @@ const getInventorySummary = async () => {
 };
 
 const getVerificationSummary = async () => {
-  const [sumResult, stocktake] = await Promise.all([
+  const [sumResult, stocktake, counterAccuracy] = await Promise.all([
     pool.execute(
       `SELECT
          COALESCE(SUM(found_count), 0) AS foundCount,
@@ -605,6 +735,7 @@ const getVerificationSummary = async () => {
        FROM stock_verification`,
     ),
     getStocktakeSummary(),
+    getCounterAccuracy(),
   ]);
 
   const row = sumResult[0][0] ?? {};
@@ -615,6 +746,7 @@ const getVerificationSummary = async () => {
     totalNew: Number(row.newCount ?? 0),
     totalTags: Number(row.totalRecords ?? 0),
     stocktake,
+    counterAccuracy,
   };
 };
 
@@ -694,15 +826,6 @@ const getTopSoldProducts = async ({ period = "all" } = {}) => {
       soldCount: Number(row.soldCount ?? 0),
     })),
   };
-};
-
-const toDateKey = (value) => {
-  if (value instanceof Date) {
-    const pad = (n) => String(n).padStart(2, "0");
-    return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
-  }
-
-  return String(value).slice(0, 10);
 };
 
 const formatDayLabel = (batchDate) => {
@@ -887,4 +1010,5 @@ export default {
   getDailyImports,
   getStocktakeSummary,
   getStocktakeHistory,
+  getCounterAccuracy,
 };
