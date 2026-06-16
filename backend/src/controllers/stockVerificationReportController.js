@@ -1,5 +1,6 @@
 import ApiError from "../utils/ApiError.js";
 import stockVerificationReportService from "../services/stockVerificationReportService.js";
+import androidScanReportService from "../services/androidScanReportService.js";
 import { getRequestParam } from "../utils/requestParams.js";
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -142,5 +143,40 @@ export const getStockVerificationReport = async (req, res) => {
     pagination: result.pagination,
     summary: result.summary,
     data: result.data,
+  });
+};
+
+const parseScanId = (req) => {
+  const rawValue = getRequestParam(
+    req,
+    "scanId",
+    "latestStockVerificationId",
+    "latest_scan_id",
+  );
+
+  if (!rawValue) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(String(rawValue), 10);
+
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new ApiError(
+      400,
+      "scanId must be a positive integer when provided",
+    );
+  }
+
+  return parsed;
+};
+
+export const getAndroidScanReport = async (req, res) => {
+  const scanId = parseScanId(req);
+  const result = await androidScanReportService.getAndroidScanReport({ scanId });
+
+  res.status(200).json({
+    success: true,
+    message: "Android scan report fetched successfully",
+    data: result,
   });
 };

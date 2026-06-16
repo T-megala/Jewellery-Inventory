@@ -101,11 +101,13 @@ export const uploadStockVerification = async (req, res) => {
       ? 'Stock verification updated successfully'
       : 'Stock verification data uploaded successfully',
     verificationId: result.verificationId,
+    latestScanId: result.latestScanId,
     reused: result.reused,
     totalExpected: result.totalExpected,
     totalScanned: result.totalScanned,
     foundCount: result.foundCount,
     missingCount: result.missingCount,
     newCount: result.newCount,
+    session: result.session,
   });
 };

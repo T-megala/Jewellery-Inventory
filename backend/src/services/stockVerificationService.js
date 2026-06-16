@@ -97,16 +97,18 @@ const fetchProductDetailsByTags = async (connection, tags, activeBatchId) => {
 const insertDetailRecords = async (
   connection,
   verificationId,
+  latestScanId,
   records,
   status,
 ) => {
   if (records.length === 0) {
-    return;
+    return 0;
   }
 
-  const placeholders = records.map(() => "(?, ?, ?, ?, ?, ?)").join(", ");
+  const placeholders = records.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(", ");
   const values = records.flatMap((record) => [
     verificationId,
+    latestScanId,
     record.tag,
     status,
     record.productName,
@@ -114,25 +116,52 @@ const insertDetailRecords = async (
     record.centerName,
   ]);
 
-  await connection.execute(
+  const [result] = await connection.execute(
     `INSERT INTO stock_verification_details
-      (verification_id, tag_no, status, product_name, sub_product_name, center_name)
+      (verification_id, latest_scan_id, tag_no, status, product_name, sub_product_name, center_name)
      VALUES ${placeholders}`,
     values,
   );
+
+  return Number(result.affectedRows ?? 0);
 };
 
 const insertDetailRecordsBatched = async (
   connection,
   verificationId,
+  latestScanId,
   records,
   status,
 ) => {
+  let inserted = 0;
+
   for (let index = 0; index < records.length; index += DETAIL_BATCH_SIZE) {
     const chunk = records.slice(index, index + DETAIL_BATCH_SIZE);
-    await insertDetailRecords(connection, verificationId, chunk, status);
+    inserted += await insertDetailRecords(
+      connection,
+      verificationId,
+      latestScanId,
+      chunk,
+      status,
+    );
   }
+
+  return inserted;
 };
+
+const fetchExistingTagsForVerification = async (connection, verificationId) => {
+  const [rows] = await connection.execute(
+    `SELECT tag_no
+     FROM stock_verification_details
+     WHERE verification_id = ?`,
+    [verificationId],
+  );
+
+  return new Set(rows.map((row) => normalizeTag(row.tag_no)));
+};
+
+const filterNewDetailRecords = (records, existingTags) =>
+  records.filter((record) => !existingTags.has(record.tag));
 
 const countExpectedTags = async (scope) => {
   const sql = `SELECT COUNT(DISTINCT ${TAG_EXPR}) AS total
@@ -216,10 +245,6 @@ const upsertVerificationHeader = async (
     datetimeMillis,
     scopeLabels,
     totalExpected,
-    scannedCount,
-    foundCount,
-    missingCount,
-    newCount,
   },
 ) => {
   const existingId = await findExistingVerificationId(
@@ -227,20 +252,6 @@ const upsertVerificationHeader = async (
     verificationEpochSeconds,
     scopeLabels,
   );
-
-  const headerValues = [
-    verificationEpochSeconds,
-    verificationEpochSeconds,
-    datetimeMillis,
-    scopeLabels.productName,
-    scopeLabels.subProductName,
-    scopeLabels.centerName,
-    totalExpected,
-    scannedCount,
-    foundCount,
-    missingCount,
-    newCount,
-  ];
 
   if (existingId) {
     await connection.execute(
@@ -252,20 +263,18 @@ const upsertVerificationHeader = async (
            sub_product_name = ?,
            center_name = ?,
            total_expected = ?,
-           total_scanned = ?,
-           found_count = ?,
-           missing_count = ?,
-           new_count = ?,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
-      [...headerValues, existingId],
-    );
-
-    await connection.execute(
-      `DELETE FROM stock_verification_details
-       WHERE verification_id = ?
-         AND status IN ('FOUND', 'NEW')`,
-      [existingId],
+      [
+        verificationEpochSeconds,
+        verificationEpochSeconds,
+        datetimeMillis,
+        scopeLabels.productName,
+        scopeLabels.subProductName,
+        scopeLabels.centerName,
+        totalExpected,
+        existingId,
+      ],
     );
 
     logVerificationDebug("verification-reused", {
@@ -282,8 +291,16 @@ const upsertVerificationHeader = async (
       (verification_date, verification_day, verification_millis, product_name,
        sub_product_name, center_name, total_expected, total_scanned,
        found_count, missing_count, new_count)
-     VALUES (FROM_UNIXTIME(?), DATE(FROM_UNIXTIME(?)), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    headerValues,
+     VALUES (FROM_UNIXTIME(?), DATE(FROM_UNIXTIME(?)), ?, ?, ?, ?, ?, 0, 0, 0, 0)`,
+    [
+      verificationEpochSeconds,
+      verificationEpochSeconds,
+      datetimeMillis,
+      scopeLabels.productName,
+      scopeLabels.subProductName,
+      scopeLabels.centerName,
+      totalExpected,
+    ],
   );
 
   const verificationId = headerResult.insertId;
@@ -295,6 +312,97 @@ const upsertVerificationHeader = async (
   });
 
   return { verificationId, reused: false };
+};
+
+const insertLatestScan = async (
+  connection,
+  {
+    verificationId,
+    verificationEpochSeconds,
+    datetimeMillis,
+    scopeLabels,
+    totalExpected,
+    scannedCount,
+    foundCount,
+    missingCount,
+    newCount,
+  },
+) => {
+  const [result] = await connection.execute(
+    `INSERT INTO latest_stock_verification
+      (verification_id, verification_date, verification_day, verification_millis,
+       product_name, sub_product_name, center_name, total_expected, total_scanned,
+       found_count, missing_count, new_count)
+     VALUES (?, FROM_UNIXTIME(?), DATE(FROM_UNIXTIME(?)), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      verificationId,
+      verificationEpochSeconds,
+      verificationEpochSeconds,
+      datetimeMillis,
+      scopeLabels.productName,
+      scopeLabels.subProductName,
+      scopeLabels.centerName,
+      totalExpected,
+      scannedCount,
+      foundCount,
+      missingCount,
+      newCount,
+    ],
+  );
+
+  return Number(result.insertId);
+};
+
+const refreshSessionHeaderCounts = async (
+  connection,
+  verificationId,
+  totalExpected,
+) => {
+  const [scanResult, foundResult, newResult] = await Promise.all([
+    connection.execute(
+      `SELECT COALESCE(SUM(total_scanned), 0) AS totalScanned
+       FROM latest_stock_verification
+       WHERE verification_id = ?`,
+      [verificationId],
+    ),
+    connection.execute(
+      `SELECT COUNT(DISTINCT tag_no) AS foundCount
+       FROM stock_verification_details
+       WHERE verification_id = ?
+         AND status = 'FOUND'`,
+      [verificationId],
+    ),
+    connection.execute(
+      `SELECT COUNT(DISTINCT tag_no) AS newCount
+       FROM stock_verification_details
+       WHERE verification_id = ?
+         AND status = 'NEW'`,
+      [verificationId],
+    ),
+  ]);
+
+  const totalScanned = Number(scanResult[0][0]?.totalScanned ?? 0);
+  const foundCount = Number(foundResult[0][0]?.foundCount ?? 0);
+  const newCount = Number(newResult[0][0]?.newCount ?? 0);
+  const missingCount = Math.max(totalExpected - foundCount, 0);
+
+  await connection.execute(
+    `UPDATE stock_verification
+     SET total_scanned = ?,
+         found_count = ?,
+         missing_count = ?,
+         new_count = ?,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+    [totalScanned, foundCount, missingCount, newCount, verificationId],
+  );
+
+  return {
+    totalScanned,
+    foundCount,
+    missingCount,
+    newCount,
+  };
 };
 
 const uploadStockVerification = async ({
@@ -346,13 +454,15 @@ const uploadStockVerification = async ({
   const found = await findScannedTagsInScope(scope, scannedTags);
   const foundSet = new Set(found);
   const newTags = scannedTags.filter((tag) => !foundSet.has(tag));
-  const missingCount = totalExpected - found.length;
+  const scanFoundCount = found.length;
+  const scanNewCount = newTags.length;
+  const scanMissingCount = Math.max(totalExpected - scanFoundCount, 0);
 
   logVerificationDebug("classification", {
     scannedTags,
     found,
     newTags,
-    missingCount,
+    scanMissingCount,
   });
 
   const connection = await pool.getConnection();
@@ -370,11 +480,24 @@ const uploadStockVerification = async ({
         datetimeMillis,
         scopeLabels,
         totalExpected,
-        scannedCount: scannedTags.length,
-        foundCount: found.length,
-        missingCount,
-        newCount: newTags.length,
       },
+    );
+
+    const latestScanId = await insertLatestScan(connection, {
+      verificationId,
+      verificationEpochSeconds,
+      datetimeMillis,
+      scopeLabels,
+      totalExpected,
+      scannedCount: scannedTags.length,
+      foundCount: scanFoundCount,
+      missingCount: scanMissingCount,
+      newCount: scanNewCount,
+    });
+
+    const existingTags = await fetchExistingTagsForVerification(
+      connection,
+      verificationId,
     );
 
     const foundProductDetails = await fetchProductDetailsByTags(
@@ -391,39 +514,51 @@ const uploadStockVerification = async ({
         details: foundProductDetails.get(tag) ?? null,
       })),
     });
-    const foundRecords = buildInventoryDetailRecords(
-      found,
-      foundProductDetails,
-      scopeLabels,
+    const foundRecords = filterNewDetailRecords(
+      buildInventoryDetailRecords(found, foundProductDetails, scopeLabels),
+      existingTags,
     );
 
     await insertDetailRecordsBatched(
       connection,
       verificationId,
+      latestScanId,
       foundRecords,
       "FOUND",
     );
 
-    const newRecords = buildNewDetailRecords(newTags, scopeLabels);
+    const newRecords = filterNewDetailRecords(
+      buildNewDetailRecords(newTags, scopeLabels),
+      existingTags,
+    );
 
     await insertDetailRecordsBatched(
       connection,
       verificationId,
+      latestScanId,
       newRecords,
       "NEW",
+    );
+
+    const sessionTotals = await refreshSessionHeaderCounts(
+      connection,
+      verificationId,
+      totalExpected,
     );
 
     await connection.commit();
 
     return {
       verificationId,
+      latestScanId,
       reused,
       batchId: activeBatchId,
       totalExpected,
       totalScanned: scannedTags.length,
-      foundCount: found.length,
-      missingCount,
-      newCount: newTags.length,
+      foundCount: scanFoundCount,
+      missingCount: scanMissingCount,
+      newCount: scanNewCount,
+      session: sessionTotals,
     };
   } catch (error) {
     await connection.rollback();

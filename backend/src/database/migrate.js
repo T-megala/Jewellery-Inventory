@@ -20,6 +20,8 @@ const files = [
   "011_inventory_sales_audit.sql",
   "015_dedupe_products_by_tag.sql",
   "016_untagged_products_index.sql",
+  "017_latest_stock_verification_scans.sql",
+  "018_backfill_latest_stock_verification.sql",
 ];
 
 const SKIPPABLE_ERROR_CODES = new Set([

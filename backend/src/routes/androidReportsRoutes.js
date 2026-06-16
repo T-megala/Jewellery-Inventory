@@ -6,11 +6,11 @@ const router = express.Router();
 
 router.get(
   "/stock-verification/android-report",
-  asyncHandler(stockVerificationReportController.getStockVerificationReport),
+  asyncHandler(stockVerificationReportController.getAndroidScanReport),
 );
 router.post(
   "/stock-verification/android-report",
-  asyncHandler(stockVerificationReportController.getStockVerificationReport),
+  asyncHandler(stockVerificationReportController.getAndroidScanReport),
 );
 
 export default router;
