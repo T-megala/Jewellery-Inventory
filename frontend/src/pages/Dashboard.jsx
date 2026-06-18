@@ -922,7 +922,7 @@ function DailyImportsBarChart({ data }) {
             />
           </Bar>
         </BarChart>
-        </ResponsiveContainer>
+      </ResponsiveContainer>
 
       <div className="day-sales-legend">
         <span className="day-sales-legend__item">
@@ -937,8 +937,8 @@ function DailyImportsBarChart({ data }) {
           <i className="day-sales-legend__swatch day-sales-legend__swatch--today" />
           Today
         </span>
-        </div>
       </div>
+    </div>
   )
 }
 
@@ -1332,15 +1332,15 @@ function MetricTrendIcon({ direction }) {
     )
   }
 
-    return (
+  return (
     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M12 5v14M5 12l7 7 7-7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    )
-  }
+    </svg>
+  )
+}
 
 function MetricCard({ label, value, hint, variant, hintTone }) {
-    return (
+  return (
     <div className={`dashboard-metric dashboard-metric--${variant}`}>
       <p className="dashboard-metric__label">{label}</p>
       <p className="dashboard-metric__value dashboard-num">{value}</p>
@@ -1353,7 +1353,7 @@ function MetricCard({ label, value, hint, variant, hintTone }) {
 }
 
 function DashboardSkeleton() {
-    return (
+  return (
     <div className="dashboard">
       {/* Hero skeleton */}
       <section className="skeleton-hero" aria-hidden="true">
@@ -1653,7 +1653,7 @@ export default function Dashboard() {
         {metricCards.map((card) => (
           <MetricCard key={card.key} {...card} />
         ))}
-            </div>
+      </div>
 
       {/* Stocktake */}
       <section className="dashboard-stocktake">
@@ -1668,7 +1668,7 @@ export default function Dashboard() {
               this month
             </span>
           )}
-      </div>
+        </div>
 
         <div className="stocktake-grid">
           <LastStocktakeFindings stocktake={stocktake} />
@@ -1755,7 +1755,7 @@ export default function Dashboard() {
             label="Found, missing & new tags"
             icon="reports"
           />
-        </div>
+      </div>
       </section>
     </div>
   )
