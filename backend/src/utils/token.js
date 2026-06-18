@@ -51,7 +51,10 @@ export const createAccessToken = (user) => {
     sub: String(user.id),
     username: user.username,
     name: user.name,
-    role: user.role,
+    roleId: user.roleId ?? null,
+    roleName: user.roleName ?? null,
+    branchId: user.branchId ?? null,
+    permissions: Array.isArray(user.permissions) ? user.permissions : [],
     iat: now,
     exp: now + expiresIn,
   });

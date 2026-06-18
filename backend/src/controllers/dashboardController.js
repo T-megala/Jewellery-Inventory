@@ -11,17 +11,17 @@ const sendSuccess = (res, data, message = 'Data fetched successfully') => {
 };
 
 export const getInventorySummary = async (req, res) => {
-  const data = await dashboardService.getInventorySummary();
+  const data = await dashboardService.getInventorySummary({ branchId: req.branchId });
   sendSuccess(res, data, 'Inventory summary fetched successfully');
 };
 
 export const getVerificationSummary = async (req, res) => {
-  const data = await dashboardService.getVerificationSummary();
+  const data = await dashboardService.getVerificationSummary({ branchId: req.branchId });
   sendSuccess(res, data, 'Verification summary fetched successfully');
 };
 
 export const getDashboard = async (req, res) => {
-  const data = await dashboardService.getDashboard();
+  const data = await dashboardService.getDashboard({ branchId: req.branchId });
   sendSuccess(res, data, 'Dashboard data fetched successfully');
 };
 
@@ -74,6 +74,7 @@ export const getStockMovement = async (req, res) => {
   const limit = getRequestParam(req, 'limit');
 
   const result = await dashboardService.getStockMovement({
+    branchId: req.branchId,
     slowDays,
     fastDays,
     limit,
@@ -83,7 +84,7 @@ export const getStockMovement = async (req, res) => {
 };
 
 export const getBranchComparison = async (req, res) => {
-  const data = await dashboardService.getBranchComparison();
+  const data = await dashboardService.getBranchComparison(req.branchId);
   sendSuccess(res, data, 'Branch comparison fetched successfully');
 };
 
@@ -93,6 +94,7 @@ export const getSmartAlerts = async (req, res) => {
   const limit = getRequestParam(req, 'limit');
 
   const result = await smartAlertsService.getSmartAlerts({
+    branchId: req.branchId,
     consecutiveStocktakes,
     accuracyDropThreshold,
     limit,

@@ -59,8 +59,15 @@ const buildSearchClause = (search) => {
   };
 };
 
-const getProductList = async ({ search, page, limit, offset, batchId = null }) => {
-  const activeBatchId = batchId ?? (await getActiveBatchId());
+const getProductList = async ({
+  search,
+  page,
+  limit,
+  offset,
+  batchId = null,
+  branchId = null,
+}) => {
+  const activeBatchId = batchId ?? (await getActiveBatchId(branchId));
 
   if (!activeBatchId) {
     return {
@@ -107,11 +114,14 @@ const getProductList = async ({ search, page, limit, offset, batchId = null }) =
 
 export const getProducts = () => inventoryDropdownService.getProducts();
 
-export const getSubProducts = (product) =>
-  inventoryDropdownService.getSubProducts(product);
+export const getProductsForBranch = (branchId) =>
+  inventoryDropdownService.getProducts({ branchId });
 
-export const getCenters = (product, subProduct) =>
-  inventoryDropdownService.getCenters(product, subProduct);
+export const getSubProducts = (product, branchId = null) =>
+  inventoryDropdownService.getSubProducts(product, { branchId });
+
+export const getCenters = (product, subProduct, branchId = null) =>
+  inventoryDropdownService.getCenters(product, subProduct, { branchId });
 
 export { getProductList };
 

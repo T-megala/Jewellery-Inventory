@@ -1,0 +1,66 @@
+import ApiError from "../utils/ApiError.js";
+import { PERMISSIONS, BRANCH_SCOPE_EXEMPT_PATHS } from "../constants/permissions.js";
+import branchService from "../services/branchService.js";
+
+const parsePositiveInt = (value) => {
+  const parsed = Number.parseInt(String(value), 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+};
+
+const isExemptPath = (path) =>
+  BRANCH_SCOPE_EXEMPT_PATHS.some((prefix) => path.startsWith(prefix));
+
+export const resolveBranchScope = async (req, res, next) => {
+  if (isExemptPath(req.path)) {
+    return next();
+  }
+
+  const permissions = Array.isArray(req.user?.permissions)
+    ? req.user.permissions
+    : [];
+  const canViewAll = permissions.includes(PERMISSIONS.BRANCHES_VIEW_ALL);
+  const requestedBranchId = parsePositiveInt(
+    req.query?.branchId ?? req.headers["x-branch-id"],
+  );
+
+  if (requestedBranchId && canViewAll) {
+    req.branchId = requestedBranchId;
+    return next();
+  }
+
+  const tokenBranchId = parsePositiveInt(req.user?.branchId);
+
+  if (tokenBranchId) {
+    req.branchId = tokenBranchId;
+    return next();
+  }
+
+  if (canViewAll) {
+    req.branchId = await branchService.getDefaultBranchId();
+    return next();
+  }
+
+  return next(new ApiError(403, "Branch is not assigned to this user"));
+};
+
+export const authorize =
+  (...requiredPermissions) =>
+  (req, res, next) => {
+    if (!requiredPermissions.length) {
+      return next();
+    }
+
+    const userPermissions = Array.isArray(req.user?.permissions)
+      ? req.user.permissions
+      : [];
+
+    const allowed = requiredPermissions.some((permission) =>
+      userPermissions.includes(permission),
+    );
+
+    if (!allowed) {
+      return next(new ApiError(403, "You do not have permission for this action"));
+    }
+
+    return next();
+  };

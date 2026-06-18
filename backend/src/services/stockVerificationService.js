@@ -1,4 +1,5 @@
 import pool from "../config/database.js";
+import { resolveOperationalBranchId } from "../utils/branchRequest.js";
 import { getActiveBatchId } from "../services/productBatchService.js";
 import ApiError from "../utils/ApiError.js";
 import {
@@ -245,6 +246,7 @@ const upsertVerificationHeader = async (
     datetimeMillis,
     scopeLabels,
     totalExpected,
+    branchId = null,
   },
 ) => {
   const existingId = await findExistingVerificationId(
@@ -263,6 +265,7 @@ const upsertVerificationHeader = async (
            sub_product_name = ?,
            center_name = ?,
            total_expected = ?,
+           branch_id = ?,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
       [
@@ -273,6 +276,7 @@ const upsertVerificationHeader = async (
         scopeLabels.subProductName,
         scopeLabels.centerName,
         totalExpected,
+        branchId,
         existingId,
       ],
     );
@@ -290,8 +294,8 @@ const upsertVerificationHeader = async (
     `INSERT INTO stock_verification
       (verification_date, verification_day, verification_millis, product_name,
        sub_product_name, center_name, total_expected, total_scanned,
-       found_count, missing_count, new_count)
-     VALUES (FROM_UNIXTIME(?), DATE(FROM_UNIXTIME(?)), ?, ?, ?, ?, ?, 0, 0, 0, 0)`,
+       found_count, missing_count, new_count, branch_id)
+     VALUES (FROM_UNIXTIME(?), DATE(FROM_UNIXTIME(?)), ?, ?, ?, ?, ?, 0, 0, 0, 0, ?)`,
     [
       verificationEpochSeconds,
       verificationEpochSeconds,
@@ -300,6 +304,7 @@ const upsertVerificationHeader = async (
       scopeLabels.subProductName,
       scopeLabels.centerName,
       totalExpected,
+      branchId,
     ],
   );
 
@@ -411,9 +416,11 @@ const uploadStockVerification = async ({
   subProduct,
   center,
   tagData,
+  branchId = null,
 }) => {
   const allProductsScope = isAllProducts(product);
-  const activeBatchId = await getActiveBatchId();
+  const resolvedBranchId = await resolveOperationalBranchId({ branchId });
+  const activeBatchId = await getActiveBatchId(resolvedBranchId);
 
   if (!allProductsScope && !activeBatchId) {
     throw new ApiError(
@@ -480,6 +487,7 @@ const uploadStockVerification = async ({
         datetimeMillis,
         scopeLabels,
         totalExpected,
+        branchId: resolvedBranchId,
       },
     );
 

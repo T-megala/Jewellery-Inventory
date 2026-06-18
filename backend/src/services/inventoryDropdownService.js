@@ -13,13 +13,13 @@ const mapRowsToNamedList = (rows, column) =>
     name: row[column],
   }));
 
-const activeBatchFilter = async () => {
-  const batchId = await getActiveBatchId();
+const activeBatchFilter = async (branchId = null) => {
+  const batchId = await getActiveBatchId(branchId);
   return batchId ? { clause: 'AND batch_id = ?', params: [batchId] } : null;
 };
 
-const getProducts = async ({ includeAllProductsOption = true } = {}) => {
-  const batchFilter = await activeBatchFilter();
+const getProducts = async ({ branchId = null, includeAllProductsOption = true } = {}) => {
+  const batchFilter = await activeBatchFilter(branchId);
 
   if (!batchFilter) {
     return includeAllProductsOption
@@ -47,7 +47,7 @@ const getProducts = async ({ includeAllProductsOption = true } = {}) => {
 
 const getSubProducts = async (
   productName,
-  { includeAllSubProductsOption = true } = {},
+  { branchId = null, includeAllSubProductsOption = true } = {},
 ) => {
   if (isAllProductsByName(productName)) {
     return includeAllSubProductsOption
@@ -55,7 +55,7 @@ const getSubProducts = async (
       : [];
   }
 
-  const batchFilter = await activeBatchFilter();
+  const batchFilter = await activeBatchFilter(branchId);
 
   if (!batchFilter) {
     return includeAllSubProductsOption
@@ -89,7 +89,7 @@ const getSubProducts = async (
 const getCenters = async (
   productName,
   subProductName,
-  { includeAllCentersOption = true } = {},
+  { branchId = null, includeAllCentersOption = true } = {},
 ) => {
   if (isAllProductsByName(productName)) {
     return includeAllCentersOption
@@ -97,7 +97,7 @@ const getCenters = async (
       : [];
   }
 
-  const batchFilter = await activeBatchFilter();
+  const batchFilter = await activeBatchFilter(branchId);
 
   if (!batchFilter) {
     return includeAllCentersOption

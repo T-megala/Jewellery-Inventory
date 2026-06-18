@@ -27,6 +27,8 @@ const isAsyncImport = (req) => {
   return isTruthyParam(value);
 };
 
+import { resolveOperationalBranchId } from '../utils/branchRequest.js';
+
 export const importProducts = async (req, res) => {
   if (!req.file) {
     throw new ApiError(400, 'Excel file is required. Use form field name "file"');
@@ -35,6 +37,9 @@ export const importProducts = async (req, res) => {
   const uploadedBy = req.body?.uploadedBy
     ? String(req.body.uploadedBy).trim()
     : null;
+  const branchId = await resolveOperationalBranchId({
+    branchId: req.branchId ?? req.body?.branchId,
+  });
 
   if (isAsyncImport(req)) {
     console.info('[product-import] upload received', {
@@ -42,6 +47,7 @@ export const importProducts = async (req, res) => {
       fileSize: req.file.size,
       mimeType: req.file.mimetype,
       uploadedBy,
+      branchId,
     });
 
     const job = productImportService.startAsyncImport(
@@ -50,6 +56,7 @@ export const importProducts = async (req, res) => {
       {
         fileName: req.file.originalname,
         fileSize: req.file.size,
+        branchId,
       },
     );
 
@@ -66,7 +73,8 @@ export const importProducts = async (req, res) => {
 
   const result = await productImportService.importProductsFromExcel(
     req.file.buffer,
-    uploadedBy
+    uploadedBy,
+    { branchId },
   );
 
   res.status(200).json({

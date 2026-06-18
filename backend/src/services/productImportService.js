@@ -1,4 +1,5 @@
 import pool from '../config/database.js';
+import { resolveOperationalBranchId } from '../utils/branchRequest.js';
 import ApiError from '../utils/ApiError.js';
 import { parseStockExcel } from '../utils/excelParser.js';
 import { resolveActiveBatch } from '../services/productBatchService.js';
@@ -181,7 +182,7 @@ const schedulePostProcessing = (batchId, defer = DEFER_POST_PROCESSING) => {
 const importProductsFromExcel = async (
   buffer,
   uploadedBy = null,
-  { onProgress, deferPostProcessing = DEFER_POST_PROCESSING } = {},
+  { branchId = null, onProgress, deferPostProcessing = DEFER_POST_PROCESSING } = {},
 ) => {
   const reportProgress = (patch) => {
     if (onProgress) {
@@ -251,8 +252,11 @@ const importProductsFromExcel = async (
       processed: 0,
     });
 
+    const resolvedBranchId = await resolveOperationalBranchId({ branchId });
+
     const { batchId, isNewBatch, previousBatchId } = await resolveActiveBatch(
       connection,
+      resolvedBranchId,
       uploadedBy,
     );
 
@@ -362,6 +366,7 @@ const startAsyncImport = (buffer, uploadedBy = null, meta = {}) => {
 
     try {
       const result = await importProductsFromExcel(buffer, uploadedBy, {
+        branchId: meta.branchId ?? null,
         onProgress: ({
           phase,
           progress,

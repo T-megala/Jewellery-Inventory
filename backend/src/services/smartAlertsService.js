@@ -419,6 +419,7 @@ const buildAccuracyDropAlerts = async (
 };
 
 const getSmartAlerts = async ({
+  branchId = null,
   consecutiveStocktakes = 2,
   accuracyDropThreshold = 2,
   limit = 20,
@@ -428,7 +429,7 @@ const getSmartAlerts = async ({
   const alertLimit = Math.min(parsePositiveInt(limit, 20), 50);
 
   const [batchId, sessions] = await Promise.all([
-    getActiveBatchId(),
+    getActiveBatchId(branchId),
     getRecentStorewideSessions(sessionLimit),
   ]);
 

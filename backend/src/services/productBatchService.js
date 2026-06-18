@@ -10,42 +10,79 @@ const formatDateTime = (value) => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 };
 
-export const getActiveBatchId = async (connection = pool) => {
-  const [rows] = await connection.execute(
-    `SELECT id FROM product_upload_batches WHERE is_active = 1 ORDER BY id DESC LIMIT 1`
-  );
-  return rows[0]?.id ?? null;
-};
+export const getActiveBatchId = async (branchId = null, connection = pool) => {
+  if (branchId) {
+    const [rows] = await connection.execute(
+      `SELECT id
+       FROM product_upload_batches
+       WHERE branch_id = ? AND is_active = 1
+       ORDER BY id DESC
+       LIMIT 1`,
+      [branchId],
+    );
 
-/** Every import creates a new active batch; prior batch is deactivated. */
-export const resolveActiveBatch = async (connection, uploadedBy = null) => {
-  const [activeRows] = await connection.execute(
-    `SELECT id FROM product_upload_batches
+    return rows[0]?.id ?? null;
+  }
+
+  const [rows] = await connection.execute(
+    `SELECT id
+     FROM product_upload_batches
      WHERE is_active = 1
      ORDER BY id DESC
      LIMIT 1`,
   );
 
+  return rows[0]?.id ?? null;
+};
+
+/** Every import creates a new active batch for the branch; prior branch batch is deactivated. */
+export const resolveActiveBatch = async (
+  connection,
+  branchId = null,
+  uploadedBy = null,
+) => {
+  const branchClause = branchId ? "AND branch_id = ?" : "";
+  const branchParams = branchId ? [branchId] : [];
+
+  const [activeRows] = await connection.execute(
+    `SELECT id
+     FROM product_upload_batches
+     WHERE is_active = 1
+       ${branchClause}
+     ORDER BY id DESC
+     LIMIT 1`,
+    branchParams,
+  );
+
   const previousBatchId = activeRows[0]?.id ?? null;
 
   await connection.execute(
-    `UPDATE product_upload_batches SET is_active = 0 WHERE is_active = 1`,
+    `UPDATE product_upload_batches
+     SET is_active = 0
+     WHERE is_active = 1
+       ${branchClause}`,
+    branchParams,
   );
 
   const [insertResult] = await connection.execute(
-    `INSERT INTO product_upload_batches (batch_date, uploaded_at, uploaded_by, is_active)
-     VALUES (CURDATE(), NOW(), ?, 1)`,
-    [uploadedBy],
+    `INSERT INTO product_upload_batches
+      (batch_date, uploaded_at, uploaded_by, is_active, branch_id)
+     VALUES (CURDATE(), NOW(), ?, 1, ?)`,
+    [uploadedBy, branchId],
   );
 
   return {
     batchId: insertResult.insertId,
     isNewBatch: true,
     previousBatchId,
+    branchId,
   };
 };
 
-export const listBatches = async () => {
+export const listBatches = async (branchId = null) => {
+  const branchClause = branchId ? "WHERE b.branch_id = ?" : "";
+  const params = branchId ? [branchId] : [];
+
   const [rows] = await pool.execute(
     `SELECT
        b.id,
@@ -53,11 +90,16 @@ export const listBatches = async () => {
        b.uploaded_at,
        b.uploaded_by,
        b.is_active,
+       b.branch_id,
+       br.name AS branch_name,
        COUNT(p.id) AS product_count
      FROM product_upload_batches b
+     LEFT JOIN branches br ON br.id = b.branch_id
      LEFT JOIN products p ON p.batch_id = b.id
-     GROUP BY b.id, b.batch_date, b.uploaded_at, b.uploaded_by, b.is_active
-     ORDER BY b.id DESC`
+     ${branchClause}
+     GROUP BY b.id, b.batch_date, b.uploaded_at, b.uploaded_by, b.is_active, b.branch_id, br.name
+     ORDER BY b.id DESC`,
+    params,
   );
 
   return rows.map((row) => ({
@@ -66,6 +108,8 @@ export const listBatches = async () => {
     uploadedAt: formatDateTime(row.uploaded_at),
     uploadedBy: row.uploaded_by,
     isActive: Boolean(row.is_active),
+    branchId: row.branch_id ? Number(row.branch_id) : null,
+    branchName: row.branch_name ?? null,
     productCount: Number(row.product_count),
   }));
 };

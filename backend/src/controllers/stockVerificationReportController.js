@@ -1,4 +1,5 @@
 import ApiError from "../utils/ApiError.js";
+import { resolveOperationalBranchId } from "../utils/branchRequest.js";
 import stockVerificationReportService from "../services/stockVerificationReportService.js";
 import androidScanReportService from "../services/androidScanReportService.js";
 import { getRequestParam } from "../utils/requestParams.js";
@@ -103,6 +104,7 @@ const validateFilters = (req, { isExport = false } = {}) => {
       status,
       fromDate,
       toDate,
+      branchId: req.branchId ?? null,
     },
     pagination: {
       page,
@@ -172,7 +174,13 @@ const parseScanId = (req) => {
 
 export const getAndroidScanReport = async (req, res) => {
   const scanId = parseScanId(req);
-  const result = await androidScanReportService.getAndroidScanReport({ scanId });
+  const branchId = await resolveOperationalBranchId({
+    branchId: req.branchId ?? req.query?.branchId,
+  });
+  const result = await androidScanReportService.getAndroidScanReport({
+    scanId,
+    branchId,
+  });
 
   res.status(200).json({
     success: true,

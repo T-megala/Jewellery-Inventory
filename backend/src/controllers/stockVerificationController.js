@@ -75,6 +75,8 @@ const validateUploadRequest = (body) => {
   return null;
 };
 
+import { resolveOperationalBranchId } from '../utils/branchRequest.js';
+
 export const uploadStockVerification = async (req, res) => {
   const validationError = validateUploadRequest(req.body);
 
@@ -86,6 +88,9 @@ export const uploadStockVerification = async (req, res) => {
   }
 
   const { datetimeMillis, product, subProduct, center, tagData } = req.body;
+  const branchId = await resolveOperationalBranchId({
+    branchId: req.branchId ?? req.body?.branchId,
+  });
 
   const result = await stockVerificationService.uploadStockVerification({
     datetimeMillis,
@@ -93,6 +98,7 @@ export const uploadStockVerification = async (req, res) => {
     subProduct: isAllProducts(product) ? null : subProduct,
     center: isAllProducts(product) ? null : center,
     tagData,
+    branchId,
   });
 
   res.status(200).json({

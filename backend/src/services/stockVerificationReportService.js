@@ -211,7 +211,7 @@ const buildStoredDetailQuery = (filters) => {
 
 const buildExportQuery = async (filters) => {
   const { whereClause, params } = buildStoredDetailFilterClause(filters);
-  const activeBatchId = (await getActiveBatchId()) ?? -1;
+  const activeBatchId = (await getActiveBatchId(filters.branchId)) ?? -1;
 
   return {
     baseFrom: `
@@ -447,7 +447,7 @@ const buildMissingRankedFromSql = (headerWhereClause) => {
 
 const buildMissingQueryParts = async (filters) => {
   const { whereClause, params } = buildHeaderFilterClause(filters);
-  const activeBatchId = (await getActiveBatchId()) ?? -1;
+  const activeBatchId = (await getActiveBatchId(filters.branchId)) ?? -1;
 
   return {
     baseFrom: buildMissingRankedFromSql(whereClause),
@@ -520,7 +520,7 @@ const getCombinedRows = async (filters, pagination) => {
   const { limit, offset } = pagination;
   const { whereClause: headerWhereClause, params: headerParams } = buildHeaderFilterClause(filters);
   const { whereClause: detailWhereClause, params: detailParams } = buildStoredDetailFilterClause(filters);
-  const activeBatchId = (await getActiveBatchId()) ?? -1;
+  const activeBatchId = (await getActiveBatchId(filters.branchId)) ?? -1;
 
   /**
    * UNION query that combines:
@@ -677,7 +677,7 @@ const getReport = async (filters, pagination) => {
   if (filters.status === "FOUND" || filters.status === "NEW") {
     const totalRecords = getStoredRecordCount(summary, filters);
     const totalPages = totalRecords === 0 ? 0 : Math.ceil(totalRecords / limit);
-    const activeBatchId = await getActiveBatchId();
+    const activeBatchId = await getActiveBatchId(filters.branchId);
     const dataRows = await getStoredDetailRows(filters, pagination);
     const enrichedRows = await enrichRowsWithProducts(dataRows, activeBatchId);
 
@@ -700,7 +700,7 @@ const getReport = async (filters, pagination) => {
   // If no status filter, return combined FOUND + NEW + MISSING
   const totalRecords = summary.foundCount + summary.newCount + summary.missingCount;
   const totalPages = totalRecords === 0 ? 0 : Math.ceil(totalRecords / limit);
-  const activeBatchId = await getActiveBatchId();
+  const activeBatchId = await getActiveBatchId(filters.branchId);
   const dataRows = await getCombinedRows(filters, pagination);
   const enrichedRows = await enrichRowsWithProducts(dataRows, activeBatchId);
 
@@ -906,7 +906,7 @@ const getExcelExportRows = async (filters) => {
     }
 
     const { whereClause, params } = buildStoredDetailFilterClause(filters);
-    const activeBatchId = (await getActiveBatchId()) ?? -1;
+    const activeBatchId = (await getActiveBatchId(filters.branchId)) ?? -1;
 
     const [dataRows] = await pool.execute(
       `${EXCEL_DETAIL_SELECT_SQL},
@@ -939,7 +939,7 @@ const getExcelExportRows = async (filters) => {
 
   // Stored rows (FOUND + NEW)
   const { whereClause, params } = buildStoredDetailFilterClause(filters);
-  const activeBatchId = (await getActiveBatchId()) ?? -1;
+  const activeBatchId = (await getActiveBatchId(filters.branchId)) ?? -1;
 
   const [storedRows] = await pool.execute(
     `${EXCEL_DETAIL_SELECT_SQL},

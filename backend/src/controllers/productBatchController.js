@@ -16,7 +16,7 @@ const parsePositiveInt = (value, fieldName, defaultValue) => {
 };
 
 export const listBatches = async (req, res) => {
-  const data = await productBatchService.listBatches();
+  const data = await productBatchService.listBatches(req.branchId);
 
   res.status(200).json({
     success: true,

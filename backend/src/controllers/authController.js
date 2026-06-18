@@ -1,46 +1,41 @@
-import ApiError from '../utils/ApiError.js';
-import { createAccessToken } from '../utils/token.js';
-import { verifyPassword } from '../utils/passwordHasher.js';
-import pool from '../config/database.js';
+import ApiError from "../utils/ApiError.js";
+import authService from "../services/authService.js";
 
 export const login = async (req, res) => {
-  const username = String(req.body?.username || '').trim();
-  const password = String(req.body?.password || '');
-
-  if (!username || !password) {
-    throw new ApiError(400, 'Username and password are required');
-  }
-
-  // Look up user in the database
-  const [rows] = await pool.execute(
-    'SELECT id, username, password FROM users WHERE username = ?',
-    [username],
-  );
-
-  if (rows.length === 0) {
-    throw new ApiError(401, 'Invalid username or password');
-  }
-
-  const dbUser = rows[0];
-
-  const passwordMatch = await verifyPassword(password, dbUser.password);
-  if (!passwordMatch) {
-    throw new ApiError(401, 'Invalid username or password');
-  }
-
-  const user = {
-    id: dbUser.id,
-    name: dbUser.username,
-    username: dbUser.username,
-    role: 'user',
-  };
+  const result = await authService.login({
+    username: req.body?.username,
+    password: req.body?.password,
+  });
 
   res.status(200).json({
     success: true,
-    message: 'Login successful',
+    message: "Login successful",
     data: {
-      token: createAccessToken(user),
-      user,
+      token: result.token,
+      user: result.user,
+      permissions: result.permissions,
+    },
+  });
+};
+
+export const getProfile = async (req, res) => {
+  const userId = Number(req.user?.id ?? req.user?.sub);
+
+  if (!userId) {
+    throw new ApiError(401, "Authentication token is required");
+  }
+
+  const profile = await authService.loadUserAuthProfile(userId);
+
+  if (!profile) {
+    throw new ApiError(404, "User not found");
+  }
+
+  res.status(200).json({
+    success: true,
+    data: {
+      user: profile,
+      permissions: profile.permissions,
     },
   });
 };

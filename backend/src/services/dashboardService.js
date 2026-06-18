@@ -1,6 +1,7 @@
 import pool from "../config/database.js";
 import ApiError from "../utils/ApiError.js";
 import { getActiveBatchId } from "./productBatchService.js";
+import branchService from "./branchService.js";
 import dailySalesSummaryService from "./dailySalesSummaryService.js";
 import { batchProductsFrom, batchAllProductsFrom } from "../utils/productQueryHelper.js";
 import { TAG_EXPR } from "../utils/verificationScope.js";
@@ -175,12 +176,14 @@ const emptyCounterAccuracy = () => ({
   locations: [],
 });
 
-const getCounterAccuracy = async () => {
+const getCounterAccuracy = async ({ branchId = null } = {}) => {
   const [batchId, latestDayRows] = await Promise.all([
-    getActiveBatchId(),
+    getActiveBatchId(branchId),
     pool.execute(
       `SELECT MAX(verification_day) AS verificationDay
-       FROM stock_verification`,
+       FROM stock_verification
+       ${branchId ? "WHERE branch_id = ?" : ""}`,
+      branchId ? [branchId] : [],
     ),
   ]);
 
@@ -358,7 +361,10 @@ const fetchDurationMinutesByVerificationIds = async (verificationIds) => {
   return map;
 };
 
-const getStocktakeHistory = async () => {
+const getStocktakeHistory = async ({ branchId = null } = {}) => {
+  const branchClause = branchId ? "WHERE branch_id = ?" : "";
+  const branchParams = branchId ? [branchId] : [];
+
   const [rows] = await pool.execute(
     `SELECT
        id,
@@ -375,8 +381,10 @@ const getStocktakeHistory = async () => {
        created_at,
        updated_at
      FROM stock_verification
+     ${branchClause}
      ORDER BY verification_day DESC, verification_date DESC
      LIMIT 100`,
+    branchParams,
   );
 
   if (rows.length === 0) {
@@ -510,7 +518,10 @@ const emptyStocktakeSummary = () => ({
   history: emptyStocktakeHistory(),
 });
 
-const getLatestStocktakeRow = async () => {
+const getLatestStocktakeRow = async (branchId = null) => {
+  const branchClause = branchId ? "AND branch_id = ?" : "";
+  const branchParams = branchId ? [branchId] : [];
+
   const [rows] = await pool.execute(
     `SELECT
        id,
@@ -523,11 +534,14 @@ const getLatestStocktakeRow = async () => {
        new_count,
        product_name,
        sub_product_name,
-       center_name
+       center_name,
+       branch_id
      FROM stock_verification
      WHERE verification_day = (
        SELECT MAX(verification_day) FROM stock_verification
+       WHERE 1 = 1 ${branchClause}
      )
+       ${branchClause}
      ORDER BY
        CASE
          WHEN product_name = ?
@@ -539,22 +553,27 @@ const getLatestStocktakeRow = async () => {
        verification_date DESC,
        id DESC
      LIMIT 1`,
-    [ALL_PRODUCTS, ALL_SUB_PRODUCTS, ALL_CENTERS],
+    [...branchParams, ...branchParams, ALL_PRODUCTS, ALL_SUB_PRODUCTS, ALL_CENTERS],
   );
 
   return rows[0] ?? null;
 };
 
-const getStocktakeSummary = async () => {
+const getStocktakeSummary = async ({ branchId = null } = {}) => {
+  const branchClause = branchId ? "AND branch_id = ?" : "";
+  const branchParams = branchId ? [branchId] : [];
+
   const [monthResult, latestRow, history] = await Promise.all([
     pool.execute(
       `SELECT COUNT(DISTINCT verification_day) AS stocktakesThisMonth
        FROM stock_verification
        WHERE YEAR(verification_day) = YEAR(CURDATE())
-         AND MONTH(verification_day) = MONTH(CURDATE())`,
+         AND MONTH(verification_day) = MONTH(CURDATE())
+         ${branchClause}`,
+      branchParams,
     ),
-    getLatestStocktakeRow(),
-    getStocktakeHistory(),
+    getLatestStocktakeRow(branchId),
+    getStocktakeHistory({ branchId }),
   ]);
 
   const stocktakesThisMonth = Number(monthResult[0][0]?.stocktakesThisMonth ?? 0);
@@ -622,8 +641,8 @@ const getBatchInfo = async (batchId) => {
   };
 };
 
-const getInventorySummary = async () => {
-  const batchId = await getActiveBatchId();
+const getInventorySummary = async ({ branchId = null } = {}) => {
+  const batchId = await getActiveBatchId(branchId);
 
   if (!batchId) {
     return {
@@ -740,7 +759,10 @@ const getInventorySummary = async () => {
   };
 };
 
-const getVerificationSummary = async () => {
+const getVerificationSummary = async ({ branchId = null } = {}) => {
+  const branchClause = branchId ? "WHERE branch_id = ?" : "";
+  const branchParams = branchId ? [branchId] : [];
+
   const [sumResult, stocktake, counterAccuracy] = await Promise.all([
     pool.execute(
       `SELECT
@@ -748,10 +770,12 @@ const getVerificationSummary = async () => {
          COALESCE(SUM(missing_count), 0) AS missingCount,
          COALESCE(SUM(new_count), 0) AS newCount,
          COALESCE(SUM(found_count + missing_count + new_count), 0) AS totalRecords
-       FROM stock_verification`,
+       FROM stock_verification
+       ${branchClause}`,
+      branchParams,
     ),
-    getStocktakeSummary(),
-    getCounterAccuracy(),
+    getStocktakeSummary({ branchId }),
+    getCounterAccuracy({ branchId }),
   ]);
 
   const row = sumResult[0][0] ?? {};
@@ -766,10 +790,10 @@ const getVerificationSummary = async () => {
   };
 };
 
-const getDashboard = async () => {
+const getDashboard = async ({ branchId = null } = {}) => {
   const [inventory, verification] = await Promise.all([
-    getInventorySummary(),
-    getVerificationSummary(),
+    getInventorySummary({ branchId }),
+    getVerificationSummary({ branchId }),
   ]);
 
   return {
@@ -1028,6 +1052,7 @@ const parsePositiveInt = (value, fallback) => {
 };
 
 const getStockMovement = async ({
+  branchId = null,
   slowDays = 60,
   fastDays = 30,
   limit = 10,
@@ -1035,7 +1060,7 @@ const getStockMovement = async ({
   const thresholdDays = parsePositiveInt(slowDays, 60);
   const periodDays = parsePositiveInt(fastDays, 30);
   const resultLimit = Math.min(parsePositiveInt(limit, 10), 50);
-  const batchId = await getActiveBatchId();
+  const batchId = await getActiveBatchId(branchId);
 
   const emptyResponse = {
     slowMovers: {
@@ -1164,22 +1189,34 @@ const getStockMovement = async ({
   };
 };
 
-const resolveCurrentBranch = () => {
-  const name =
-    String(process.env.STORE_BRANCH_NAME ?? "Mylapore").trim() || "Mylapore";
-  const configuredCode = String(process.env.STORE_BRANCH_CODE ?? "").trim();
-  const code =
-    configuredCode ||
-    name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "") ||
-    "mylapore";
+const resolveCurrentBranch = async (branchId = null) => {
+  if (branchId) {
+    const branch = await branchService.getBranchById(branchId);
+
+    if (branch) {
+      return {
+        id: branch.id,
+        name: branch.name,
+        isMain: branch.isMain,
+      };
+    }
+  }
+
+  const branches = await branchService.getAllBranches();
+  const selected = branches.find((branch) => branch.isMain) ?? branches[0] ?? null;
+
+  if (!selected) {
+    return {
+      id: null,
+      name: "Unassigned",
+      isMain: false,
+    };
+  }
 
   return {
-    code,
-    name,
-    isMain: process.env.STORE_BRANCH_IS_MAIN !== "false",
+    id: selected.id,
+    name: selected.name,
+    isMain: selected.isMain,
   };
 };
 
@@ -1196,9 +1233,9 @@ const emptyBranchStocktake = () => ({
   discrepancies: 0,
 });
 
-const getBranchComparison = async () => {
-  const currentBranch = resolveCurrentBranch();
-  const latestRow = await getLatestStocktakeRow();
+const getBranchComparison = async (branchId = null) => {
+  const currentBranch = await resolveCurrentBranch(branchId);
+  const latestRow = await getLatestStocktakeRow(branchId ?? currentBranch.id);
 
   if (!latestRow) {
     return {

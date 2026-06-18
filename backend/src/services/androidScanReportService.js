@@ -169,7 +169,7 @@ const mapScanResponse = (scanRow) => ({
   createdAt: formatDateTime(scanRow.created_at),
 });
 
-const getAndroidScanReport = async ({ scanId } = {}) => {
+const getAndroidScanReport = async ({ scanId, branchId = null } = {}) => {
   const scanRow = scanId
     ? await fetchScanRow(scanId)
     : await fetchLatestScanRow();
@@ -178,7 +178,7 @@ const getAndroidScanReport = async ({ scanId } = {}) => {
     throw new ApiError(404, "No stock verification scan found");
   }
 
-  const activeBatchId = await getActiveBatchId();
+  const activeBatchId = await getActiveBatchId(branchId);
   const [found, newItems, missing] = await Promise.all([
     fetchDetailCountsByProduct(scanRow.id, "FOUND"),
     fetchDetailCountsByProduct(scanRow.id, "NEW"),
