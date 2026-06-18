@@ -333,7 +333,7 @@ const insertLatestScan = async (
       (verification_id, verification_date, verification_day, verification_millis,
        product_name, sub_product_name, center_name, total_expected, total_scanned,
        found_count, missing_count, new_count)
-     VALUES (?, FROM_UNIXTIME(?), DATE(FROM_UNIXTIME(?)), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, FROM_UNIXTIME(?), DATE(FROM_UNIXTIME(?)), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       verificationId,
       verificationEpochSeconds,

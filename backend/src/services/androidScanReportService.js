@@ -48,6 +48,7 @@ const toDateKey = (value) => {
 const mapProductCounts = (rows) =>
   rows.map((row) => ({
     productName: row.productName,
+    tagNo: row.tagNo || row.tagPacketNo,
     count: Number(row.count ?? 0),
   }));
 
@@ -105,11 +106,12 @@ const fetchDetailCountsByProduct = async (scanId, status) => {
   const [rows] = await pool.execute(
     `SELECT
        product_name AS productName,
-       COUNT(*) AS count
+       tag_no AS tagNo,
+       COUNT(*) AS count  
      FROM stock_verification_details
      WHERE latest_scan_id = ?
        AND status = ?
-     GROUP BY product_name
+     GROUP BY product_name, tag_no
      ORDER BY count DESC, product_name ASC`,
     [scanId, status],
   );
@@ -128,6 +130,7 @@ const fetchMissingCountsByProduct = async (scanRow, activeBatchId) => {
   const [rows] = await pool.execute(
     `SELECT
        p.product AS productName,
+       p.tag_packet_no AS tagNo,
        COUNT(DISTINCT ${TAG_EXPR}) AS count
      FROM products p
      WHERE ${scope.whereClause}
@@ -138,7 +141,7 @@ const fetchMissingCountsByProduct = async (scanRow, activeBatchId) => {
            AND svd.status = 'FOUND'
            AND svd.tag_no = ${TAG_EXPR}
        )
-     GROUP BY p.product
+     GROUP BY p.product, p.tag_packet_no
      HAVING count > 0
      ORDER BY count DESC, p.product ASC`,
     [...scope.params, scanRow.id],
@@ -152,8 +155,7 @@ const mapScanResponse = (scanRow) => ({
   verificationId: Number(scanRow.verification_id),
   verificationDate: formatDateTime(scanRow.verification_date),
   verificationDay:
-    toDateKey(scanRow.verification_day) ??
-    toDateKey(scanRow.verification_date),
+    toDateKey(scanRow.verification_day) ?? toDateKey(scanRow.verification_date),
   scope: {
     product: scanRow.product_name,
     subProduct: scanRow.sub_product_name,
@@ -168,7 +170,9 @@ const mapScanResponse = (scanRow) => ({
 });
 
 const getAndroidScanReport = async ({ scanId } = {}) => {
-  const scanRow = scanId ? await fetchScanRow(scanId) : await fetchLatestScanRow();
+  const scanRow = scanId
+    ? await fetchScanRow(scanId)
+    : await fetchLatestScanRow();
 
   if (!scanRow) {
     throw new ApiError(404, "No stock verification scan found");
