@@ -14,6 +14,7 @@ const REPORTS_NAV_ITEMS = [
 ]
 
 const ADMIN_NAV_ITEMS = [
+  { to: '/branches', label: 'Branches', icon: 'branches' },
   { to: '/users', label: 'Users', icon: 'users' },
 ]
 
@@ -23,6 +24,7 @@ const PAGE_META = {
   '/stock': { title: 'Stock', subtitle: 'All products in your showroom' },
   '/reports': { title: 'Reports', subtitle: 'Stock verification by product, counter and status' },
   '/users': { title: 'Users', subtitle: 'Add, edit and manage user accounts' },
+  '/branches': { title: 'Branches', subtitle: 'Add, edit and manage showroom branches' },
 }
 
 function NavIcon({ name }) {
@@ -49,6 +51,14 @@ function NavIcon({ name }) {
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M4 7l8-4 8 4-8 4-8-4z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
         <path d="M4 12l8 4 8-4M4 17l8 4 8-4" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      </svg>
+    )
+  }
+  if (name === 'branches') {
+    return (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M3 21h18M5 21V7l7-4 7 4v14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M9 21v-6h6v6M10 10h4M10 13h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       </svg>
     )
   }
@@ -111,7 +121,7 @@ export default function MainLayout() {
   const displayName = getUserDisplayName(user)
   const roleLabel = getUserRoleLabel(user)
   const page = PAGE_META[location.pathname] || PAGE_META['/dashboard']
-  const isTablePage = location.pathname === '/stock' || location.pathname === '/users'
+  const isTablePage = location.pathname === '/stock' || location.pathname === '/users' || location.pathname === '/branches'
   const isReportsPage = location.pathname === '/reports'
   const isFillPage = location.pathname === '/import' || isTablePage
   const isWidePage = location.pathname === '/dashboard'
