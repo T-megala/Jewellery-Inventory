@@ -1,6 +1,7 @@
 import pool from "../config/database.js";
 import { hashPassword } from "../utils/passwordHasher.js";
 import ApiError from "../utils/ApiError.js";
+import userBranchService from "./userBranchService.js";
 
 const USER_SELECT_SQL = `
   SELECT
@@ -11,46 +12,10 @@ const USER_SELECT_SQL = `
     u.created_at,
     u.role_id,
     r.name AS role_name,
-    u.branch_id,
-    b.name AS branch_name
+    u.branch_id
   FROM users u
   LEFT JOIN roles r ON r.id = u.role_id
-  LEFT JOIN branches b ON b.id = u.branch_id
 `;
-
-const toSafeUser = (row) => ({
-  id: Number(row.id),
-  username: row.username,
-  fullName: row.full_name ?? null,
-  isActive: Boolean(row.is_active),
-  createdAt: row.created_at,
-  role: row.role_id
-    ? {
-        id: Number(row.role_id),
-        name: row.role_name,
-      }
-    : null,
-  branch: row.branch_id
-    ? {
-        id: Number(row.branch_id),
-        name: row.branch_name,
-      }
-    : null,
-});
-
-export const getAllUsers = async () => {
-  const [rows] = await pool.execute(
-    `${USER_SELECT_SQL}
-     ORDER BY u.id ASC`,
-  );
-
-  return rows.map(toSafeUser);
-};
-
-export const getUserById = async (id) => {
-  const [rows] = await pool.execute(`${USER_SELECT_SQL} WHERE u.id = ?`, [id]);
-  return rows.length ? toSafeUser(rows[0]) : null;
-};
 
 const parseOptionalId = (value, fieldName) => {
   if (value === undefined || value === null || value === "") {
@@ -66,12 +31,106 @@ const parseOptionalId = (value, fieldName) => {
   return parsed;
 };
 
+const parseBranchIds = (value) => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    throw new ApiError(400, "branchIds must be an array");
+  }
+
+  return [
+    ...new Set(
+      value
+        .map((id) => Number.parseInt(String(id), 10))
+        .filter((id) => Number.isInteger(id) && id > 0),
+    ),
+  ];
+};
+
+const resolveBranchAssignment = ({ branchId, branchIds, defaultBranchId }) => {
+  const parsedBranchIds = parseBranchIds(branchIds);
+
+  if (parsedBranchIds !== undefined) {
+    return {
+      branchIds: parsedBranchIds,
+      defaultBranchId:
+        defaultBranchId !== undefined
+          ? parseOptionalId(defaultBranchId, "defaultBranchId")
+          : branchId !== undefined
+            ? parseOptionalId(branchId, "branchId")
+            : null,
+    };
+  }
+
+  if (branchId !== undefined && branchId !== null && branchId !== "") {
+    const parsedBranchId = parseOptionalId(branchId, "branchId");
+
+    return {
+      branchIds: parsedBranchId ? [parsedBranchId] : [],
+      defaultBranchId: parsedBranchId,
+    };
+  }
+
+  return null;
+};
+
+const toSafeUser = async (row) => {
+  const branches = await userBranchService.getBranchesForUser(row.id);
+  const defaultBranch =
+    branches.find((branch) => branch.isDefault) ?? branches[0] ?? null;
+
+  return {
+    id: Number(row.id),
+    username: row.username,
+    fullName: row.full_name ?? null,
+    isActive: Boolean(row.is_active),
+    createdAt: row.created_at,
+    role: row.role_id
+      ? {
+          id: Number(row.role_id),
+          name: row.role_name,
+        }
+      : null,
+    branch: defaultBranch
+      ? {
+          id: defaultBranch.id,
+          name: defaultBranch.name,
+        }
+      : null,
+    branches: branches.map(({ id, name, isMain, isActive, isDefault }) => ({
+      id,
+      name,
+      isMain,
+      isActive,
+      isDefault,
+    })),
+  };
+};
+
+export const getAllUsers = async () => {
+  const [rows] = await pool.execute(
+    `${USER_SELECT_SQL}
+     ORDER BY u.id ASC`,
+  );
+
+  return Promise.all(rows.map((row) => toSafeUser(row)));
+};
+
+export const getUserById = async (id) => {
+  const [rows] = await pool.execute(`${USER_SELECT_SQL} WHERE u.id = ?`, [id]);
+  return rows.length ? toSafeUser(rows[0]) : null;
+};
+
 export const createUser = async ({
   username,
   password,
   fullName = null,
   roleId = null,
   branchId = null,
+  branchIds,
+  defaultBranchId = null,
   isActive = true,
 }) => {
   const [existing] = await pool.execute(
@@ -85,10 +144,18 @@ export const createUser = async ({
 
   const hashedPassword = await hashPassword(password);
   const parsedRoleId = parseOptionalId(roleId, "roleId");
-  const parsedBranchId = parseOptionalId(branchId, "branchId");
+  const branchAssignment = resolveBranchAssignment({
+    branchId,
+    branchIds,
+    defaultBranchId,
+  });
+
+  const connection = await pool.getConnection();
 
   try {
-    const [result] = await pool.execute(
+    await connection.beginTransaction();
+
+    const [result] = await connection.execute(
       `INSERT INTO users
         (username, password, full_name, role_id, branch_id, is_active)
        VALUES (?, ?, ?, ?, ?, ?)`,
@@ -97,22 +164,44 @@ export const createUser = async ({
         hashedPassword,
         fullName?.trim() || null,
         parsedRoleId,
-        parsedBranchId,
+        branchAssignment?.defaultBranchId ?? null,
         isActive ? 1 : 0,
       ],
     );
 
-    return getUserById(result.insertId);
+    const userId = result.insertId;
+
+    if (branchAssignment) {
+      await userBranchService.setUserBranches(
+        userId,
+        branchAssignment.branchIds,
+        branchAssignment.defaultBranchId,
+        connection,
+      );
+    }
+
+    await connection.commit();
+    return getUserById(userId);
   } catch (error) {
+    await connection.rollback();
+
     if (error.code === "ER_DUP_ENTRY") {
       throw new ApiError(409, "Username already exists");
     }
 
     throw error;
+  } finally {
+    connection.release();
   }
 };
 
 export const updateUser = async (id, fields) => {
+  const branchAssignment = resolveBranchAssignment({
+    branchId: fields.branchId,
+    branchIds: fields.branchIds,
+    defaultBranchId: fields.defaultBranchId,
+  });
+
   const setClauses = [];
   const params = [];
 
@@ -137,40 +226,64 @@ export const updateUser = async (id, fields) => {
     params.push(parseOptionalId(fields.roleId, "roleId"));
   }
 
-  if (fields.branchId !== undefined) {
-    setClauses.push("branch_id = ?");
-    params.push(parseOptionalId(fields.branchId, "branchId"));
-  }
-
   if (fields.isActive !== undefined) {
     setClauses.push("is_active = ?");
     params.push(fields.isActive ? 1 : 0);
   }
 
-  if (setClauses.length === 0) {
+  if (setClauses.length === 0 && !branchAssignment) {
     throw new ApiError(400, "No fields provided to update");
   }
 
-  params.push(id);
+  const connection = await pool.getConnection();
 
   try {
-    const [result] = await pool.execute(
-      `UPDATE users SET ${setClauses.join(", ")} WHERE id = ?`,
-      params,
-    );
+    await connection.beginTransaction();
 
-    if (result.affectedRows === 0) {
-      throw new ApiError(404, "User not found");
+    if (setClauses.length > 0) {
+      params.push(id);
+
+      const [result] = await connection.execute(
+        `UPDATE users SET ${setClauses.join(", ")} WHERE id = ?`,
+        params,
+      );
+
+      if (result.affectedRows === 0) {
+        throw new ApiError(404, "User not found");
+      }
+    } else {
+      const [existing] = await connection.execute(
+        `SELECT id FROM users WHERE id = ?`,
+        [id],
+      );
+
+      if (!existing.length) {
+        throw new ApiError(404, "User not found");
+      }
     }
+
+    if (branchAssignment) {
+      await userBranchService.setUserBranches(
+        id,
+        branchAssignment.branchIds,
+        branchAssignment.defaultBranchId,
+        connection,
+      );
+    }
+
+    await connection.commit();
+    return getUserById(id);
   } catch (error) {
+    await connection.rollback();
+
     if (error.code === "ER_DUP_ENTRY") {
       throw new ApiError(409, "Username already exists");
     }
 
     throw error;
+  } finally {
+    connection.release();
   }
-
-  return getUserById(id);
 };
 
 export const deleteUser = async (id) => {

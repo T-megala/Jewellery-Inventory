@@ -23,6 +23,9 @@ export const authenticateApi = (req, res, next) => {
     roleId: user.roleId ?? null,
     roleName: user.roleName ?? null,
     branchId: user.branchId ?? null,
+    branchIds: Array.isArray(user.branchIds)
+      ? user.branchIds.map((id) => Number(id)).filter((id) => id > 0)
+      : [],
     permissions: Array.isArray(user.permissions) ? user.permissions : [],
   };
   next();

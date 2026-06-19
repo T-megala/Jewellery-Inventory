@@ -49,6 +49,18 @@ export const getUser = async (req, res) => {
   res.status(200).json({ success: true, data: user });
 };
 
+const parseBranchIdsField = (value) => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    throw new ApiError(400, "branchIds must be an array");
+  }
+
+  return value;
+};
+
 export const createUser = async (req, res) => {
   const username = normalizeUsername(req.body?.username);
   const { password } = req.body ?? {};
@@ -82,6 +94,11 @@ export const createUser = async (req, res) => {
     fullName: req.body?.fullName,
     roleId: parseOptionalIdField(req.body?.roleId, "roleId"),
     branchId: parseOptionalIdField(req.body?.branchId, "branchId"),
+    branchIds: parseBranchIdsField(req.body?.branchIds),
+    defaultBranchId: parseOptionalIdField(
+      req.body?.defaultBranchId,
+      "defaultBranchId",
+    ),
     isActive: req.body?.isActive !== false,
   });
 
@@ -133,6 +150,17 @@ export const updateUser = async (req, res) => {
 
   if (req.body?.branchId !== undefined) {
     fields.branchId = parseOptionalIdField(req.body.branchId, "branchId");
+  }
+
+  if (req.body?.branchIds !== undefined) {
+    fields.branchIds = parseBranchIdsField(req.body.branchIds);
+  }
+
+  if (req.body?.defaultBranchId !== undefined) {
+    fields.defaultBranchId = parseOptionalIdField(
+      req.body.defaultBranchId,
+      "defaultBranchId",
+    );
   }
 
   if (req.body?.isActive !== undefined) {

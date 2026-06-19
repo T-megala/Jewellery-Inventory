@@ -23,6 +23,7 @@ const files = [
   "017_latest_stock_verification_scans.sql",
   "018_backfill_latest_stock_verification.sql",
   "021_branches_roles_permissions.sql",
+  "022_user_branches.sql",
 ];
 
 const SKIPPABLE_ERROR_CODES = new Set([

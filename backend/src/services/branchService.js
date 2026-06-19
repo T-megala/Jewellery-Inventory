@@ -147,7 +147,9 @@ export const updateBranch = async (id, payload) => {
 
 export const deleteBranch = async (id) => {
   const [users] = await pool.execute(
-    `SELECT COUNT(*) AS total FROM users WHERE branch_id = ?`,
+    `SELECT COUNT(*) AS total
+     FROM user_branches
+     WHERE branch_id = ?`,
     [id],
   );
 

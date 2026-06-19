@@ -3,16 +3,7 @@ import ApiError from "../utils/ApiError.js";
 import { createAccessToken } from "../utils/token.js";
 import { verifyPassword } from "../utils/passwordHasher.js";
 import roleService from "./roleService.js";
-
-const mapBranch = (row) =>
-  row
-    ? {
-        id: Number(row.branch_id ?? row.id),
-        name: row.branch_name ?? row.name,
-        isMain: Boolean(row.is_main),
-        isActive: Boolean(row.is_active),
-      }
-    : null;
+import userBranchService from "./userBranchService.js";
 
 const mapRole = (row) =>
   row?.role_id
@@ -30,13 +21,9 @@ export const loadUserAuthProfile = async (userId) => {
        u.full_name,
        u.is_active,
        u.branch_id,
-       b.name AS branch_name,
-       b.is_main,
-       b.is_active AS branch_is_active,
        u.role_id,
        r.name AS role_name
      FROM users u
-     LEFT JOIN branches b ON b.id = u.branch_id
      LEFT JOIN roles r ON r.id = u.role_id
      WHERE u.id = ?`,
     [userId],
@@ -51,23 +38,45 @@ export const loadUserAuthProfile = async (userId) => {
     ? await roleService.getPermissionNamesForRole(row.role_id)
     : [];
 
+  const branches = await userBranchService.getBranchesForUser(userId);
+  const defaultBranch =
+    branches.find((branch) => branch.isDefault) ?? branches[0] ?? null;
+
   return {
     id: Number(row.id),
     username: row.username,
     fullName: row.full_name ?? row.username,
     isActive: Boolean(row.is_active),
-    branch: row.branch_id
+    branch: defaultBranch
       ? {
-          id: Number(row.branch_id),
-          name: row.branch_name,
-          isMain: Boolean(row.is_main),
-          isActive: Boolean(row.branch_is_active),
+          id: defaultBranch.id,
+          name: defaultBranch.name,
+          isMain: defaultBranch.isMain,
+          isActive: defaultBranch.isActive,
         }
       : null,
+    branches: branches.map(({ id, name, isMain, isActive, isDefault }) => ({
+      id,
+      name,
+      isMain,
+      isActive,
+      isDefault,
+    })),
     role: mapRole(row),
     permissions,
   };
 };
+
+const buildTokenUser = (profile) => ({
+  id: profile.id,
+  username: profile.username,
+  name: profile.fullName,
+  roleId: profile.role?.id ?? null,
+  roleName: profile.role?.name ?? null,
+  branchId: profile.branch?.id ?? null,
+  branchIds: profile.branches.map((branch) => branch.id),
+  permissions: profile.permissions,
+});
 
 export const login = async ({ username, password }) => {
   const normalizedUsername = String(username ?? "").trim();
@@ -106,27 +115,39 @@ export const login = async ({ username, password }) => {
     throw new ApiError(401, "Invalid username or password");
   }
 
-  if (profile.branch && !profile.branch.isActive) {
-    throw new ApiError(403, "Assigned branch is inactive");
-  }
-
-  await pool.execute(
-    `UPDATE users SET last_login_at = NOW() WHERE id = ?`,
-    [dbUser.id],
+  const inactiveAssignedBranch = profile.branches.find(
+    (branch) => !branch.isActive,
   );
 
-  const tokenUser = {
-    id: profile.id,
-    username: profile.username,
-    name: profile.fullName,
-    roleId: profile.role?.id ?? null,
-    roleName: profile.role?.name ?? null,
-    branchId: profile.branch?.id ?? null,
-    permissions: profile.permissions,
-  };
+  if (profile.branches.length > 0 && profile.branches.every((b) => !b.isActive)) {
+    throw new ApiError(403, "All assigned branches are inactive");
+  }
+
+  if (profile.branch && !profile.branch.isActive && inactiveAssignedBranch) {
+    throw new ApiError(403, "Default branch is inactive");
+  }
+
+  await pool.execute(`UPDATE users SET last_login_at = NOW() WHERE id = ?`, [
+    dbUser.id,
+  ]);
 
   return {
-    token: createAccessToken(tokenUser),
+    token: createAccessToken(buildTokenUser(profile)),
+    user: profile,
+    permissions: profile.permissions,
+  };
+};
+
+export const switchBranch = async (userId, branchId) => {
+  await userBranchService.switchUserDefaultBranch(userId, branchId);
+  const profile = await loadUserAuthProfile(userId);
+
+  if (!profile) {
+    throw new ApiError(404, "User not found");
+  }
+
+  return {
+    token: createAccessToken(buildTokenUser(profile)),
     user: profile,
     permissions: profile.permissions,
   };
@@ -135,4 +156,5 @@ export const login = async ({ username, password }) => {
 export default {
   login,
   loadUserAuthProfile,
+  switchBranch,
 };

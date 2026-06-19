@@ -10,6 +10,19 @@ const parsePositiveInt = (value) => {
 const isExemptPath = (path) =>
   BRANCH_SCOPE_EXEMPT_PATHS.some((prefix) => path.startsWith(prefix));
 
+const getUserBranchIds = (req) => {
+  const fromToken = Array.isArray(req.user?.branchIds)
+    ? req.user.branchIds.map((id) => Number(id)).filter((id) => id > 0)
+    : [];
+
+  if (fromToken.length > 0) {
+    return fromToken;
+  }
+
+  const single = parsePositiveInt(req.user?.branchId);
+  return single ? [single] : [];
+};
+
 export const resolveBranchScope = async (req, res, next) => {
   if (isExemptPath(req.path)) {
     return next();
@@ -19,19 +32,29 @@ export const resolveBranchScope = async (req, res, next) => {
     ? req.user.permissions
     : [];
   const canViewAll = permissions.includes(PERMISSIONS.BRANCHES_VIEW_ALL);
+  const userBranchIds = getUserBranchIds(req);
   const requestedBranchId = parsePositiveInt(
     req.query?.branchId ?? req.headers["x-branch-id"],
   );
 
-  if (requestedBranchId && canViewAll) {
-    req.branchId = requestedBranchId;
+  if (requestedBranchId) {
+    if (canViewAll || userBranchIds.includes(requestedBranchId)) {
+      req.branchId = requestedBranchId;
+      return next();
+    }
+
+    return next(new ApiError(403, "Branch is not assigned to this user"));
+  }
+
+  const defaultBranchId = parsePositiveInt(req.user?.branchId);
+
+  if (defaultBranchId) {
+    req.branchId = defaultBranchId;
     return next();
   }
 
-  const tokenBranchId = parsePositiveInt(req.user?.branchId);
-
-  if (tokenBranchId) {
-    req.branchId = tokenBranchId;
+  if (userBranchIds.length === 1) {
+    req.branchId = userBranchIds[0];
     return next();
   }
 
