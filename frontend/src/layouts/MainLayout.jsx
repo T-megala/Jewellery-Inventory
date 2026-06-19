@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { MASTER_PATHS } from '../config/masters.js'
 import { getUser, getUserDisplayName, getUserRoleLabel, logout } from '../services/auth.js'
 import './MainLayout.css'
 
@@ -13,16 +14,12 @@ const REPORTS_NAV_ITEMS = [
   { to: '/reports', label: 'Reports', icon: 'reports' },
 ]
 
-const ADMIN_NAV_ITEMS = [
-  { to: '/branches', label: 'Branches', icon: 'branches' },
-  { to: '/users', label: 'Users', icon: 'users' },
-]
-
 const PAGE_META = {
   '/dashboard': { title: 'Dashboard', subtitle: 'Your showroom at a glance' },
   '/import': { title: 'Import', subtitle: 'Upload tag-wise stock Excel file' },
   '/stock': { title: 'Stock', subtitle: 'All products in your showroom' },
   '/reports': { title: 'Reports', subtitle: 'Stock verification by product, counter and status' },
+  '/masters': { title: 'Masters', subtitle: 'Setup and administration' },
   '/users': { title: 'Users', subtitle: 'Add, edit and manage user accounts' },
   '/branches': { title: 'Branches', subtitle: 'Add, edit and manage showroom branches' },
 }
@@ -51,23 +48,6 @@ function NavIcon({ name }) {
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M4 7l8-4 8 4-8 4-8-4z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
         <path d="M4 12l8 4 8-4M4 17l8 4 8-4" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-      </svg>
-    )
-  }
-  if (name === 'branches') {
-    return (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M3 21h18M5 21V7l7-4 7 4v14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M9 21v-6h6v6M10 10h4M10 13h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      </svg>
-    )
-  }
-  if (name === 'users') {
-    return (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-        <circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="1.8" />
-        <path d="M22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       </svg>
     )
   }
@@ -125,6 +105,7 @@ export default function MainLayout() {
   const isReportsPage = location.pathname === '/reports'
   const isFillPage = location.pathname === '/import' || isTablePage
   const isWidePage = location.pathname === '/dashboard'
+  const isMastersArea = MASTER_PATHS.includes(location.pathname)
 
   useEffect(() => {
     setMobileNavOpen(false)
@@ -144,6 +125,10 @@ export default function MainLayout() {
 
   function closeMobileNav() {
     setMobileNavOpen(false)
+  }
+
+  function openMasters() {
+    navigate('/masters')
   }
 
   return (
@@ -191,11 +176,6 @@ export default function MainLayout() {
           <nav className="sidebar-nav sidebar-nav--reports">
             {renderNavLinks(REPORTS_NAV_ITEMS, closeMobileNav)}
           </nav>
-
-          <p className="sidebar-menu-label sidebar-menu-label--reports">Admin</p>
-          <nav className="sidebar-nav sidebar-nav--reports">
-            {renderNavLinks(ADMIN_NAV_ITEMS, closeMobileNav)}
-          </nav>
         </div>
 
         <div className="sidebar-footer">
@@ -230,6 +210,18 @@ export default function MainLayout() {
           </div>
 
           <div className="topbar-right">
+            <button
+              type="button"
+              className={`topbar-settings${isMastersArea ? ' topbar-settings--active' : ''}`}
+              aria-label="Open masters"
+              onClick={openMasters}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
+                <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </button>
+
             <time className="topbar-date" dateTime={new Date().toISOString().slice(0, 10)}>
               {formatToday()}
             </time>

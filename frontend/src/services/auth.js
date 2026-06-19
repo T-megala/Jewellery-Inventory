@@ -61,6 +61,25 @@ export function getUserRoleLabel(user = getUser()) {
   return user.role.name || 'Staff'
 }
 
+export function getUserBranch(user = getUser()) {
+  return user?.branch ?? null
+}
+
+export function getUserPermissions(user = getUser()) {
+  return Array.isArray(user?.permissions) ? user.permissions : []
+}
+
+export function hasPermission(permission, user = getUser()) {
+  return getUserPermissions(user).includes(permission)
+}
+
+export function hasAnyPermission(permissions = [], user = getUser()) {
+  if (!permissions.length) return true
+  const granted = getUserPermissions(user)
+  if (!granted.length) return true
+  return permissions.some((permission) => granted.includes(permission))
+}
+
 export function isAuthenticated() {
   return !!getToken()
 }

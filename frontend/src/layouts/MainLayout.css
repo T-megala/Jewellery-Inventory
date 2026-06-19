@@ -562,3 +562,32 @@
     min-height: auto;
   }
 }
+
+/* ── Masters (header gear) ── */
+.topbar-settings {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border: 1px solid #ebe3d6;
+  border-radius: 10px;
+  background: #fffefb;
+  color: #6b5c48;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.topbar-settings:hover {
+  background: #fff8f0;
+  border-color: rgba(184, 134, 11, 0.35);
+  color: #9a7209;
+}
+
+.topbar-settings--active {
+  background: linear-gradient(135deg, #fffdf8 0%, #fdf6e8 100%);
+  border-color: rgba(184, 134, 11, 0.4);
+  color: #b8860b;
+  box-shadow: 0 2px 8px rgba(184, 134, 11, 0.12);
+}
