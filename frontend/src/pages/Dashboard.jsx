@@ -15,6 +15,7 @@ import {
   YAxis,
 } from 'recharts'
 import {
+  EMPTY_COUNTER_ACCURACY,
   EMPTY_STOCKTAKE,
   fetchDailyImports,
   fetchDashboard,
@@ -23,6 +24,15 @@ import {
 } from '../services/dashboard.js'
 import './Module.css'
 import './Dashboard.css'
+
+function DashboardTitleRow({ className = '', children }) {
+  return (
+    <div className={`dashboard-title-row${className ? ` ${className}` : ''}`}>
+      <span className="dashboard-title-accent" aria-hidden="true" />
+      {children}
+    </div>
+  )
+}
 
 const CHART_COLORS = ['#b8860b', '#d4af37', '#c9a227', '#a67c00', '#e8c547', '#9a7209', '#f0c75e', '#8b6914']
 
@@ -258,8 +268,9 @@ function LastStocktakeFindings({ stocktake }) {
   return (
     <article className="stocktake-card">
       <header className="stocktake-card__head">
-        <span className="stocktake-card__accent" aria-hidden="true" />
-        <h3>Last stocktake findings</h3>
+        <DashboardTitleRow>
+          <h3>Last stocktake findings</h3>
+        </DashboardTitleRow>
       </header>
 
       <div className="stocktake-card__body">
@@ -270,19 +281,17 @@ function LastStocktakeFindings({ stocktake }) {
         {hasData && (
           <>
             <div className="stocktake-accuracy">
-              <div className="stocktake-accuracy__meta">
-                <span className="stocktake-accuracy__label">Accuracy</span>
-                <strong className="stocktake-accuracy__value dashboard-num">
-                  {formatAccuracyPercent(accuracy)}
-                  %
-                </strong>
-              </div>
+              <span className="stocktake-accuracy__label">Accuracy</span>
               <div className="stocktake-accuracy__track" aria-hidden="true">
                 <span
                   className="stocktake-accuracy__fill"
                   style={{ width: `${Math.min(Math.max(accuracy, 0), 100)}%` }}
                 />
               </div>
+              <strong className="stocktake-accuracy__value dashboard-num">
+                {formatAccuracyPercent(accuracy)}
+                %
+              </strong>
             </div>
 
             <ul className="stocktake-findings">
@@ -303,9 +312,7 @@ function LastStocktakeFindings({ stocktake }) {
                   Duration:
                   {' '}
                   {durationMinutes}
-                  {' '}
-                  min
-                  {' · '}
+                  {' min · '}
                 </>
               )}
               {formatStocktakeDate(stocktake.verificationDay || latestSession?.date)}
@@ -324,11 +331,10 @@ function StocktakeHistory({ stocktake }) {
   return (
     <article className="stocktake-card">
       <header className="stocktake-card__head">
-        <span className="stocktake-card__accent" aria-hidden="true" />
-        <div>
+        <DashboardTitleRow>
           <h3>Stocktake history</h3>
-          <p className="stocktake-card__subtitle">Last 6 sessions — accuracy %</p>
-        </div>
+        </DashboardTitleRow>
+        <p className="stocktake-card__subtitle">Last 6 sessions — accuracy %</p>
       </header>
 
       <div className="stocktake-card__body">
@@ -337,7 +343,7 @@ function StocktakeHistory({ stocktake }) {
         )}
 
         {sessions.length > 0 && (
-          <>
+          <div className="stocktake-history-panel">
             <ul className="stocktake-history">
               {sessions.map((session) => {
                 const tone = getStocktakeAccuracyTone(session.accuracyPercent)
@@ -383,7 +389,7 @@ function StocktakeHistory({ stocktake }) {
                 <strong>{history.frequencyLabel || '—'}</strong>
               </div>
             </div>
-          </>
+          </div>
         )}
       </div>
     </article>
@@ -549,6 +555,7 @@ function JewelleryTrendLineChart({
   showArea = false,
   uniformDots = false,
   dotOnImportOnly = false,
+  chartHeight = 280,
 }) {
   const isMonth = period === 'month'
   const xLabelKey = isMonth ? 'dayMedium' : 'dayShort'
@@ -556,13 +563,19 @@ function JewelleryTrendLineChart({
   const xTickInterval = isMonth ? Math.max(0, Math.floor(chartData.length / 6) - 1) : 0
   const gradientId = `trend-fill-${dataKey}`
   const curveType = showArea ? 'natural' : 'monotone'
+  const isCompact = chartHeight < 250
 
   return (
-    <div className={`trend-line-chart${showArea ? ' trend-line-chart--filled' : ''}`}>
-      <ResponsiveContainer width="100%" height={280}>
+    <div className={`trend-line-chart${showArea ? ' trend-line-chart--filled' : ''}${isCompact ? ' trend-line-chart--compact' : ''}`}>
+      <ResponsiveContainer width="100%" height={chartHeight}>
         <ComposedChart
           data={chartData}
-          margin={{ top: 36, right: isMonth ? 16 : 28, left: 8, bottom: isMonth ? 28 : 14 }}
+          margin={{
+            top: isCompact ? 28 : 36,
+            right: isMonth ? 16 : isCompact ? 20 : 28,
+            left: 8,
+            bottom: isMonth ? 28 : isCompact ? 8 : 14,
+          }}
         >
           {showArea && (
             <defs>
@@ -679,6 +692,7 @@ function DayWiseSalesLineChart({ data }) {
       legendPrimaryLabel="Sold (pieces)"
       showArea
       uniformDots
+      chartHeight={220}
     />
   )
 }
@@ -890,8 +904,8 @@ function DailyImportsBarChart({ data }) {
 
   return (
     <div className="day-sales-bar-chart">
-      <ResponsiveContainer width="100%" height={280}>
-        <BarChart data={chartData} margin={{ top: 28, right: 8, left: 0, bottom: 8 }}>
+      <ResponsiveContainer width="100%" height={220}>
+        <BarChart data={chartData} margin={{ top: 22, right: 8, left: 0, bottom: 6 }}>
           <XAxis
             dataKey="dayShort"
             tick={(props) => <TrendLineXTick {...props} chartData={chartData} labelKey="dayShort" />}
@@ -908,7 +922,7 @@ function DailyImportsBarChart({ data }) {
             width={52}
           />
           <Tooltip content={<DailyImportTooltip />} cursor={{ fill: 'rgba(184, 134, 11, 0.08)' }} />
-          <Bar dataKey="barStock" radius={[10, 10, 0, 0]} maxBarSize={48}>
+          <Bar dataKey="barStock" radius={[8, 8, 0, 0]} maxBarSize={42}>
             {chartData.map((entry) => (
               <Cell key={entry.date} fill={DAY_SALES_BAR_COLORS[entry.dayType]} />
             ))}
@@ -1014,8 +1028,10 @@ function DailyImportsCard({
   return (
     <article className="analytics-tile analytics-tile--wide day-sales-card">
       <header className="day-sales-card__head">
-        <div className="day-sales-card__title-wrap">
-          <h3>Daily imports — stock per batch</h3>
+        <DashboardTitleRow>
+          <h3 className="day-sales-card__title">Daily imports — stock per batch</h3>
+        </DashboardTitleRow>
+        <div className="day-sales-card__toolbar">
           <div className="day-sales-pills">
             {DAILY_IMPORT_COUNTERS.map((option) => (
               <button
@@ -1029,31 +1045,31 @@ function DailyImportsCard({
               </button>
             ))}
           </div>
-        </div>
 
-        <div className="day-sales-card__actions">
-          <div className="day-sales-toggle" role="group" aria-label="Import period">
-            {DAY_SALES_PERIODS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className={`day-sales-toggle__btn${period === option.value ? ' day-sales-toggle__btn--active' : ''}`}
-                onClick={() => onPeriodChange(option.value)}
-                disabled={loading}
-              >
-                {option.label}
-              </button>
-            ))}
+          <div className="day-sales-card__actions">
+            <div className="day-sales-toggle" role="group" aria-label="Import period">
+              {DAY_SALES_PERIODS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`day-sales-toggle__btn${period === option.value ? ' day-sales-toggle__btn--active' : ''}`}
+                  onClick={() => onPeriodChange(option.value)}
+                  disabled={loading}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <span className="day-sales-total">
+              {formatCount(importCount)}
+              {' '}
+              imports ·
+              {' '}
+              <strong>{formatCount(totalStock)}</strong>
+              {' '}
+              stock
+            </span>
           </div>
-          <span className="day-sales-total">
-            {formatCount(importCount)}
-            {' '}
-            imports ·
-            {' '}
-            <strong>{formatCount(totalStock)}</strong>
-            {' '}
-            stock
-          </span>
         </div>
       </header>
 
@@ -1062,6 +1078,47 @@ function DailyImportsCard({
         {!loading && error && <p className="analytics-empty">{error}</p>}
         {!loading && !error && period === 'week' && <DailyImportsBarChart data={data} />}
         {!loading && !error && period === 'month' && <DailyImportsCalendar data={data} />}
+      </div>
+    </article>
+  )
+}
+
+function CounterDisplayAccuracy({ counterAccuracy, loading }) {
+  const locations = counterAccuracy?.locations ?? []
+  const hasData = locations.length > 0
+
+  return (
+    <article className="counter-accuracy-card">
+      <header className="counter-accuracy-card__head">
+        <DashboardTitleRow>
+          <h3>Counter / display accuracy</h3>
+        </DashboardTitleRow>
+        <p className="counter-accuracy-card__subtitle">By physical location in store</p>
+      </header>
+
+      <div className="counter-accuracy-card__body">
+        {loading && <p className="analytics-empty">Loading counter accuracy…</p>}
+        {!loading && !hasData && (
+          <p className="analytics-empty">Counter accuracy will appear after stock verification.</p>
+        )}
+        {!loading && hasData && (
+          <ul className="counter-accuracy-list">
+            {locations.map((row) => {
+              const tone = getStocktakeAccuracyTone(row.accuracyPercent)
+              const label = row.label || row.name
+
+              return (
+                <li key={row.name} className="counter-accuracy-list__row">
+                  <span className="counter-accuracy-list__label" title={label}>{label}</span>
+                  <span className={`counter-accuracy-list__value dashboard-num counter-accuracy-list__value--${tone}`}>
+                    {formatAccuracyPercent(row.accuracyPercent)}
+                    %
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        )}
       </div>
     </article>
   )
@@ -1078,10 +1135,12 @@ function DayWiseSalesCard({
   totalSoldPieces,
 }) {
   return (
-    <article className="analytics-tile analytics-tile--wide day-sales-card">
+    <article className="analytics-tile day-sales-card">
       <header className="day-sales-card__head">
-        <div className="day-sales-card__title-wrap">
-          <h3>Day-wise sales — pieces sold</h3>
+        <DashboardTitleRow>
+          <h3 className="day-sales-card__title">Day-wise sales — pieces sold</h3>
+        </DashboardTitleRow>
+        <div className="day-sales-card__toolbar">
           <div className="day-sales-pills">
             {DAY_SALES_COUNTERS.map((option) => (
               <button
@@ -1095,29 +1154,29 @@ function DayWiseSalesCard({
               </button>
             ))}
           </div>
-        </div>
 
-        <div className="day-sales-card__actions">
-          <div className="day-sales-toggle" role="group" aria-label="Sales period">
-            {DAY_SALES_PERIODS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className={`day-sales-toggle__btn${period === option.value ? ' day-sales-toggle__btn--active' : ''}`}
-                onClick={() => onPeriodChange(option.value)}
-                disabled={loading}
-              >
-                {option.label}
-              </button>
-            ))}
+          <div className="day-sales-card__actions">
+            <div className="day-sales-toggle" role="group" aria-label="Sales period">
+              {DAY_SALES_PERIODS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`day-sales-toggle__btn${period === option.value ? ' day-sales-toggle__btn--active' : ''}`}
+                  onClick={() => onPeriodChange(option.value)}
+                  disabled={loading}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <span className="day-sales-total">
+              Total:
+              {' '}
+              <strong>{formatCount(totalSoldPieces)}</strong>
+              {' '}
+              pieces
+            </span>
           </div>
-          <span className="day-sales-total">
-            Total:
-            {' '}
-            <strong>{formatCount(totalSoldPieces)}</strong>
-            {' '}
-            pieces
-          </span>
         </div>
       </header>
 
@@ -1258,7 +1317,9 @@ function AnalyticsTile({ title, subtitle, children, wide = false }) {
   return (
     <article className={`analytics-tile${wide ? ' analytics-tile--wide' : ''}`}>
       <header className="analytics-tile__head">
-        <h3>{title}</h3>
+        <DashboardTitleRow>
+          <h3>{title}</h3>
+        </DashboardTitleRow>
         <p>{subtitle}</p>
       </header>
       <div className="analytics-tile__body">{children}</div>
@@ -1405,6 +1466,7 @@ function DashboardSkeleton() {
 export default function Dashboard() {
   const [summary, setSummary] = useState(null)
   const [stocktake, setStocktake] = useState(EMPTY_STOCKTAKE)
+  const [counterAccuracy, setCounterAccuracy] = useState(EMPTY_COUNTER_ACCURACY)
   const [topSoldProducts, setTopSoldProducts] = useState([])
   const [topSoldNotice, setTopSoldNotice] = useState('')
   const [loading, setLoading] = useState(true)
@@ -1434,12 +1496,14 @@ export default function Dashboard() {
         if (!cancelled) {
           setSummary(inventory)
           setStocktake(verification?.stocktake ?? EMPTY_STOCKTAKE)
+          setCounterAccuracy(verification?.counterAccuracy ?? EMPTY_COUNTER_ACCURACY)
         }
       } catch (err) {
         if (!cancelled) {
           setError(err.message || 'Failed to load inventory summary.')
           setSummary(null)
           setStocktake(EMPTY_STOCKTAKE)
+          setCounterAccuracy(EMPTY_COUNTER_ACCURACY)
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -1642,18 +1706,20 @@ export default function Dashboard() {
       </section>
 
       {/* Key Metrics */}
-      <div className="module-header">
-        <div className="module-header__main">
-          <h2>Inventory Overview</h2>
+      <section className="dashboard-inventory-overview">
+        <div className="module-header">
+          <div className="module-header__main">
+            <h2>Inventory Overview</h2>
+          </div>
+          <span className="module-header__badge">Live Data</span>
         </div>
-        <span className="module-header__badge">Live Data</span>
-      </div>
 
-      <div className="dashboard-metrics">
-        {metricCards.map((card) => (
-          <MetricCard key={card.key} {...card} />
-        ))}
-      </div>
+        <div className="dashboard-metrics">
+          {metricCards.map((card) => (
+            <MetricCard key={card.key} {...card} />
+          ))}
+        </div>
+      </section>
 
       {/* Stocktake */}
       <section className="dashboard-stocktake">
@@ -1696,16 +1762,23 @@ export default function Dashboard() {
             <CounterSplitChart data={counterSplitData} />
           </AnalyticsTile>
 
-          <DayWiseSalesCard
-            period={salesPeriod}
-            counter={salesCounter}
-            onPeriodChange={setSalesPeriod}
-            onCounterChange={setSalesCounter}
-            loading={dayWiseLoading}
-            error={dayWiseError}
-            data={dayWiseSales.data}
-            totalSoldPieces={dayWiseSales.totalSoldPieces}
-          />
+          <div className="sales-accuracy-row">
+            <DayWiseSalesCard
+              period={salesPeriod}
+              counter={salesCounter}
+              onPeriodChange={setSalesPeriod}
+              onCounterChange={setSalesCounter}
+              loading={dayWiseLoading}
+              error={dayWiseError}
+              data={dayWiseSales.data}
+              totalSoldPieces={dayWiseSales.totalSoldPieces}
+            />
+
+            <CounterDisplayAccuracy
+              counterAccuracy={counterAccuracy}
+              loading={loading}
+            />
+          </div>
 
           <DailyImportsCard
             period={importPeriod}

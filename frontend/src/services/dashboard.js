@@ -31,6 +31,11 @@ export const EMPTY_STOCKTAKE = {
   history: { ...EMPTY_STOCKTAKE_HISTORY },
 };
 
+export const EMPTY_COUNTER_ACCURACY = {
+  verificationDay: null,
+  locations: [],
+};
+
 function normalizeStocktakeHistory(history = {}) {
   return {
     sessions: (history.sessions || []).map((session) => ({
@@ -50,6 +55,21 @@ function normalizeStocktakeHistory(history = {}) {
     averageDurationMinutes: Number(history.averageDurationMinutes ?? 0),
     frequencyLabel: history.frequencyLabel ?? null,
     averageFrequencyDays: history.averageFrequencyDays ?? null,
+  };
+}
+
+function normalizeCounterAccuracy(counterAccuracy = {}) {
+  return {
+    verificationDay: counterAccuracy.verificationDay ?? null,
+    locations: (counterAccuracy.locations || []).map((row) => ({
+      name: row.name ?? '',
+      label: row.label ?? row.name ?? '',
+      category: row.category ?? null,
+      expected: Number(row.expected ?? 0),
+      found: Number(row.found ?? 0),
+      missing: Number(row.missing ?? 0),
+      accuracyPercent: Number(row.accuracyPercent ?? 0),
+    })),
   };
 }
 
@@ -94,6 +114,7 @@ export async function fetchDashboard() {
       ...EMPTY_VERIFICATION,
       ...verification,
       stocktake: normalizeStocktake(verification.stocktake),
+      counterAccuracy: normalizeCounterAccuracy(verification.counterAccuracy),
     },
   };
 }

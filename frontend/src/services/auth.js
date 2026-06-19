@@ -50,6 +50,17 @@ export function getUser() {
   }
 }
 
+export function getUserDisplayName(user = getUser()) {
+  if (!user) return 'User'
+  return user.fullName || user.name || user.username || 'User'
+}
+
+export function getUserRoleLabel(user = getUser()) {
+  if (!user?.role) return 'Staff'
+  if (typeof user.role === 'string') return user.role
+  return user.role.name || 'Staff'
+}
+
 export function isAuthenticated() {
   return !!getToken()
 }

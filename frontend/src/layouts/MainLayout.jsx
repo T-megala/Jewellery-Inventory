@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { getUser, logout } from '../services/auth.js'
+import { getUser, getUserDisplayName, getUserRoleLabel, logout } from '../services/auth.js'
 import './MainLayout.css'
 
 const MAIN_NAV_ITEMS = [
@@ -108,7 +108,8 @@ export default function MainLayout() {
   const location = useLocation()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const user = getUser()
-  const displayName = user?.name || user?.username || 'User'
+  const displayName = getUserDisplayName(user)
+  const roleLabel = getUserRoleLabel(user)
   const page = PAGE_META[location.pathname] || PAGE_META['/dashboard']
   const isTablePage = location.pathname === '/stock' || location.pathname === '/users'
   const isReportsPage = location.pathname === '/reports'
@@ -227,7 +228,7 @@ export default function MainLayout() {
               <span className="topbar-user__avatar">{getInitials(displayName)}</span>
               <div className="topbar-user__text">
                 <p className="topbar-user__name">{displayName}</p>
-                <p className="topbar-user__role">{user?.role || 'Staff'}</p>
+                <p className="topbar-user__role">{roleLabel}</p>
               </div>
             </div>
 

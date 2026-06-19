@@ -17,6 +17,30 @@
   letter-spacing: -0.03em;
 }
 
+/* Gold accent bar — titles only */
+.dashboard-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dashboard-title-accent {
+  flex-shrink: 0;
+  width: 4px;
+  height: 1.2em;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #e8c547, #b8860b);
+}
+
+.dashboard-title-row h2,
+.dashboard-title-row h3 {
+  margin: 0;
+}
+
+.analytics-tile__head .dashboard-title-row {
+  margin-bottom: 4px;
+}
+
 /* ── Hero Banner ── */
 .dashboard-hero {
   position: relative;
@@ -295,20 +319,44 @@
 }
 
 /* ── KPI Metric Cards (6-up) ── */
+.dashboard-inventory-overview {
+  margin-bottom: 28px;
+  font-family: var(--font-body);
+}
+
+.dashboard-inventory-overview .module-header {
+  margin-bottom: 16px;
+}
+
+.dashboard-inventory-overview .module-header__main h2 {
+  font-family: var(--font-body);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.dashboard-inventory-overview .module-header__badge {
+  font-family: var(--font-body);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
 .dashboard-metrics {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 14px;
   margin-bottom: 22px;
+  align-items: stretch;
 }
 
 .dashboard-metric {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0;
-  min-height: 108px;
-  padding: 14px 16px 14px 18px;
+  height: 100%;
+  min-height: 118px;
+  padding: 16px 14px 14px 20px;
   background: #fff;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
@@ -330,30 +378,34 @@
   left: 0;
   bottom: 0;
   width: 4px;
+  background: linear-gradient(180deg, #e8c547, #b8860b);
 }
 
-.dashboard-metric--gold::before { background: #d4af37; }
-.dashboard-metric--blue::before { background: #3b82f6; }
-.dashboard-metric--teal::before { background: #0d9488; }
-.dashboard-metric--green::before { background: #22c55e; }
-.dashboard-metric--red::before { background: #ef4444; }
-.dashboard-metric--purple::before { background: #8b5cf6; }
-
 .dashboard-metric__label {
-  margin: 0 0 8px;
+  flex-shrink: 0;
+  margin: 0;
+  min-height: 2.6em;
+  max-height: 2.6em;
+  font-family: var(--font-body);
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 0.04em;
+  text-transform: uppercase;
   color: var(--color-text-muted);
-  line-height: 1.25;
+  line-height: 1.3;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .dashboard-metric__value {
-  margin: 0 0 8px;
+  flex-shrink: 0;
+  margin: 8px 0 0;
   font-family: var(--font-numeric);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1, 'lnum' 1;
-  font-size: 1.55rem;
+  font-size: 1.35rem;
   font-weight: 700;
   letter-spacing: -0.03em;
   color: var(--color-text);
@@ -361,13 +413,18 @@
 }
 
 .dashboard-metric__hint {
-  display: inline-flex;
-  align-items: center;
+  display: flex;
+  align-items: flex-start;
   gap: 4px;
+  width: 100%;
+  flex-shrink: 0;
   margin: auto 0 0;
+  padding-top: 10px;
+  min-height: 2.4em;
+  font-family: var(--font-body);
   font-size: 0.68rem;
   font-weight: 500;
-  color: #a39484;
+  color: var(--color-text-muted);
   line-height: 1.35;
 }
 
@@ -388,10 +445,18 @@
 /* ── Stock Analytics ── */
 .dashboard-analytics {
   margin-bottom: 28px;
+  font-family: var(--font-body);
 }
 
 .dashboard-analytics .module-header {
   margin-bottom: 16px;
+}
+
+.dashboard-analytics .module-header__main h2 {
+  font-family: var(--font-body);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .analytics-grid {
@@ -410,9 +475,163 @@
   flex-direction: column;
 }
 
+/* Shared subtitle under card / tile titles */
+.analytics-tile__head p,
+.stocktake-card__subtitle,
+.counter-accuracy-card__subtitle {
+  font-family: var(--font-body);
+  font-size: 0.74rem;
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--color-text-muted);
+}
+
 .analytics-tile--wide {
   grid-column: 1 / -1;
 }
+
+.sales-accuracy-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.sales-accuracy-row .day-sales-card,
+.sales-accuracy-row .counter-accuracy-card {
+  height: 100%;
+}
+
+.sales-accuracy-row .day-sales-card {
+  min-width: 0;
+}
+
+.sales-accuracy-row .day-sales-card__head {
+  padding: 14px 16px 12px;
+  gap: 10px;
+}
+
+.sales-accuracy-row .day-sales-card__toolbar {
+  gap: 10px;
+}
+
+.sales-accuracy-row .day-sales-pill {
+  padding: 6px 12px;
+  font-size: 0.76rem;
+}
+
+.sales-accuracy-row .day-sales-toggle__btn {
+  padding: 6px 14px;
+  font-size: 0.76rem;
+}
+
+.sales-accuracy-row .day-sales-total {
+  padding: 6px 12px;
+  font-size: 0.76rem;
+}
+
+.sales-accuracy-row .day-sales-card__body,
+.sales-accuracy-row .counter-accuracy-card__body {
+  flex: 1;
+  padding-bottom: 10px;
+}
+
+.sales-accuracy-row .counter-accuracy-card__head {
+  padding: 14px 16px 10px;
+}
+
+.sales-accuracy-row .counter-accuracy-list__row {
+  padding: 10px 16px;
+}
+
+.sales-accuracy-row .trend-line-legend {
+  padding: 2px 8px 0;
+}
+
+.sales-accuracy-row .trend-line-chart--compact {
+  padding: 2px 8px 0 4px;
+}
+
+.counter-accuracy-card {
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.counter-accuracy-card__head {
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid #f5f0e8;
+}
+
+.counter-accuracy-card__head h3 {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1.35;
+}
+
+.counter-accuracy-card__subtitle {
+  margin: 6px 0 0;
+  padding-left: 16px;
+}
+
+.counter-accuracy-card__body {
+  flex: 1;
+  padding: 4px 0 8px;
+}
+
+.counter-accuracy-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.counter-accuracy-list__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid #f5f0e8;
+}
+
+.counter-accuracy-list__row:last-child {
+  border-bottom: none;
+}
+
+/* Shared list row labels (counter accuracy, stocktake findings, etc.) */
+.counter-accuracy-list__label,
+.stocktake-findings__label,
+.stocktake-history__label {
+  font-family: var(--font-body);
+  font-size: 0.76rem;
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--color-text);
+}
+
+.counter-accuracy-list__label {
+  min-width: 0;
+}
+
+.counter-accuracy-list__value {
+  flex-shrink: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.counter-accuracy-list__value--green { color: #16a34a; }
+.counter-accuracy-list__value--gold { color: #b8860b; }
+.counter-accuracy-list__value--orange { color: #f97316; }
+.counter-accuracy-list__value--red { color: #ef4444; }
 
 .analytics-tile__head {
   padding: 18px 20px 12px;
@@ -420,19 +639,16 @@
 }
 
 .analytics-tile__head h3 {
-  margin: 0 0 4px;
-  font-family: var(--font-display);
-  font-size: 1.05rem;
-  font-weight: 600;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 700;
   color: var(--color-text);
-  line-height: 1.25;
+  line-height: 1.35;
 }
 
 .analytics-tile__head p {
-  margin: 0;
-  font-size: 0.76rem;
-  color: var(--color-text-muted);
-  line-height: 1.4;
+  margin: 4px 0 0;
+  padding-left: 16px;
 }
 
 .analytics-tile__body {
@@ -445,7 +661,9 @@
   margin: 0;
   padding: 32px 0;
   text-align: center;
+  font-family: var(--font-body);
   font-size: 0.82rem;
+  font-weight: 400;
   color: var(--color-text-muted);
 }
 
@@ -558,9 +776,10 @@
   padding-bottom: 10px;
   background: #faf8f5;
   border-bottom: 1px solid #ebe3d6;
+  font-family: var(--font-body);
   font-size: 0.68rem;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--color-text-muted);
 }
@@ -585,9 +804,10 @@
 }
 
 .product-category-breakdown__name {
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
+  font-family: var(--font-body);
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--color-text);
   white-space: nowrap;
@@ -615,8 +835,8 @@
 .product-category-breakdown__count {
   font-family: var(--font-numeric);
   font-variant-numeric: tabular-nums;
-  font-size: 0.84rem;
-  font-weight: 700;
+  font-size: 0.82rem;
+  font-weight: 600;
   color: var(--color-primary-dark);
   text-align: right;
   white-space: nowrap;
@@ -663,7 +883,8 @@
 }
 
 .product-bar-chart__name {
-  font-size: 0.8rem;
+  font-family: var(--font-body);
+  font-size: 0.82rem;
   font-weight: 500;
   color: var(--color-text);
   white-space: nowrap;
@@ -691,8 +912,8 @@
 .product-bar-chart__value {
   font-family: var(--font-numeric);
   font-variant-numeric: tabular-nums;
-  font-size: 0.88rem;
-  font-weight: 700;
+  font-size: 0.82rem;
+  font-weight: 600;
   color: var(--color-primary-dark);
   text-align: right;
   white-space: nowrap;
@@ -720,7 +941,8 @@
   gap: 8px;
   padding: 7px 12px;
   border-radius: 100px;
-  font-size: 0.8125rem;
+  font-family: var(--font-body);
+  font-size: 0.78rem;
   font-weight: 600;
   line-height: 1;
 }
@@ -740,7 +962,7 @@
 .counter-split__value {
   font-family: var(--font-numeric);
   font-variant-numeric: tabular-nums;
-  font-size: 1.125rem;
+  font-size: 1.05rem;
   font-weight: 700;
   color: var(--color-text);
   letter-spacing: -0.02em;
@@ -773,28 +995,36 @@
 
 .day-sales-card__head {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  padding: 18px 20px 14px;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px 12px;
   border-bottom: 1px solid #f5f0e8;
 }
 
-.day-sales-card__title-wrap h3 {
-  margin: 0 0 12px;
-  font-family: var(--font-display);
-  font-size: 1.05rem;
-  font-weight: 600;
+.day-sales-card__title {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 700;
   color: var(--color-text);
-  line-height: 1.25;
+  line-height: 1.35;
+}
+
+.day-sales-card__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+  flex-wrap: wrap;
 }
 
 .day-sales-card__actions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px 14px;
+  gap: 10px;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .day-sales-card__body {
@@ -805,6 +1035,8 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .day-sales-pill {
@@ -813,7 +1045,7 @@
   border-radius: 100px;
   background: #fff;
   font-family: var(--font-body);
-  font-size: 0.8125rem;
+  font-size: 0.78rem;
   font-weight: 600;
   color: var(--color-text-muted);
   cursor: pointer;
@@ -851,7 +1083,7 @@
   border-radius: 100px;
   background: transparent;
   font-family: var(--font-body);
-  font-size: 0.8125rem;
+  font-size: 0.78rem;
   font-weight: 600;
   color: var(--color-text-muted);
   cursor: pointer;
@@ -874,14 +1106,17 @@
   background: var(--color-gold-soft);
   border: 1px solid rgba(184, 134, 11, 0.2);
   border-radius: 100px;
-  font-size: 0.8125rem;
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 500;
   color: var(--color-primary-dark);
   white-space: nowrap;
 }
 
 .day-sales-total strong {
   font-family: var(--font-numeric);
-  font-size: 0.9375rem;
+  font-size: 0.86rem;
+  font-weight: 600;
   color: var(--color-text);
 }
 
@@ -908,7 +1143,8 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-size: 0.75rem;
+  font-family: var(--font-body);
+  font-size: 0.72rem;
   font-weight: 500;
   color: var(--color-text-muted);
 }
@@ -972,7 +1208,8 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-size: 0.75rem;
+  font-family: var(--font-body);
+  font-size: 0.72rem;
   font-weight: 500;
   color: var(--color-text-muted);
 }
@@ -998,6 +1235,59 @@
 
 .day-sales-heatmap {
   padding: 4px 6px 2px;
+}
+
+/* Compact month calendar inside day-sales cards */
+.day-sales-card .day-sales-heatmap {
+  padding: 2px 4px 0;
+}
+
+.day-sales-card .day-sales-heatmap__weekdays {
+  gap: 5px;
+  margin-bottom: 5px;
+}
+
+.day-sales-card .day-sales-heatmap__weekday {
+  font-size: 0.66rem;
+}
+
+.day-sales-card .day-sales-heatmap__grid {
+  gap: 5px;
+}
+
+.day-sales-card .day-sales-heatmap__cell,
+.day-sales-card .day-sales-heatmap__cell--empty {
+  min-height: 40px;
+  padding: 4px 2px;
+  border-radius: 8px;
+  gap: 1px;
+}
+
+.day-sales-card .day-sales-heatmap__day {
+  font-size: 0.74rem;
+}
+
+.day-sales-card .day-sales-heatmap__value {
+  font-size: 0.62rem;
+}
+
+.day-sales-card .day-sales-heatmap__legend {
+  margin-top: 8px;
+  font-size: 0.68rem;
+}
+
+.sales-accuracy-row .day-sales-heatmap__cell,
+.sales-accuracy-row .day-sales-heatmap__cell--empty {
+  min-height: 34px;
+  padding: 3px 2px;
+}
+
+.sales-accuracy-row .day-sales-heatmap__weekdays {
+  margin-bottom: 4px;
+}
+
+.sales-accuracy-row .day-sales-heatmap__legend {
+  margin-top: 6px;
 }
 
 .daily-imports-calendar .day-sales-heatmap__value {
@@ -1661,10 +1951,18 @@
 /* ── Dashboard quick nav ── */
 .dash-nav {
   margin-bottom: 8px;
+  font-family: var(--font-body);
 }
 
 .dash-nav .module-header {
   margin-bottom: 14px;
+}
+
+.dash-nav .module-header__main h2 {
+  font-family: var(--font-body);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .dash-nav__grid {
@@ -1719,15 +2017,16 @@
 }
 
 .dash-nav-card__title {
-  font-family: var(--font-display);
-  font-size: 1rem;
+  font-family: var(--font-body);
+  font-size: 0.92rem;
   font-weight: 600;
   color: var(--color-text);
-  line-height: 1.25;
+  line-height: 1.35;
 }
 
 .dash-nav-card__label {
-  font-size: 0.76rem;
+  font-family: var(--font-body);
+  font-size: 0.72rem;
   font-weight: 500;
   color: var(--color-text-muted);
   line-height: 1.4;
@@ -1757,10 +2056,18 @@
 /* ── Stocktake widgets ── */
 .dashboard-stocktake {
   margin-bottom: 28px;
+  font-family: var(--font-body);
 }
 
 .dashboard-stocktake .module-header {
   margin-bottom: 16px;
+}
+
+.dashboard-stocktake .module-header__main h2 {
+  font-family: var(--font-body);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .stocktake-grid {
@@ -1781,38 +2088,21 @@
 }
 
 .stocktake-card__head {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
   padding: 18px 20px 14px;
   border-bottom: 1px solid #f5f0e8;
 }
 
-.stocktake-card__accent {
-  flex-shrink: 0;
-  width: 4px;
-  height: 22px;
-  margin-top: 2px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, #e8c547, #b8860b);
-}
-
 .stocktake-card__head h3 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 1.05rem;
-  font-weight: 600;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 700;
   color: var(--color-text);
-  line-height: 1.25;
+  line-height: 1.35;
 }
 
 .stocktake-card__subtitle {
-  margin: 4px 0 0;
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
+  margin: 6px 0 0;
+  padding-left: 16px;
 }
 
 .stocktake-card__body {
@@ -1823,35 +2113,31 @@
   background: linear-gradient(180deg, #fffefb 0%, #fff 100%);
 }
 
-.stocktake-accuracy {
-  margin-bottom: 18px;
+.stocktake-history-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
-.stocktake-accuracy__meta {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
+.stocktake-accuracy {
+  margin-bottom: 0;
 }
 
 .stocktake-accuracy__label {
+  display: block;
+  margin-bottom: 10px;
+  font-family: var(--font-body);
   font-size: 0.68rem;
   font-weight: 600;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--color-text-muted);
 }
 
-.stocktake-accuracy__value {
-  font-size: 1.65rem;
-  font-weight: 700;
-  color: #b8860b;
-  line-height: 1;
-}
-
 .stocktake-accuracy__track {
-  height: 10px;
+  height: 12px;
+  margin-bottom: 12px;
   border-radius: 999px;
   background: #f3ece0;
   overflow: hidden;
@@ -1864,32 +2150,44 @@
   background: linear-gradient(90deg, #d4af37, #b8860b);
 }
 
+.stocktake-accuracy__value {
+  display: block;
+  margin-bottom: 16px;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #b8860b;
+  line-height: 1;
+}
+
 .stocktake-findings {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  border-top: 1px solid #f0ebe3;
 }
 
 .stocktake-findings__row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid #f0ebe3;
+}
+
+.stocktake-findings__row:last-child {
+  border-bottom: none;
 }
 
 .stocktake-findings__label {
-  font-size: 0.82rem;
-  color: #5c4f42;
-  line-height: 1.35;
+  flex: 1;
+  min-width: 0;
 }
 
 .stocktake-findings__badge {
   flex-shrink: 0;
-  min-width: 52px;
-  padding: 4px 12px;
+  min-width: 56px;
+  padding: 5px 14px;
   border-radius: 999px;
   font-size: 0.82rem;
   font-weight: 700;
@@ -1912,15 +2210,18 @@
 }
 
 .stocktake-findings__badge--unverified {
-  background: #fff3e6;
-  color: #c2410c;
+  background: #f5ebe0;
+  color: #92400e;
 }
 
 .stocktake-card__footer {
   margin-top: auto;
-  padding-top: 16px;
+  padding-top: 14px;
+  font-family: var(--font-body);
   font-size: 0.72rem;
+  font-weight: 400;
   color: var(--color-text-muted);
+  line-height: 1.5;
 }
 
 .stocktake-history {
@@ -1929,7 +2230,6 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
 }
 
 .stocktake-history__row {
@@ -1937,6 +2237,12 @@
   grid-template-columns: 10px 56px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f0ebe3;
+}
+
+.stocktake-history__row:last-child {
+  border-bottom: none;
 }
 
 .stocktake-history__dot {
@@ -1951,9 +2257,7 @@
 .stocktake-history__dot--green { background: #22c55e; }
 
 .stocktake-history__label {
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: #5c4f42;
+  min-width: 0;
 }
 
 .stocktake-history__track {
@@ -1976,8 +2280,8 @@
 
 .stocktake-history__value {
   min-width: 52px;
-  font-size: 0.82rem;
-  font-weight: 700;
+  font-size: 0.86rem;
+  font-weight: 600;
   text-align: right;
 }
 
@@ -1988,33 +2292,32 @@
 
 .stocktake-history__summary {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 18px 24px;
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px solid #f5f0e8;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid #f0ebe3;
 }
 
 .stocktake-history__stat {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .stocktake-history__stat span {
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-family: var(--font-body);
+  font-size: 0.76rem;
+  font-weight: 400;
   color: var(--color-text-muted);
 }
 
 .stocktake-history__stat strong {
-  font-size: 0.92rem;
-  font-weight: 700;
+  font-size: 0.82rem;
+  font-weight: 600;
   color: var(--color-text);
+  text-align: right;
 }
 
 .stocktake-history__stat:first-child strong {
@@ -2053,6 +2356,10 @@
   }
 
   .analytics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sales-accuracy-row {
     grid-template-columns: 1fr;
   }
 
@@ -2116,12 +2423,13 @@
     grid-template-columns: 1fr;
   }
 
-  .day-sales-card__head {
+  .day-sales-card__toolbar {
     flex-direction: column;
     align-items: stretch;
   }
 
   .day-sales-card__actions {
+    margin-left: 0;
     justify-content: space-between;
   }
 
