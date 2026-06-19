@@ -114,11 +114,9 @@ const toSafeUser = async (row) => {
           name: defaultBranch.name,
         }
       : null,
-    branches: branches.map(({ id, name, isMain, isActive, isDefault }) => ({
+    branches: branches.map(({ id, name, isDefault }) => ({
       id,
       name,
-      isMain,
-      isActive,
       isDefault,
     })),
   };

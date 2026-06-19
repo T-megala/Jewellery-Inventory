@@ -100,12 +100,32 @@ const replaceRolePermissions = async (connection, roleId, permissionIds) => {
   }
 
   const placeholders = permissionIds.map(() => "(?, ?)").join(", ");
-  const values = permissionIds.flatMap((permissionId) => [roleId, permissionId]);
+  const values = permissionIds.flatMap((permissionId) => [
+    roleId,
+    permissionId,
+  ]);
 
   await connection.execute(
     `INSERT INTO role_permissions (role_id, permission_id) VALUES ${placeholders}`,
     values,
   );
+};
+
+const validatePermissionIds = async (connection, permissionIds) => {
+  if (!permissionIds.length) return;
+
+  const placeholders = permissionIds.map(() => "?").join(", ");
+  const [rows] = await connection.execute(
+    `SELECT id FROM permissions WHERE id IN (${placeholders})`,
+    permissionIds,
+  );
+
+  const foundIds = new Set(rows.map((row) => Number(row.id)));
+  const invalidIds = permissionIds.filter((id) => !foundIds.has(Number(id)));
+
+  if (invalidIds.length) {
+    throw new ApiError(400, `Invalid permission IDs: ${invalidIds.join(", ")}`);
+  }
 };
 
 export const createRole = async ({ name, description, permissionIds = [] }) => {
@@ -129,6 +149,7 @@ export const createRole = async ({ name, description, permissionIds = [] }) => {
     const roleId = result.insertId;
 
     if (permissionIds.length) {
+      await validatePermissionIds(connection, permissionIds);
       await replaceRolePermissions(connection, roleId, permissionIds);
     }
 
@@ -175,13 +196,16 @@ export const updateRole = async (
        WHERE id = ?`,
       [
         name !== undefined ? String(name).trim() : existing.name,
-        description !== undefined ? description?.trim() || null : existing.description,
+        description !== undefined
+          ? description?.trim() || null
+          : existing.description,
         isActive !== undefined ? (isActive ? 1 : 0) : existing.isActive ? 1 : 0,
         id,
       ],
     );
 
     if (permissionIds !== undefined) {
+      await validatePermissionIds(connection, permissionIds);
       await replaceRolePermissions(connection, id, permissionIds);
     }
 
@@ -217,7 +241,10 @@ export const deleteRole = async (id) => {
   );
 
   if (Number(users[0]?.total ?? 0) > 0) {
-    throw new ApiError(400, "Cannot delete role while users are assigned to it");
+    throw new ApiError(
+      400,
+      "Cannot delete role while users are assigned to it",
+    );
   }
 
   await pool.execute(`DELETE FROM roles WHERE id = ?`, [id]);

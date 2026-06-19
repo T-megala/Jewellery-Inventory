@@ -25,6 +25,8 @@ const files = [
   "021_branches_roles_permissions.sql",
   "022_user_branches.sql",
   "023_drop_users_branch_id.sql",
+  "024_drop_branch_is_main_is_active.sql",
+  "025_split_master_permissions.sql",
 ];
 
 const SKIPPABLE_ERROR_CODES = new Set([

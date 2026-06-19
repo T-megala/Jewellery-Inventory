@@ -4,8 +4,6 @@ import ApiError from "../utils/ApiError.js";
 const mapBranchRow = (row) => ({
   id: Number(row.branch_id),
   name: row.branch_name,
-  isMain: Boolean(row.is_main),
-  isActive: Boolean(row.branch_is_active),
   isDefault: Boolean(row.is_default),
 });
 
@@ -14,9 +12,7 @@ export const getBranchesForUser = async (userId, connection = pool) => {
     `SELECT
        ub.branch_id,
        ub.is_default,
-       b.name AS branch_name,
-       b.is_main,
-       b.is_active AS branch_is_active
+       b.name AS branch_name
      FROM user_branches ub
      INNER JOIN branches b ON b.id = ub.branch_id
      WHERE ub.user_id = ?
@@ -44,12 +40,12 @@ const validateBranchIds = async (connection, branchIds) => {
 
   const placeholders = branchIds.map(() => "?").join(", ");
   const [rows] = await connection.execute(
-    `SELECT id FROM branches WHERE id IN (${placeholders}) AND is_active = 1`,
+    `SELECT id FROM branches WHERE id IN (${placeholders})`,
     branchIds,
   );
 
   if (rows.length !== branchIds.length) {
-    throw new ApiError(400, "One or more branch IDs are invalid or inactive");
+    throw new ApiError(400, "One or more branch IDs are invalid");
   }
 };
 

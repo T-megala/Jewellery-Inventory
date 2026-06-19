@@ -7,12 +7,18 @@ export const PERMISSIONS = {
   STOCK_VERIFICATION_REPORT: "stock_verification.report",
   STOCK_VERIFICATION_EXPORT: "stock_verification.export",
   USERS_VIEW: "users.view",
-  USERS_MANAGE: "users.manage",
+  USERS_ADD: "users.add",
+  USERS_UPDATE: "users.update",
+  USERS_DELETE: "users.delete",
   BRANCHES_VIEW: "branches.view",
-  BRANCHES_MANAGE: "branches.manage",
+  BRANCHES_ADD: "branches.add",
+  BRANCHES_UPDATE: "branches.update",
+  BRANCHES_DELETE: "branches.delete",
   BRANCHES_VIEW_ALL: "branches.view_all",
   ROLES_VIEW: "roles.view",
-  ROLES_MANAGE: "roles.manage",
+  ROLES_ADD: "roles.add",
+  ROLES_UPDATE: "roles.update",
+  ROLES_DELETE: "roles.delete",
 };
 
 export const ALL_PERMISSION_NAMES = Object.values(PERMISSIONS);

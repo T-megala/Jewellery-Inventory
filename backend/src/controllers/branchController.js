@@ -12,8 +12,7 @@ const parseId = (raw) => {
 };
 
 export const listBranches = async (req, res) => {
-  const includeInactive = String(req.query?.includeInactive ?? "") === "true";
-  const branches = await branchService.getAllBranches({ includeInactive });
+  const branches = await branchService.getAllBranches();
 
   res.status(200).json({ success: true, data: branches });
 };
@@ -34,8 +33,6 @@ export const createBranch = async (req, res) => {
     address: req.body?.address,
     city: req.body?.city,
     phone: req.body?.phone,
-    isMain: Boolean(req.body?.isMain),
-    isActive: req.body?.isActive !== false,
   });
 
   res.status(201).json({ success: true, data: branch });
@@ -47,8 +44,6 @@ export const updateBranch = async (req, res) => {
     address: req.body?.address,
     city: req.body?.city,
     phone: req.body?.phone,
-    isMain: req.body?.isMain,
-    isActive: req.body?.isActive,
   });
 
   res.status(200).json({ success: true, data: branch });

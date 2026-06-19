@@ -7,31 +7,23 @@ const toBranch = (row) => ({
   address: row.address ?? null,
   city: row.city ?? null,
   phone: row.phone ?? null,
-  isMain: Boolean(row.is_main),
-  isActive: Boolean(row.is_active),
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
 
 export const getDefaultBranchId = async () => {
   const [rows] = await pool.execute(
-    `SELECT id FROM branches
-     WHERE is_active = 1
-     ORDER BY is_main DESC, id ASC
-     LIMIT 1`,
+    `SELECT id FROM branches ORDER BY id ASC LIMIT 1`,
   );
 
   return rows[0]?.id ?? null;
 };
 
-export const getAllBranches = async ({ includeInactive = false } = {}) => {
-  const whereClause = includeInactive ? "1 = 1" : "is_active = 1";
-
+export const getAllBranches = async () => {
   const [rows] = await pool.execute(
-    `SELECT id, name, address, city, phone, is_main, is_active, created_at, updated_at
+    `SELECT id, name, address, city, phone, created_at, updated_at
      FROM branches
-     WHERE ${whereClause}
-     ORDER BY is_main DESC, name ASC`,
+     ORDER BY name ASC`,
   );
 
   return rows.map(toBranch);
@@ -39,7 +31,7 @@ export const getAllBranches = async ({ includeInactive = false } = {}) => {
 
 export const getBranchById = async (id) => {
   const [rows] = await pool.execute(
-    `SELECT id, name, address, city, phone, is_main, is_active, created_at, updated_at
+    `SELECT id, name, address, city, phone, created_at, updated_at
      FROM branches
      WHERE id = ?`,
     [id],
@@ -55,21 +47,15 @@ export const createBranch = async (payload) => {
     throw new ApiError(400, "Branch name is required");
   }
 
-  if (payload.isMain) {
-    await pool.execute(`UPDATE branches SET is_main = 0`);
-  }
-
   try {
     const [result] = await pool.execute(
-      `INSERT INTO branches (name, address, city, phone, is_main, is_active)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO branches (name, address, city, phone)
+       VALUES (?, ?, ?, ?)`,
       [
         name,
         payload.address?.trim() || null,
         payload.city?.trim() || null,
         payload.phone?.trim() || null,
-        payload.isMain ? 1 : 0,
-        payload.isActive === false ? 0 : 1,
       ],
     );
 
@@ -97,10 +83,6 @@ export const updateBranch = async (id, payload) => {
     throw new ApiError(400, "Branch name is required");
   }
 
-  if (payload.isMain) {
-    await pool.execute(`UPDATE branches SET is_main = 0`);
-  }
-
   try {
     await pool.execute(
       `UPDATE branches
@@ -108,8 +90,6 @@ export const updateBranch = async (id, payload) => {
            address = ?,
            city = ?,
            phone = ?,
-           is_main = ?,
-           is_active = ?,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
       [
@@ -121,16 +101,6 @@ export const updateBranch = async (id, payload) => {
         payload.phone !== undefined
           ? payload.phone?.trim() || null
           : existing.phone,
-        payload.isMain !== undefined ? (payload.isMain ? 1 : 0) : existing.isMain
-          ? 1
-          : 0,
-        payload.isActive !== undefined
-          ? payload.isActive
-            ? 1
-            : 0
-          : existing.isActive
-            ? 1
-            : 0,
         id,
       ],
     );

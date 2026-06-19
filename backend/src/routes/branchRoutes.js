@@ -8,27 +8,27 @@ const router = express.Router();
 
 router.get(
   "/branches",
-  authorize(PERMISSIONS.BRANCHES_VIEW, PERMISSIONS.BRANCHES_MANAGE, PERMISSIONS.BRANCHES_VIEW_ALL),
+  authorize(PERMISSIONS.BRANCHES_VIEW, PERMISSIONS.BRANCHES_VIEW_ALL),
   asyncHandler(branchController.listBranches),
 );
 router.get(
   "/branches/:id",
-  authorize(PERMISSIONS.BRANCHES_VIEW, PERMISSIONS.BRANCHES_MANAGE, PERMISSIONS.BRANCHES_VIEW_ALL),
+  authorize(PERMISSIONS.BRANCHES_VIEW, PERMISSIONS.BRANCHES_VIEW_ALL),
   asyncHandler(branchController.getBranch),
 );
 router.post(
   "/branches",
-  authorize(PERMISSIONS.BRANCHES_MANAGE),
+  authorize(PERMISSIONS.BRANCHES_ADD),
   asyncHandler(branchController.createBranch),
 );
 router.put(
   "/branches/:id",
-  authorize(PERMISSIONS.BRANCHES_MANAGE),
+  authorize(PERMISSIONS.BRANCHES_UPDATE),
   asyncHandler(branchController.updateBranch),
 );
 router.delete(
   "/branches/:id",
-  authorize(PERMISSIONS.BRANCHES_MANAGE),
+  authorize(PERMISSIONS.BRANCHES_DELETE),
   asyncHandler(branchController.deleteBranch),
 );
 

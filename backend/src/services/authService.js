@@ -50,15 +50,11 @@ export const loadUserAuthProfile = async (userId) => {
       ? {
           id: defaultBranch.id,
           name: defaultBranch.name,
-          isMain: defaultBranch.isMain,
-          isActive: defaultBranch.isActive,
         }
       : null,
-    branches: branches.map(({ id, name, isMain, isActive, isDefault }) => ({
+    branches: branches.map(({ id, name, isDefault }) => ({
       id,
       name,
-      isMain,
-      isActive,
       isDefault,
     })),
     role: mapRole(row),
@@ -120,18 +116,6 @@ export const login = async ({ username, password }) => {
 
   if (profile.branches.length === 0) {
     throw new ApiError(403, "User branch is not assigned");
-  }
-
-  const inactiveAssignedBranch = profile.branches.find(
-    (branch) => !branch.isActive,
-  );
-
-  if (profile.branches.length > 0 && profile.branches.every((b) => !b.isActive)) {
-    throw new ApiError(403, "All assigned branches are inactive");
-  }
-
-  if (profile.branch && !profile.branch.isActive && inactiveAssignedBranch) {
-    throw new ApiError(403, "Default branch is inactive");
   }
 
   await pool.execute(`UPDATE users SET last_login_at = NOW() WHERE id = ?`, [

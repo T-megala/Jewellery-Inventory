@@ -8,27 +8,27 @@ const router = express.Router();
 
 router.get(
   "/users",
-  authorize(PERMISSIONS.USERS_VIEW, PERMISSIONS.USERS_MANAGE),
+  authorize(PERMISSIONS.USERS_VIEW),
   asyncHandler(userController.listUsers),
 );
 router.get(
   "/users/:id",
-  authorize(PERMISSIONS.USERS_VIEW, PERMISSIONS.USERS_MANAGE),
+  authorize(PERMISSIONS.USERS_VIEW),
   asyncHandler(userController.getUser),
 );
 router.post(
   "/users",
-  authorize(PERMISSIONS.USERS_MANAGE),
+  authorize(PERMISSIONS.USERS_ADD),
   asyncHandler(userController.createUser),
 );
 router.put(
   "/users/:id",
-  authorize(PERMISSIONS.USERS_MANAGE),
+  authorize(PERMISSIONS.USERS_UPDATE),
   asyncHandler(userController.updateUser),
 );
 router.delete(
   "/users/:id",
-  authorize(PERMISSIONS.USERS_MANAGE),
+  authorize(PERMISSIONS.USERS_DELETE),
   asyncHandler(userController.deleteUser),
 );
 

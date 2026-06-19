@@ -1197,26 +1197,23 @@ const resolveCurrentBranch = async (branchId = null) => {
       return {
         id: branch.id,
         name: branch.name,
-        isMain: branch.isMain,
       };
     }
   }
 
   const branches = await branchService.getAllBranches();
-  const selected = branches.find((branch) => branch.isMain) ?? branches[0] ?? null;
+  const selected = branches[0] ?? null;
 
   if (!selected) {
     return {
       id: null,
       name: "Unassigned",
-      isMain: false,
     };
   }
 
   return {
     id: selected.id,
     name: selected.name,
-    isMain: selected.isMain,
   };
 };
 
