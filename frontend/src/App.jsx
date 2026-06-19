@@ -7,6 +7,7 @@ import Reports from './pages/Reports.jsx'
 import Users from './pages/Users.jsx'
 import Branches from './pages/Branches.jsx'
 import Masters from './pages/Masters.jsx'
+import Roles from './pages/Roles.jsx'
 import MainLayout from './layouts/MainLayout.jsx'
 import RequireAuth from './components/RequireAuth.jsx'
 import RootRedirect from './components/RootRedirect.jsx'
@@ -28,6 +29,7 @@ export default function App() {
           <Route path="/masters" element={<Masters />} />
           <Route path="/users" element={<Users />} />
           <Route path="/branches" element={<Branches />} />
+          <Route path="/roles" element={<Roles />} />
         </Route>
       </Route>
 

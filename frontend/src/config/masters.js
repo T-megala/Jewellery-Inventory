@@ -29,7 +29,6 @@ export const MASTER_GROUPS = [
         description: 'Role definitions and permissions',
         icon: 'roles',
         permissions: ['roles.view', 'roles.manage'],
-        comingSoon: true,
       },
     ],
   },

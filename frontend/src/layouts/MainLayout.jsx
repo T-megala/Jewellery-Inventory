@@ -22,6 +22,7 @@ const PAGE_META = {
   '/masters': { title: 'Masters', subtitle: 'Setup and administration' },
   '/users': { title: 'Users', subtitle: 'Add, edit and manage user accounts' },
   '/branches': { title: 'Branches', subtitle: 'Add, edit and manage showroom branches' },
+  '/roles': { title: 'Roles', subtitle: 'Add, edit and manage roles and permissions' },
 }
 
 function NavIcon({ name }) {
@@ -101,7 +102,7 @@ export default function MainLayout() {
   const displayName = getUserDisplayName(user)
   const roleLabel = getUserRoleLabel(user)
   const page = PAGE_META[location.pathname] || PAGE_META['/dashboard']
-  const isTablePage = location.pathname === '/stock' || location.pathname === '/users' || location.pathname === '/branches'
+  const isTablePage = location.pathname === '/stock' || location.pathname === '/users' || location.pathname === '/branches' || location.pathname === '/roles'
   const isReportsPage = location.pathname === '/reports'
   const isFillPage = location.pathname === '/import' || isTablePage
   const isWidePage = location.pathname === '/dashboard'
