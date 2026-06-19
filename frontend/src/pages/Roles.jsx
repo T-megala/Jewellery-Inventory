@@ -485,7 +485,9 @@ export default function Roles() {
                     <p className="roles-field__hint">No permissions available.</p>
                   ) : (
                     <div className="roles-permissions">
-                      {Object.entries(permissionGroups).map(([moduleName, modulePermissions]) => (
+                      {Object.entries(permissionGroups)
+                        .sort(([a], [b]) => a.localeCompare(b))
+                        .map(([moduleName, modulePermissions]) => (
                         <section key={moduleName} className="roles-permissions__group">
                           <h3 className="roles-permissions__group-title">{moduleName}</h3>
                           <div className="roles-permissions__list">
