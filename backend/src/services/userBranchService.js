@@ -53,13 +53,6 @@ const validateBranchIds = async (connection, branchIds) => {
   }
 };
 
-const syncUsersDefaultBranch = async (connection, userId, defaultBranchId) => {
-  await connection.execute(`UPDATE users SET branch_id = ? WHERE id = ?`, [
-    defaultBranchId,
-    userId,
-  ]);
-};
-
 const applyUserBranches = async (
   connection,
   userId,
@@ -71,7 +64,6 @@ const applyUserBranches = async (
   ]);
 
   if (uniqueBranchIds.length === 0) {
-    await syncUsersDefaultBranch(connection, userId, null);
     return [];
   }
 
@@ -88,7 +80,6 @@ const applyUserBranches = async (
     values,
   );
 
-  await syncUsersDefaultBranch(connection, userId, resolvedDefault);
   return getBranchesForUser(userId, connection);
 };
 
@@ -187,7 +178,6 @@ export const switchUserDefaultBranch = async (userId, branchId) => {
       [userId, parsedBranchId],
     );
 
-    await syncUsersDefaultBranch(connection, userId, parsedBranchId);
     await connection.commit();
 
     return getDefaultBranchForUser(userId);

@@ -24,6 +24,7 @@ const files = [
   "018_backfill_latest_stock_verification.sql",
   "021_branches_roles_permissions.sql",
   "022_user_branches.sql",
+  "023_drop_users_branch_id.sql",
 ];
 
 const SKIPPABLE_ERROR_CODES = new Set([
@@ -32,6 +33,8 @@ const SKIPPABLE_ERROR_CODES = new Set([
   "ER_DUP_KEYNAME",
   "ER_FK_DUP_NAME",
   "ER_CANT_CREATE_TABLE",
+  "ER_CANT_DROP_FIELD_OR_KEY",
+  "ER_BAD_FIELD_ERROR",
 ]);
 
 async function runSqlFile(file) {

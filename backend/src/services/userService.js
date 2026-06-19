@@ -11,11 +11,26 @@ const USER_SELECT_SQL = `
     u.is_active,
     u.created_at,
     u.role_id,
-    r.name AS role_name,
-    u.branch_id
+    r.name AS role_name
   FROM users u
   LEFT JOIN roles r ON r.id = u.role_id
 `;
+
+const parseRequiredId = (value, fieldName) => {
+  const parsed = parseOptionalId(value, fieldName);
+
+  if (!parsed) {
+    throw new ApiError(400, `${fieldName} is required`);
+  }
+
+  return parsed;
+};
+
+const assertBranchAssignment = (branchAssignment) => {
+  if (!branchAssignment || branchAssignment.branchIds.length === 0) {
+    throw new ApiError(400, "At least one branch is required");
+  }
+};
 
 const parseOptionalId = (value, fieldName) => {
   if (value === undefined || value === null || value === "") {
@@ -143,12 +158,14 @@ export const createUser = async ({
   }
 
   const hashedPassword = await hashPassword(password);
-  const parsedRoleId = parseOptionalId(roleId, "roleId");
+  const parsedRoleId = parseRequiredId(roleId, "roleId");
   const branchAssignment = resolveBranchAssignment({
     branchId,
     branchIds,
     defaultBranchId,
   });
+
+  assertBranchAssignment(branchAssignment);
 
   const connection = await pool.getConnection();
 
@@ -157,14 +174,13 @@ export const createUser = async ({
 
     const [result] = await connection.execute(
       `INSERT INTO users
-        (username, password, full_name, role_id, branch_id, is_active)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+        (username, password, full_name, role_id, is_active)
+       VALUES (?, ?, ?, ?, ?)`,
       [
         username,
         hashedPassword,
         fullName?.trim() || null,
         parsedRoleId,
-        branchAssignment?.defaultBranchId ?? null,
         isActive ? 1 : 0,
       ],
     );
@@ -223,7 +239,7 @@ export const updateUser = async (id, fields) => {
 
   if (fields.roleId !== undefined) {
     setClauses.push("role_id = ?");
-    params.push(parseOptionalId(fields.roleId, "roleId"));
+    params.push(parseRequiredId(fields.roleId, "roleId"));
   }
 
   if (fields.isActive !== undefined) {
@@ -263,6 +279,8 @@ export const updateUser = async (id, fields) => {
     }
 
     if (branchAssignment) {
+      assertBranchAssignment(branchAssignment);
+
       await userBranchService.setUserBranches(
         id,
         branchAssignment.branchIds,

@@ -20,7 +20,6 @@ export const loadUserAuthProfile = async (userId) => {
        u.username,
        u.full_name,
        u.is_active,
-       u.branch_id,
        u.role_id,
        r.name AS role_name
      FROM users u
@@ -113,6 +112,14 @@ export const login = async ({ username, password }) => {
 
   if (!profile) {
     throw new ApiError(401, "Invalid username or password");
+  }
+
+  if (!profile.role) {
+    throw new ApiError(403, "User role is not assigned");
+  }
+
+  if (profile.branches.length === 0) {
+    throw new ApiError(403, "User branch is not assigned");
   }
 
   const inactiveAssignedBranch = profile.branches.find(

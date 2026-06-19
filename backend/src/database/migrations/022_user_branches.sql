@@ -1,4 +1,4 @@
--- User ↔ branch mapping (many-to-many). users.branch_id remains the default/active branch.
+-- User ↔ branch mapping (many-to-many). Default branch is is_default = 1 in this table.
 
 CREATE TABLE IF NOT EXISTS user_branches (
   user_id INT NOT NULL,

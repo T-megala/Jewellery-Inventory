@@ -61,6 +61,39 @@ const parseBranchIdsField = (value) => {
   return value;
 };
 
+const parseRequiredIdField = (value, fieldName) => {
+  if (value === undefined || value === null || value === "") {
+    throw new ApiError(400, `${fieldName} is required`);
+  }
+
+  return parseOptionalIdField(value, fieldName);
+};
+
+const validateBranchInput = ({ branchId, branchIds }) => {
+  const parsedBranchIds = parseBranchIdsField(branchIds);
+  const parsedBranchId =
+    branchId === undefined
+      ? undefined
+      : parseOptionalIdField(branchId, "branchId");
+
+  if (parsedBranchIds === undefined && parsedBranchId === undefined) {
+    throw new ApiError(400, "At least one branch is required (branchIds or branchId)");
+  }
+
+  if (
+    parsedBranchIds !== undefined &&
+    parsedBranchIds.length === 0 &&
+    !parsedBranchId
+  ) {
+    throw new ApiError(400, "At least one branch is required");
+  }
+
+  return {
+    branchId: parsedBranchId,
+    branchIds: parsedBranchIds,
+  };
+};
+
 export const createUser = async (req, res) => {
   const username = normalizeUsername(req.body?.username);
   const { password } = req.body ?? {};
@@ -88,13 +121,18 @@ export const createUser = async (req, res) => {
     throw new ApiError(400, "Password is too long (max 72 bytes)");
   }
 
+  const branchInput = validateBranchInput({
+    branchId: req.body?.branchId,
+    branchIds: req.body?.branchIds,
+  });
+
   const user = await userService.createUser({
     username,
     password,
     fullName: req.body?.fullName,
-    roleId: parseOptionalIdField(req.body?.roleId, "roleId"),
-    branchId: parseOptionalIdField(req.body?.branchId, "branchId"),
-    branchIds: parseBranchIdsField(req.body?.branchIds),
+    roleId: parseRequiredIdField(req.body?.roleId, "roleId"),
+    branchId: branchInput.branchId,
+    branchIds: branchInput.branchIds,
     defaultBranchId: parseOptionalIdField(
       req.body?.defaultBranchId,
       "defaultBranchId",
@@ -145,15 +183,19 @@ export const updateUser = async (req, res) => {
   }
 
   if (req.body?.roleId !== undefined) {
-    fields.roleId = parseOptionalIdField(req.body.roleId, "roleId");
+    fields.roleId = parseRequiredIdField(req.body.roleId, "roleId");
   }
 
-  if (req.body?.branchId !== undefined) {
-    fields.branchId = parseOptionalIdField(req.body.branchId, "branchId");
-  }
-
-  if (req.body?.branchIds !== undefined) {
-    fields.branchIds = parseBranchIdsField(req.body.branchIds);
+  if (
+    req.body?.branchId !== undefined ||
+    req.body?.branchIds !== undefined
+  ) {
+    const branchInput = validateBranchInput({
+      branchId: req.body?.branchId,
+      branchIds: req.body?.branchIds,
+    });
+    fields.branchId = branchInput.branchId;
+    fields.branchIds = branchInput.branchIds;
   }
 
   if (req.body?.defaultBranchId !== undefined) {
