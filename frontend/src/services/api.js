@@ -1,5 +1,6 @@
 import { API_BASE, apiUrl } from '../config/apiConfig.js';
-import { getToken } from './auth.js';
+import { getToken, logout } from './auth.js';
+import { getUserFriendlyErrorMessage } from '../utils/userFriendlyError.js';
 
 export { API_BASE, apiUrl };
 
@@ -32,16 +33,25 @@ function isSuccessResponse(res, json) {
   return json?.success === true || json?.status === true || json?.data !== undefined;
 }
 
+function createApiError(message, status) {
+  const error = new Error(getUserFriendlyErrorMessage(message, status));
+  error.status = status;
+  return error;
+}
+
 async function parseResponse(res) {
   let json;
   try {
     json = await res.json();
   } catch {
-    throw new Error('Unexpected server response');
+    throw createApiError('Unexpected server response', res.status);
   }
 
   if (!isSuccessResponse(res, json)) {
-    throw new Error(getErrorMessage(json));
+    if (res.status === 401) {
+      logout();
+    }
+    throw createApiError(getErrorMessage(json), res.status);
   }
 
   return json;
@@ -55,7 +65,25 @@ function buildJsonHeaders(options = {}) {
   };
 }
 
+/** Authenticated GET — always sends the access token. */
+export async function apiGet(path, options = {}) {
+  const res = await fetch(apiUrl(path), {
+    method: 'GET',
+    ...options,
+    headers: buildJsonHeaders(options),
+  });
+
+  return parseResponse(res);
+}
+
 export async function apiFetch(path, options = {}) {
+  const method = (options.method || 'GET').toUpperCase();
+
+  if (method === 'GET') {
+    const json = await apiGet(path, options);
+    return json.data;
+  }
+
   const res = await fetch(apiUrl(path), {
     ...options,
     headers: buildJsonHeaders(options),
@@ -79,12 +107,7 @@ export async function apiUpload(path, formData) {
 }
 
 export async function apiFetchPaged(path, options = {}) {
-  const res = await fetch(apiUrl(path), {
-    ...options,
-    headers: buildJsonHeaders(options),
-  });
-
-  const json = await parseResponse(res);
+  const json = await apiGet(path, options);
 
   return {
     rows: json.data || [],
@@ -96,12 +119,7 @@ export async function apiFetchReport(path, params = {}) {
   const query = buildQueryString(params);
   const url = query ? `${path}?${query}` : path;
 
-  const res = await fetch(apiUrl(url), {
-    method: 'GET',
-    headers: buildJsonHeaders(),
-  });
-
-  const json = await parseResponse(res);
+  const json = await apiGet(url);
 
   return {
     rows: (json.data || []).map(normalizeReportRow),
@@ -129,7 +147,10 @@ export async function apiFetchReport(path, params = {}) {
 
 /** Authenticated fetch for non-JSON responses (e.g. file downloads). */
 export async function apiFetchRaw(path, options = {}) {
+  const method = (options.method || 'GET').toUpperCase();
+
   return fetch(apiUrl(path), {
+    method,
     ...options,
     headers: {
       ...getAuthHeaders(),

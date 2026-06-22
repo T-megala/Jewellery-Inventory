@@ -10,6 +10,7 @@ const STATUS_OPTIONS = [
   { value: 'FULLY_VERIFIED', label: 'Fully Verified' },
   { value: 'PARTIALLY_VERIFIED', label: 'Partially Verified' },
   { value: 'NOT_VERIFIED', label: 'Not Verified' },
+  { value: 'NEW', label: 'New' },
 ]
 
 const STAT_CARDS = [
@@ -52,6 +53,7 @@ function statusBadgeClass(status) {
   if (status === 'FULLY_VERIFIED') return 'report-status report-status--found'
   if (status === 'PARTIALLY_VERIFIED') return 'report-status report-status--partial'
   if (status === 'NOT_VERIFIED') return 'report-status report-status--missing'
+  if (status === 'NEW') return 'report-status report-status--new'
   return 'report-status'
 }
 
@@ -59,6 +61,7 @@ function formatStatus(status) {
   if (status === 'FULLY_VERIFIED') return 'Fully Verified'
   if (status === 'PARTIALLY_VERIFIED') return 'Partially Verified'
   if (status === 'NOT_VERIFIED') return 'Not Verified'
+  if (status === 'NEW') return 'New'
   return status || '—'
 }
 

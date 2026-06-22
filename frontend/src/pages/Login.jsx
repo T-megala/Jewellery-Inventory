@@ -18,7 +18,10 @@ export default function Login() {
 
   useEffect(() => {
     logout()
-  }, [])
+    if (location.state?.sessionExpired) {
+      setError('Your session has expired. Please sign in again.')
+    }
+  }, [location.state])
 
   function handleUsernameKeyDown(e) {
     if (e.key === 'Enter') {

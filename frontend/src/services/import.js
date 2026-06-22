@@ -1,4 +1,4 @@
-import { apiUrl, getAuthHeaders } from './api.js';
+import { apiGet, apiUrl, getAuthHeaders } from './api.js';
 
 /** Bulk stock import — POST multipart/form-data with field name "file" */
 export const BULK_STOCK_IMPORT_URL = apiUrl('/products/import');
@@ -74,17 +74,7 @@ export async function startAsyncImport(file) {
 }
 
 export async function getImportStatus(jobId) {
-  const res = await fetch(apiUrl(`/products/import/status/${jobId}`), {
-    headers: {
-      ...getAuthHeaders(),
-    },
-  });
-  const json = await parseJsonResponse(res);
-
-  if (!res.ok) {
-    throw new Error(json.message || json.error || 'Failed to fetch import status');
-  }
-
+  const json = await apiGet(`/products/import/status/${jobId}`);
   return json.data;
 }
 

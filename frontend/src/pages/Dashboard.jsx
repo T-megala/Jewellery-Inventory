@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   Area,
   Bar,
@@ -21,6 +21,12 @@ import {
   fetchDayWiseSales,
   fetchTopSoldProducts,
 } from '../services/dashboard.js'
+import { logout } from '../services/auth.js'
+import {
+  getUserFriendlyErrorMessage,
+  isConnectionError,
+  isSessionExpiredError,
+} from '../utils/userFriendlyError.js'
 import './Module.css'
 import './Dashboard.css'
 
@@ -143,12 +149,13 @@ function formatQty(value) {
   return numeric.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-function formatLastStocktake(value) {
-  if (!value) return 'No stocktake yet'
+function formatLastImport(batch) {
+  const value = batch?.uploadedAt ?? batch?.batchDate
+  if (!value) return 'No import yet'
 
   const normalized = String(value).includes('T') ? value : String(value).replace(' ', 'T')
   const date = new Date(normalized)
-  if (Number.isNaN(date.getTime())) return 'No stocktake yet'
+  if (Number.isNaN(date.getTime())) return 'No import yet'
 
   const now = new Date()
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -166,51 +173,39 @@ function formatLastStocktake(value) {
   else if (diffDays === 1) dayLabel = 'yesterday'
   else dayLabel = date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
 
-  return `Last: ${dayLabel} ${time}`
+  return `Last import: ${dayLabel} ${time}`
 }
 
-function buildOverviewCards(overview = {}) {
-  const scanRate = Number(overview.scanRate ?? 0)
-  const discrepancies = Number(overview.discrepancies ?? 0)
+function buildOverviewCards(totals = {}, batch = null) {
+  const totalBarcodes = Number(totals.totalBarcodes ?? totals.totalTags ?? 0)
+  const totalQty = Number(totals.totalQty ?? totals.totalPieces ?? 0)
+  const itemDescriptions = Number(totals.itemDescriptions ?? totals.productGroups ?? 0)
+  const avgQtyPerItem = itemDescriptions > 0 ? totalQty / itemDescriptions : 0
 
   return [
     {
-      label: 'Categories',
-      value: formatCount(overview.categories ?? 0),
-      hint: 'Product types',
+      label: 'Total Products',
+      value: formatCount(totalBarcodes),
+      hint: 'Unique barcodes',
       accent: 'gold-light',
     },
     {
-      label: 'Sub-products',
-      value: formatCount(overview.subProducts ?? 0),
-      hint: 'Variants',
+      label: 'Closing Qty',
+      value: formatQty(totalQty),
+      hint: 'Pieces in stock',
       accent: 'gold-medium',
     },
     {
-      label: 'Total items (ERP)',
-      value: formatCount(overview.totalItemsErp ?? 0),
-      hint: 'EOD sync',
+      label: 'Item Descriptions',
+      value: formatCount(itemDescriptions),
+      hint: 'Dress types',
       accent: 'gold-dark',
     },
     {
-      label: 'Items scanned',
-      value: formatCount(overview.itemsScanned ?? 0),
-      hint: scanRate > 0 ? `▲ ${scanRate.toFixed(2)}% scan rate` : 'No scan yet',
-      hintTone: scanRate > 0 ? 'positive' : 'neutral',
+      label: 'Avg Qty / Item',
+      value: formatQty(avgQtyPerItem),
+      hint: formatLastImport(batch),
       accent: 'gold',
-    },
-    {
-      label: 'Discrepancies',
-      value: formatCount(discrepancies),
-      hint: discrepancies > 0 ? '▼ Review needed' : 'All matched',
-      hintTone: discrepancies > 0 ? 'negative' : 'positive',
-      accent: 'gold-deep',
-    },
-    {
-      label: 'Stocktakes / month',
-      value: formatCount(overview.stocktakesThisMonth ?? 0),
-      hint: formatLastStocktake(overview.lastStocktakeAt),
-      accent: 'gold-rich',
     },
   ]
 }
@@ -1114,7 +1109,7 @@ function DashboardSkeleton() {
       </div>
 
       <div className="skeleton-overview" aria-hidden="true">
-        {Array.from({ length: 6 }, (_, i) => (
+        {Array.from({ length: 4 }, (_, i) => (
           <div key={i} className="skeleton-overview-card">
             <span className="skeleton skeleton-overview-card__label" />
             <span className="skeleton skeleton-overview-card__value" />
@@ -1127,8 +1122,8 @@ function DashboardSkeleton() {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate()
   const [summary, setSummary] = useState(null)
-  const [overview, setOverview] = useState(null)
   const [topSoldProducts, setTopSoldProducts] = useState([])
   const [topSoldNotice, setTopSoldNotice] = useState('')
   const [loading, setLoading] = useState(true)
@@ -1151,15 +1146,20 @@ export default function Dashboard() {
       setError('')
 
       try {
-        const { inventory, overview: overviewData } = await fetchDashboard()
+        const { inventory } = await fetchDashboard()
 
         if (!cancelled) {
           setSummary(inventory)
-          setOverview(overviewData)
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err.message || 'Failed to load inventory summary.')
+          if (isSessionExpiredError(err.message, err.status)) {
+            logout()
+            navigate('/login', { replace: true, state: { sessionExpired: true } })
+            return
+          }
+
+          setError(getUserFriendlyErrorMessage(err.message, err.status))
           setSummary(null)
           setOverview(null)
         }
@@ -1275,7 +1275,7 @@ export default function Dashboard() {
     subProducts: 0,
   }
 
-  const overviewCards = buildOverviewCards(overview ?? {})
+  const overviewCards = buildOverviewCards(totals, summary?.batch ?? null)
   const byDescription = summary?.byDescription ?? summary?.byProduct ?? []
   const topSoldBarData = useMemo(
     () => topSoldProducts.slice(0, 10).map((row) => ({
@@ -1294,9 +1294,13 @@ export default function Dashboard() {
     return (
       <div className="dashboard">
         <div className="dashboard-empty">
-          <h2>Could not load dashboard</h2>
+          <h2>Unable to load dashboard</h2>
           <p>{error}</p>
-          <p className="dashboard-empty__hint">Make sure the backend is running and stock Excel has been imported.</p>
+          <p className="dashboard-empty__hint">
+            {isConnectionError(error)
+              ? 'Please check your internet connection and try again.'
+              : 'Please refresh the page or try again in a moment.'}
+          </p>
         </div>
       </div>
     )
@@ -1349,7 +1353,7 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* Overview — 6 key metrics from backend */}
+      {/* Overview — Brand Factory stock metrics */}
       <div className="module-header">
         <div className="module-header__main">
           <h2>Overview</h2>

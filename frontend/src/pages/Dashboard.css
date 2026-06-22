@@ -205,10 +205,10 @@
   color: #4ade80;
 }
 
-/* ── Overview Cards (6-up) ── */
+/* ── Overview Cards (4-up) ── */
 .dashboard-overview {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
   margin-bottom: 22px;
 }
@@ -280,7 +280,7 @@
 
 .skeleton-overview {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
   margin-bottom: 22px;
 }

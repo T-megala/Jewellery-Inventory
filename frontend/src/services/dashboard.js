@@ -1,4 +1,4 @@
-import { apiFetch, apiUrl, buildQueryString, getAuthHeaders } from './api.js';
+import { apiFetch, apiGet, buildQueryString } from './api.js';
 
 const EMPTY_VERIFICATION = {
   totalFound: 0,
@@ -53,24 +53,7 @@ export async function fetchTopSoldProducts({ period = 'all' } = {}) {
 
 export async function fetchDayWiseSales({ period = 'week' } = {}) {
   const query = buildQueryString({ period });
-  const res = await fetch(apiUrl(`/dashboard/day-wise-sales?${query}`), {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeaders(),
-    },
-  });
-
-  let json;
-  try {
-    json = await res.json();
-  } catch {
-    throw new Error('Unexpected server response');
-  }
-
-  if (!res.ok || json?.success === false) {
-    throw new Error(json?.message || 'Failed to load day-wise sales');
-  }
+  const json = await apiGet(`/dashboard/day-wise-sales?${query}`);
 
   return {
     period: json.period ?? period,
@@ -86,24 +69,7 @@ export async function fetchDayWiseSales({ period = 'week' } = {}) {
 
 export async function fetchDailyImports({ period = 'week' } = {}) {
   const query = buildQueryString({ period });
-  const res = await fetch(apiUrl(`/dashboard/daily-imports?${query}`), {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeaders(),
-    },
-  });
-
-  let json;
-  try {
-    json = await res.json();
-  } catch {
-    throw new Error('Unexpected server response');
-  }
-
-  if (!res.ok || json?.success === false) {
-    throw new Error(json?.message || 'Failed to load daily imports');
-  }
+  const json = await apiGet(`/dashboard/daily-imports?${query}`);
 
   return {
     period: json.period ?? period,
