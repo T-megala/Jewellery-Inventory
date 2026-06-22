@@ -6,8 +6,7 @@ function buildReportParams(filters = {}) {
     limit: filters.limit ?? 10,
     search: filters.search,
     status: filters.status,
-    fromDate: filters.fromDate,
-    toDate: filters.toDate,
+    date: filters.date,
   };
 }
 

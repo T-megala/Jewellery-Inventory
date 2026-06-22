@@ -119,8 +119,7 @@ function getTodayDate() {
 export default function Reports() {
   const [barcodeSearch, setBarcodeSearch] = useState('')
   const [status, setStatus] = useState('')
-  const [fromDate, setFromDate] = useState('')
-  const [toDate, setToDate] = useState('')
+  const [date, setDate] = useState('')
 
   const [rows, setRows] = useState([])
   const [summary, setSummary] = useState(null)
@@ -135,36 +134,10 @@ export default function Reports() {
   const filterParams = useMemo(() => ({
     search: barcodeSearch.trim() || undefined,
     status: status || undefined,
-    fromDate: fromDate || undefined,
-    toDate: toDate || undefined,
-  }), [barcodeSearch, status, fromDate, toDate])
-
-  function validateDates() {
-    if (!fromDate && !toDate) {
-      return true
-    }
-
-    if (!fromDate) {
-      setError('From Date is required when To Date is set.')
-      return false
-    }
-
-    if (!toDate) {
-      setError('To Date is required when From Date is set.')
-      return false
-    }
-
-    if (fromDate > toDate) {
-      setError('From Date cannot be later than To Date.')
-      return false
-    }
-
-    return true
-  }
+    date: date || undefined,
+  }), [barcodeSearch, status, date])
 
   async function loadReport(nextPage = 1, limit = pageSize) {
-    if (!validateDates()) return
-
     setLoadingReport(true)
     setError('')
 
@@ -199,8 +172,7 @@ export default function Reports() {
   function handleReset() {
     setBarcodeSearch('')
     setStatus('')
-    setFromDate('')
-    setToDate('')
+    setDate('')
     setRows([])
     setSummary(null)
     setPagination(null)
@@ -235,23 +207,12 @@ export default function Reports() {
         <form className="report-filters" onSubmit={handleGenerate}>
           <div className="report-filters__grid">
             <label className="report-field">
-              <span>From Date</span>
+              <span>Date</span>
               <input
                 type="date"
-                value={fromDate}
-                max={toDate || getTodayDate()}
-                onChange={(e) => setFromDate(e.target.value)}
-              />
-            </label>
-
-            <label className="report-field">
-              <span>To Date</span>
-              <input
-                type="date"
-                value={toDate}
-                min={fromDate || undefined}
+                value={date}
                 max={getTodayDate()}
-                onChange={(e) => setToDate(e.target.value)}
+                onChange={(e) => setDate(e.target.value)}
               />
             </label>
 
