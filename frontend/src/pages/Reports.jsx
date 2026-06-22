@@ -1,8 +1,5 @@
 import { useMemo, useState } from 'react'
-import {
-  downloadReportExport,
-  fetchStockVerificationReport,
-} from '../services/reports.js'
+import { fetchStockVerificationReport } from '../services/reports.js'
 import TablePagination from '../components/TablePagination.jsx'
 import './Reports.css'
 
@@ -10,9 +7,9 @@ const DEFAULT_PAGE_SIZE = 10
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All Statuses' },
-  { value: 'FOUND', label: 'Found' },
-  { value: 'MISSING', label: 'Missing' },
-  { value: 'NEW', label: 'New' },
+  { value: 'FULLY_VERIFIED', label: 'Fully Verified' },
+  { value: 'PARTIALLY_VERIFIED', label: 'Partially Verified' },
+  { value: 'NOT_VERIFIED', label: 'Not Verified' },
 ]
 
 const STAT_CARDS = [
@@ -52,47 +49,17 @@ function StatIcon({ variant }) {
 }
 
 function statusBadgeClass(status) {
-  if (status === 'FOUND') return 'report-status report-status--found'
-  if (status === 'MISSING') return 'report-status report-status--missing'
-  if (status === 'NEW') return 'report-status report-status--new'
+  if (status === 'FULLY_VERIFIED') return 'report-status report-status--found'
+  if (status === 'PARTIALLY_VERIFIED') return 'report-status report-status--partial'
+  if (status === 'NOT_VERIFIED') return 'report-status report-status--missing'
   return 'report-status'
 }
 
 function formatStatus(status) {
-  if (status === 'FOUND') return 'Found'
-  if (status === 'MISSING') return 'Missing'
-  if (status === 'NEW') return 'New'
+  if (status === 'FULLY_VERIFIED') return 'Fully Verified'
+  if (status === 'PARTIALLY_VERIFIED') return 'Partially Verified'
+  if (status === 'NOT_VERIFIED') return 'Not Verified'
   return status || '—'
-}
-
-function formatReportDateCell(value) {
-  if (!value) {
-    return { dateLine: '—', timeLine: '', title: '' }
-  }
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return { dateLine: '—', timeLine: '', title: String(value) }
-  }
-
-  return {
-    dateLine: date.toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    }),
-    timeLine: date.toLocaleTimeString('en-IN', {
-      hour: '2-digit',
-      minute: '2-digit',
-    }),
-    title: date.toLocaleString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    }),
-  }
 }
 
 function formatStatValue(summary, field) {
@@ -163,7 +130,6 @@ export default function Reports() {
   const [hasSearched, setHasSearched] = useState(false)
 
   const [loadingReport, setLoadingReport] = useState(false)
-  const [exporting, setExporting] = useState(false)
   const [error, setError] = useState('')
 
   const filterParams = useMemo(() => ({
@@ -244,25 +210,6 @@ export default function Reports() {
     setError('')
   }
 
-  async function handleExport(exportType, label) {
-    if (!hasSearched || !validateDates()) return
-
-    setExporting(true)
-    setError('')
-
-    try {
-      await downloadReportExport(filterParams, exportType)
-    } catch (err) {
-      setError(err.message || `Failed to export ${label}`)
-    } finally {
-      setExporting(false)
-    }
-  }
-
-  async function handleExportExcel() {
-    await handleExport('excel', 'Excel')
-  }
-
   return (
     <div className="reports-page">
       <div className="reports-stats">
@@ -341,14 +288,14 @@ export default function Reports() {
               type="button"
               className="report-btn report-btn--ghost"
               onClick={handleReset}
-              disabled={loadingReport || exporting}
+              disabled={loadingReport}
             >
               Reset
             </button>
             <button
               type="submit"
               className={`report-btn report-btn--primary${loadingReport ? ' report-btn--loading' : ''}`}
-              disabled={loadingReport || exporting}
+              disabled={loadingReport}
             >
               {loadingReport && <span className="report-btn__spin" aria-hidden="true" />}
               Generate Report
@@ -361,17 +308,6 @@ export default function Reports() {
         <section className="reports-results-card">
           <div className="reports-results__head">
             <h3 className="reports-results__title">Results</h3>
-            <div className="reports-export">
-              <button
-                type="button"
-                className={`report-btn report-btn--export${exporting ? ' report-btn--loading' : ''}`}
-                onClick={handleExportExcel}
-                disabled={exporting || loadingReport}
-              >
-                {exporting && <span className="report-btn__spin report-btn__spin--export" aria-hidden="true" />}
-                Excel
-              </button>
-            </div>
           </div>
 
           {loadingReport ? (
@@ -382,39 +318,39 @@ export default function Reports() {
             <div className="reports-results__body">
               <div className="reports-table-scroll">
                 <table className="reports-table">
+                  <colgroup>
+                    <col className="reports-table__col-sno" />
+                    <col className="reports-table__col-barcode" />
+                    <col className="reports-table__col-description" />
+                    <col className="reports-table__col-qty" />
+                    <col className="reports-table__col-qty" />
+                    <col className="reports-table__col-status" />
+                  </colgroup>
                   <thead>
                     <tr>
                       <th>S.No</th>
-                      <th>Date</th>
                       <th>Barcode</th>
                       <th>Item Description</th>
-                      <th>Closing Bal.Qty</th>
+                      <th>Found Qty</th>
+                      <th>Missing Qty</th>
                       <th>Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((row, index) => {
-                      const dateCell = formatReportDateCell(row.verificationDate)
-                      return (
+                    {rows.map((row, index) => (
                       <tr key={row.id}>
                         <td className="reports-table__sno">{(page - 1) * pageSize + index + 1}</td>
-                        <td className="reports-table__date" title={dateCell.title}>
-                          <span className="reports-table__date-line">{dateCell.dateLine}</span>
-                          {dateCell.timeLine && (
-                            <span className="reports-table__date-time">{dateCell.timeLine}</span>
-                          )}
-                        </td>
                         <td className="reports-table__barcode">{formatCellValue(row.barcode)}</td>
                         <td className="reports-table__description">{formatCellValue(row.itemDescription)}</td>
-                        <td className="reports-table__qty">{formatQty(row.closingBalQty)}</td>
-                        <td>
+                        <td className="reports-table__qty">{formatQty(row.foundQty)}</td>
+                        <td className="reports-table__qty">{formatQty(row.missingQty)}</td>
+                        <td className="reports-table__status">
                           <span className={statusBadgeClass(row.status)}>
                             {formatStatus(row.status)}
                           </span>
                         </td>
                       </tr>
-                      )
-                    })}
+                    ))}
                   </tbody>
                 </table>
               </div>

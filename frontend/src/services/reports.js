@@ -12,7 +12,7 @@ function buildReportParams(filters = {}) {
 }
 
 export function fetchStockVerificationReport(filters = {}) {
-  return apiFetchReport('/stock-verification/report', buildReportParams(filters));
+  return apiFetchReport('/stock-verification/product-summary', buildReportParams(filters));
 }
 
 function parseFilename(res, fallback) {
@@ -29,7 +29,7 @@ export async function downloadReportExport(filters = {}, exportType) {
     export_type: exportType,
   });
 
-  const res = await apiFetchRaw(`/stock-verification/report?${query}`);
+  const res = await apiFetchRaw(`/stock-verification/product-summary?${query}`);
 
   if (!res.ok) {
     let message = 'Export failed';

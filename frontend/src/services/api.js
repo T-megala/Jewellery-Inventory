@@ -107,10 +107,22 @@ export async function apiFetchReport(path, params = {}) {
     rows: (json.data || []).map(normalizeReportRow),
     pagination: json.pagination || null,
     summary: {
-      totalTags: json.pagination?.totalRecords ?? json.data?.length ?? 0,
-      totalFound: json.summary?.foundCount ?? 0,
-      totalMissing: json.summary?.missingCount ?? 0,
-      totalNew: json.summary?.newCount ?? 0,
+      totalTags: json.summary?.totalExpectedTags
+        ?? json.pagination?.totalRecords
+        ?? json.data?.length
+        ?? 0,
+      totalFound: json.summary?.totalFoundTags
+        ?? json.summary?.tagCounts?.foundCount
+        ?? json.summary?.foundCount
+        ?? 0,
+      totalMissing: json.summary?.totalMissingTags
+        ?? json.summary?.tagCounts?.missingCount
+        ?? json.summary?.missingCount
+        ?? 0,
+      totalNew: json.summary?.totalNewTags
+        ?? json.summary?.tagCounts?.newCount
+        ?? json.summary?.newCount
+        ?? 0,
     },
   };
 }
@@ -128,11 +140,15 @@ export async function apiFetchRaw(path, options = {}) {
 
 function normalizeReportRow(row) {
   return {
-    id: row.id,
+    id: row.id ?? row.productId,
     verificationDate: row.verificationDate,
     barcode: row.barcode ?? row.tagNo ?? '',
     itemDescription: row.itemDescription ?? row.productName ?? row.product ?? '',
     closingBalQty: row.closingBalQty ?? row.pieces ?? row.product?.pieces ?? null,
-    status: row.status ?? '',
+    expectedQty: row.expectedQty ?? null,
+    foundQty: row.foundQty ?? null,
+    missingQty: row.missingQty ?? null,
+    verificationPercentage: row.verificationPercentage ?? null,
+    status: row.status ?? row.verificationStatus ?? '',
   };
 }

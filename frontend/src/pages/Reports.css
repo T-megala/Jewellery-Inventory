@@ -1,5 +1,6 @@
 .reports-page {
   width: 100%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -286,6 +287,7 @@
 .reports-results-card {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   padding: 14px 20px 10px;
   background: #fff;
   border: 1px solid var(--color-border);
@@ -307,6 +309,7 @@
   display: flex;
   flex-direction: column;
   gap: 0;
+  min-width: 0;
 }
 
 .reports-results__title {
@@ -500,11 +503,14 @@
 /* ── Table ── */
 .reports-table-scroll {
   margin: 0 2px;
+  width: 100%;
+  min-width: 0;
   /* ~10 rows visible at default page size */
   height: 390px;
   min-height: 390px;
   max-height: 390px;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   border: 1px solid #f0ebe3;
   border-radius: 12px;
@@ -513,17 +519,24 @@
 
 .reports-table {
   width: 100%;
+  min-width: 720px;
   table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
   font-size: 0.8125rem;
 }
 
+.reports-table__col-sno { width: 52px; }
+.reports-table__col-barcode { width: 132px; }
+.reports-table__col-description { width: auto; }
+.reports-table__col-qty { width: 92px; }
+.reports-table__col-status { width: 132px; }
+
 .reports-table thead th {
   position: sticky;
   top: 0;
   z-index: 2;
-  padding: 8px 12px;
+  padding: 10px 12px;
   font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0.05em;
@@ -533,27 +546,31 @@
   background: #f9f5ef;
   border-bottom: 2px solid rgba(184, 134, 11, 0.12);
   white-space: nowrap;
+  vertical-align: middle;
 }
 
-.reports-table thead th:nth-child(1) { width: 40px; }
-.reports-table thead th:nth-child(2) { width: 86px; }
-.reports-table thead th:nth-child(3) { width: 14%; }
-.reports-table thead th:nth-child(4) { width: 34%; }
-.reports-table thead th:nth-child(5) { width: 12%; }
-.reports-table thead th:nth-child(6) { width: 10%; }
-
-.reports-table thead th:first-child {
+.reports-table thead th:nth-child(1) {
   text-align: center;
-  padding-inline: 6px;
+  padding-inline: 8px;
+}
+
+.reports-table thead th:nth-child(4),
+.reports-table thead th:nth-child(5) {
+  text-align: right;
+  padding-right: 16px;
+}
+
+.reports-table thead th:nth-child(6) {
+  text-align: center;
+  padding-inline: 8px;
 }
 
 .reports-table tbody td {
-  padding: 8px 12px;
+  padding: 10px 12px;
   color: #2a2218;
   border-bottom: 1px solid #f3ede4;
   vertical-align: middle;
-  white-space: nowrap;
-  line-height: 1.3;
+  line-height: 1.35;
 }
 
 .reports-table tbody tr:nth-child(even) td {
@@ -573,50 +590,28 @@
 }
 
 .reports-table__sno {
-  width: 40px;
-  padding-inline: 6px;
+  padding-inline: 8px;
   text-align: center;
   font-size: 0.75rem;
   font-weight: 600;
   color: #a89888;
   font-variant-numeric: tabular-nums;
-}
-
-.reports-table__date {
-  width: 86px;
-  min-width: 86px;
-  max-width: 86px;
-  padding-inline: 8px;
-  white-space: normal;
-  vertical-align: middle;
-  line-height: 1.25;
-}
-
-.reports-table__date-line {
-  display: block;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: #2a2218;
-}
-
-.reports-table__date-time {
-  display: block;
-  margin-top: 2px;
-  font-size: 0.7rem;
-  font-weight: 500;
-  color: #8a7968;
-  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .reports-table__barcode {
   font-weight: 500;
   color: #8b6914;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .reports-table__description {
   font-weight: 600;
   color: #1c1410;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -627,10 +622,13 @@
   text-align: right;
   white-space: nowrap;
   font-weight: 600;
+  padding-right: 16px;
 }
 
-.reports-table td:last-child {
+.reports-table__status {
+  text-align: center;
   white-space: nowrap;
+  padding-inline: 8px;
 }
 
 .reports-table-pagination {
@@ -692,6 +690,12 @@
   border: 1px solid #bfdbfe;
 }
 
+.report-status--partial {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+
 @media (max-width: 1100px) {
   .reports-stats {
     grid-template-columns: repeat(2, 1fr);
@@ -721,6 +725,25 @@
     height: 340px;
     min-height: 340px;
     max-height: 340px;
+    overflow-x: auto;
+    overflow-y: auto;
+  }
+
+  .reports-table {
+    min-width: 680px;
+  }
+
+  .reports-table thead th,
+  .reports-table tbody td {
+    padding: 8px 10px;
+  }
+
+  .reports-table-pagination {
+    padding: 8px 0 2px;
+  }
+
+  .reports-table-pagination.table-pagination {
+    padding-inline: 0;
   }
 
   .report-filters__actions {
