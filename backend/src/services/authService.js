@@ -13,7 +13,7 @@ const mapRole = (row) =>
       }
     : null;
 
-export const loadUserAuthProfile = async (userId) => {
+export const loadUserAuthProfile = async (userId, preloadedBranches = null) => {
   const [rows] = await pool.execute(
     `SELECT
        u.id,
@@ -37,38 +37,28 @@ export const loadUserAuthProfile = async (userId) => {
     ? await roleService.getPermissionNamesForRole(row.role_id)
     : [];
 
-  const branches = await userBranchService.getBranchesForUser(userId);
-  const defaultBranch =
-    branches.find((branch) => branch.isDefault) ?? branches[0] ?? null;
+  const branches =
+    preloadedBranches ??
+    (await userBranchService.getBranchesForUser(userId));
 
   return {
     id: Number(row.id),
     username: row.username,
     fullName: row.full_name ?? row.username,
     isActive: Boolean(row.is_active),
-    branch: defaultBranch
-      ? {
-          id: defaultBranch.id,
-          name: defaultBranch.name,
-        }
-      : null,
-    branches: branches.map(({ id, name, isDefault }) => ({
-      id,
-      name,
-      isDefault,
-    })),
+    branches: userBranchService.mapBranchesForResponse(branches),
     role: mapRole(row),
     permissions,
   };
 };
 
-const buildTokenUser = (profile) => ({
+const buildTokenUser = (profile, defaultBranchId) => ({
   id: profile.id,
   username: profile.username,
   name: profile.fullName,
   roleId: profile.role?.id ?? null,
   roleName: profile.role?.name ?? null,
-  branchId: profile.branch?.id ?? null,
+  branchId: defaultBranchId,
   branchIds: profile.branches.map((branch) => branch.id),
   permissions: profile.permissions,
 });
@@ -104,7 +94,8 @@ export const login = async ({ username, password }) => {
     throw new ApiError(401, "Invalid username or password");
   }
 
-  const profile = await loadUserAuthProfile(dbUser.id);
+  const branches = await userBranchService.getBranchesForUser(dbUser.id);
+  const profile = await loadUserAuthProfile(dbUser.id, branches);
 
   if (!profile) {
     throw new ApiError(401, "Invalid username or password");
@@ -118,12 +109,14 @@ export const login = async ({ username, password }) => {
     throw new ApiError(403, "User branch is not assigned");
   }
 
+  const defaultBranchId = userBranchService.resolveDefaultBranchId(branches);
+
   await pool.execute(`UPDATE users SET last_login_at = NOW() WHERE id = ?`, [
     dbUser.id,
   ]);
 
   return {
-    token: createAccessToken(buildTokenUser(profile)),
+    token: createAccessToken(buildTokenUser(profile, defaultBranchId)),
     user: profile,
     permissions: profile.permissions,
   };
@@ -131,14 +124,17 @@ export const login = async ({ username, password }) => {
 
 export const switchBranch = async (userId, branchId) => {
   await userBranchService.switchUserDefaultBranch(userId, branchId);
-  const profile = await loadUserAuthProfile(userId);
+  const branches = await userBranchService.getBranchesForUser(userId);
+  const profile = await loadUserAuthProfile(userId, branches);
 
   if (!profile) {
     throw new ApiError(404, "User not found");
   }
 
+  const defaultBranchId = userBranchService.resolveDefaultBranchId(branches);
+
   return {
-    token: createAccessToken(buildTokenUser(profile)),
+    token: createAccessToken(buildTokenUser(profile, defaultBranchId)),
     user: profile,
     permissions: profile.permissions,
   };

@@ -151,8 +151,6 @@ const resolveCreateBranchAssignment = async ({
 
 const toSafeUser = async (row) => {
   const branches = await userBranchService.getBranchesForUser(row.id);
-  const defaultBranch =
-    branches.find((branch) => branch.isDefault) ?? branches[0] ?? null;
 
   return {
     id: Number(row.id),
@@ -166,17 +164,7 @@ const toSafeUser = async (row) => {
           name: row.role_name,
         }
       : null,
-    branch: defaultBranch
-      ? {
-          id: defaultBranch.id,
-          name: defaultBranch.name,
-        }
-      : null,
-    branches: branches.map(({ id, name, isDefault }) => ({
-      id,
-      name,
-      isDefault,
-    })),
+    branches: userBranchService.mapBranchesForResponse(branches),
   };
 };
 

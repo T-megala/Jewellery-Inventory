@@ -7,6 +7,16 @@ const mapBranchRow = (row) => ({
   isDefault: Boolean(row.is_default),
 });
 
+export const mapBranchesForResponse = (branches) =>
+  branches.map(({ id, name }) => ({ id, name }));
+
+export const resolveDefaultBranchId = (branches) => {
+  const defaultBranch =
+    branches.find((branch) => branch.isDefault) ?? branches[0] ?? null;
+
+  return defaultBranch?.id ?? null;
+};
+
 export const getBranchesForUser = async (userId, connection = pool) => {
   const [rows] = await connection.execute(
     `SELECT
@@ -192,4 +202,6 @@ export default {
   setUserBranches,
   userHasBranchAccess,
   switchUserDefaultBranch,
+  mapBranchesForResponse,
+  resolveDefaultBranchId,
 };
