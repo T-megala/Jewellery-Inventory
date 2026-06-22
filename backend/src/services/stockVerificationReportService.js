@@ -159,6 +159,7 @@ const buildDateFilterClause = (filters) => {
 const DETAIL_FROM_SQL = `
   FROM stock_verification_details svd
   INNER JOIN stock_verification sv ON sv.id = svd.verification_id
+  LEFT JOIN branches b ON b.id = sv.branch_id
   ${LATEST_SCAN_JOIN_SQL}
 `;
 
@@ -204,6 +205,7 @@ const EXCEL_PRODUCT_SELECT_SQL = `
 
 const DETAIL_SELECT_SQL = `
   SELECT svd.id, svd.verification_id, sv.verification_date,
+         sv.branch_id, b.name AS branch_name,
          svd.product_name, svd.sub_product_name, svd.center_name,
          svd.tag_no, svd.status, svd.created_at
 `;
@@ -437,6 +439,7 @@ const mapExcelRow = (row) => {
 
   return {
     verificationDate: formatDateTime(row.verification_date),
+    branch: mapBranchFields(row),
     productName: scopeFields.productName,
     subProductName: scopeFields.subProductName,
     centerName: scopeFields.centerName,
@@ -456,6 +459,14 @@ const mapExcelRow = (row) => {
   };
 };
 
+const mapBranchFields = (row) =>
+  row.branch_id
+    ? {
+        id: Number(row.branch_id),
+        name: row.branch_name ?? null,
+      }
+    : null;
+
 const mapRow = (row) => {
   const productFields = mapProductFields(row);
   const scopeFields = resolveDisplayScopeFields(row);
@@ -464,6 +475,7 @@ const mapRow = (row) => {
     id: row.id ?? null,
     verificationId: row.verification_id,
     verificationDate: formatDateTime(row.verification_date),
+    branch: mapBranchFields(row),
     productName: scopeFields.productName,
     subProductName: scopeFields.subProductName,
     centerName: scopeFields.centerName,
@@ -507,6 +519,8 @@ const buildMissingRankedFromSql = (headerWhereClause) => {
         NULL AS id,
         sv.id AS verification_id,
         sv.verification_date,
+        sv.branch_id,
+        b.name AS branch_name,
         p.product AS product_name,
         p.sub_product AS sub_product_name,
         COALESCE(NULLIF(TRIM(p.counter_name), ''), 'Unassigned') AS center_name,
@@ -542,6 +556,7 @@ const buildMissingRankedFromSql = (headerWhereClause) => {
       FROM stock_verification sv
       INNER JOIN (${LATEST_SCAN_SUBQUERY}) latest ON latest.verification_id = sv.id
       INNER JOIN latest_stock_verification lsv ON lsv.id = latest.latest_scan_id
+      LEFT JOIN branches b ON b.id = sv.branch_id
       INNER JOIN products p ON ${inventoryScopeConditions}
       WHERE ${notFoundCondition}
         AND ${headerWhereClause}
@@ -571,6 +586,8 @@ const getMissingRows = async (filters, pagination, activeBatchId) => {
        missing_ranked.id,
        missing_ranked.verification_id,
        missing_ranked.verification_date,
+       missing_ranked.branch_id,
+       missing_ranked.branch_name,
        missing_ranked.product_name,
        missing_ranked.sub_product_name,
        missing_ranked.center_name,
@@ -636,6 +653,8 @@ const getCombinedRows = async (filters, pagination, activeBatchId) => {
         svd.id,
         svd.verification_id,
         sv.verification_date,
+        sv.branch_id,
+        b.name AS branch_name,
         svd.product_name,
         svd.sub_product_name,
         svd.center_name,
@@ -660,6 +679,7 @@ const getCombinedRows = async (filters, pagination, activeBatchId) => {
         p.created_at AS product_created_at
       FROM stock_verification_details svd
       INNER JOIN stock_verification sv ON sv.id = svd.verification_id
+      LEFT JOIN branches b ON b.id = sv.branch_id
       ${LATEST_SCAN_JOIN_SQL}
       LEFT JOIN products p ON p.batch_id = ? AND p.tag_packet_no = svd.tag_no
       WHERE svd.status = 'FOUND' AND ${detailWhereClause}
@@ -671,6 +691,8 @@ const getCombinedRows = async (filters, pagination, activeBatchId) => {
         svd.id,
         svd.verification_id,
         sv.verification_date,
+        sv.branch_id,
+        b.name AS branch_name,
         svd.product_name,
         svd.sub_product_name,
         svd.center_name,
@@ -695,6 +717,7 @@ const getCombinedRows = async (filters, pagination, activeBatchId) => {
         p.created_at AS product_created_at
       FROM stock_verification_details svd
       INNER JOIN stock_verification sv ON sv.id = svd.verification_id
+      LEFT JOIN branches b ON b.id = sv.branch_id
       ${LATEST_SCAN_JOIN_SQL}
       LEFT JOIN products p ON p.batch_id = ? AND p.tag_packet_no = svd.tag_no
       WHERE svd.status = 'NEW' AND ${detailWhereClause}
@@ -706,6 +729,8 @@ const getCombinedRows = async (filters, pagination, activeBatchId) => {
         missing_ranked.id,
         missing_ranked.verification_id,
         missing_ranked.verification_date,
+        missing_ranked.branch_id,
+        missing_ranked.branch_name,
         missing_ranked.product_name,
         missing_ranked.sub_product_name,
         missing_ranked.center_name,
@@ -873,6 +898,8 @@ const getAllMissingReportRows = async (filters, activeBatchId) => {
        missing_ranked.id,
        missing_ranked.verification_id,
        missing_ranked.verification_date,
+       missing_ranked.branch_id,
+       missing_ranked.branch_name,
        missing_ranked.product_name,
        missing_ranked.sub_product_name,
        missing_ranked.center_name,

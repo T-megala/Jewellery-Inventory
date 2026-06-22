@@ -1,5 +1,6 @@
 import stockVerificationService from '../services/stockVerificationService.js';
 import { isAllProducts } from '../utils/verificationScope.js';
+import branchService from '../services/branchService.js';
 
 const validateScopeObject = (obj, fieldName, { required = true } = {}) => {
   if (obj === undefined || obj === null) {
@@ -101,6 +102,8 @@ export const uploadStockVerification = async (req, res) => {
     branchId,
   });
 
+  const branch = await branchService.getBranchById(branchId);
+
   res.status(200).json({
     success: true,
     message: result.reused
@@ -109,6 +112,7 @@ export const uploadStockVerification = async (req, res) => {
     verificationId: result.verificationId,
     latestScanId: result.latestScanId,
     reused: result.reused,
+    branch: branch ? { id: branch.id, name: branch.name } : null,
     totalExpected: result.totalExpected,
     totalScanned: result.totalScanned,
     foundCount: result.foundCount,

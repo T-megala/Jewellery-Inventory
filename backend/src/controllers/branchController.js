@@ -15,10 +15,26 @@ const parseId = (raw) => {
 
 const resolveListedBranches = async (req) => {
   if (req.user?.roleName === SUPER_ADMIN_ROLE_NAME) {
+    const selectedBranchIds = Array.isArray(req.user?.selectedBranchIds)
+      ? req.user.selectedBranchIds.filter((id) => id > 0)
+      : [];
+
+    if (selectedBranchIds.length > 0) {
+      return branchService.getBranchesByIds(selectedBranchIds);
+    }
+
     return branchService.getAllBranches();
   }
 
   if (req.user?.id) {
+    const selectedBranchIds = Array.isArray(req.user?.selectedBranchIds)
+      ? req.user.selectedBranchIds.filter((id) => id > 0)
+      : [];
+
+    if (selectedBranchIds.length > 0) {
+      return branchService.getBranchesByIds(selectedBranchIds);
+    }
+
     const branchIds =
       Array.isArray(req.user.branchIds) && req.user.branchIds.length > 0
         ? req.user.branchIds

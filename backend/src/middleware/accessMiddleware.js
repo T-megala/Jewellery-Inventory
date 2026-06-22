@@ -10,7 +10,7 @@ const parsePositiveInt = (value) => {
 const isExemptPath = (path) =>
   BRANCH_SCOPE_EXEMPT_PATHS.some((prefix) => path.startsWith(prefix));
 
-const getUserBranchIds = (req) => {
+const getMappedBranchIds = (req) => {
   const fromToken = Array.isArray(req.user?.branchIds)
     ? req.user.branchIds.map((id) => Number(id)).filter((id) => id > 0)
     : [];
@@ -23,6 +23,18 @@ const getUserBranchIds = (req) => {
   return single ? [single] : [];
 };
 
+const getSelectedBranchIds = (req) => {
+  const fromToken = Array.isArray(req.user?.selectedBranchIds)
+    ? req.user.selectedBranchIds.map((id) => Number(id)).filter((id) => id > 0)
+    : [];
+
+  if (fromToken.length > 0) {
+    return fromToken;
+  }
+
+  return getMappedBranchIds(req);
+};
+
 export const resolveBranchScope = async (req, res, next) => {
   if (isExemptPath(req.path)) {
     return next();
@@ -32,34 +44,48 @@ export const resolveBranchScope = async (req, res, next) => {
     ? req.user.permissions
     : [];
   const canViewAll = permissions.includes(PERMISSIONS.BRANCHES_VIEW_ALL);
-  const userBranchIds = getUserBranchIds(req);
+  const mappedBranchIds = getMappedBranchIds(req);
+  const selectedBranchIds = getSelectedBranchIds(req);
+  req.selectedBranchIds = selectedBranchIds;
+
   const requestedBranchId = parsePositiveInt(
     req.query?.branchId ?? req.headers["x-branch-id"],
   );
 
   if (requestedBranchId) {
-    if (canViewAll || userBranchIds.includes(requestedBranchId)) {
-      req.branchId = requestedBranchId;
-      return next();
+    if (!canViewAll && !mappedBranchIds.includes(requestedBranchId)) {
+      return next(new ApiError(403, "Branch is not assigned to this user"));
     }
 
-    return next(new ApiError(403, "Branch is not assigned to this user"));
-  }
+    if (!selectedBranchIds.includes(requestedBranchId)) {
+      return next(
+        new ApiError(403, "Branch is not in the current session selection"),
+      );
+    }
 
-  const defaultBranchId = parsePositiveInt(req.user?.branchId);
-
-  if (defaultBranchId) {
-    req.branchId = defaultBranchId;
+    req.branchId = requestedBranchId;
     return next();
   }
 
-  if (userBranchIds.length === 1) {
-    req.branchId = userBranchIds[0];
+  const tokenBranchId = parsePositiveInt(req.user?.branchId);
+
+  if (tokenBranchId && selectedBranchIds.includes(tokenBranchId)) {
+    req.branchId = tokenBranchId;
+    return next();
+  }
+
+  if (selectedBranchIds.length === 1) {
+    req.branchId = selectedBranchIds[0];
     return next();
   }
 
   if (canViewAll) {
     req.branchId = await branchService.getDefaultBranchId();
+    return next();
+  }
+
+  if (selectedBranchIds.length > 0) {
+    req.branchId = selectedBranchIds[0];
     return next();
   }
 

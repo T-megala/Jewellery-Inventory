@@ -142,6 +142,7 @@ export const getStockVerificationReport = async (req, res) => {
   res.status(200).json({
     success: true,
     message: "Report fetched successfully",
+    branchId: filters.branchId ?? null,
     pagination: result.pagination,
     summary: result.summary,
     data: result.data,
