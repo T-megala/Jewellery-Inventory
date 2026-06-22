@@ -42,20 +42,30 @@ const validateFilters = (req) => {
     throw new ApiError(400, "limit cannot exceed 100");
   }
 
-  const fromDate = validateDate(
+  const singleDate = validateDate(getRequestValue(req, "date"), "date");
+  let fromDate = validateDate(
     getRequestValue(req, "fromDate", "fromdate"),
     "fromDate",
   );
-  const toDate = validateDate(
+  let toDate = validateDate(
     getRequestValue(req, "toDate", "todate"),
     "toDate",
   );
 
-  if ((fromDate && !toDate) || (!fromDate && toDate)) {
-    throw new ApiError(
-      400,
-      "Both fromDate and toDate are required for date range filtering",
-    );
+  if (singleDate) {
+    if (fromDate || toDate) {
+      throw new ApiError(
+        400,
+        "Use either date or fromDate/toDate, not both",
+      );
+    }
+
+    fromDate = singleDate;
+    toDate = singleDate;
+  } else if (fromDate && !toDate) {
+    toDate = fromDate;
+  } else if (!fromDate && toDate) {
+    fromDate = toDate;
   }
 
   if (fromDate && toDate && fromDate > toDate) {

@@ -13,8 +13,13 @@ const buildVerificationFilterClause = (filters) => {
   const params = [];
 
   if (filters.fromDate && filters.toDate) {
-    conditions.push("AND DATE(sv.verification_date) BETWEEN ? AND ?");
-    params.push(filters.fromDate, filters.toDate);
+    if (filters.fromDate === filters.toDate) {
+      conditions.push("AND sv.verification_day = ?");
+      params.push(filters.fromDate);
+    } else {
+      conditions.push("AND sv.verification_day BETWEEN ? AND ?");
+      params.push(filters.fromDate, filters.toDate);
+    }
   } else {
     conditions.push(
       `AND sv.id = (

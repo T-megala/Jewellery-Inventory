@@ -33,6 +33,37 @@ const SKIPPABLE_ERROR_CODES = new Set([
   "ER_CANT_CREATE_TABLE",
 ]);
 
+async function columnExists(table, column) {
+  const [rows] = await pool.query(
+    `SELECT 1
+     FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME = ?
+       AND COLUMN_NAME = ?
+     LIMIT 1`,
+    [table, column],
+  );
+  return rows.length > 0;
+}
+
+async function shouldSkipFile(file) {
+  switch (file) {
+    case "009_dedupe_verification_scope_day.sql":
+      return !(await columnExists("stock_verification", "product_name"));
+    case "012_simplify_products.sql":
+      return await columnExists("products", "barcode");
+    case "013_simplify_dashboard_sales.sql":
+      return await columnExists("inventory_sales_audit", "barcode");
+    case "014_simplify_stock_verification.sql":
+      return (
+        (await columnExists("stock_verification", "batch_id")) &&
+        !(await columnExists("stock_verification", "product_name"))
+      );
+    default:
+      return false;
+  }
+}
+
 async function runSqlFile(file) {
   const sqlPath = path.join(__dirname, "migrations", file);
   const sql = fs.readFileSync(sqlPath, "utf8");
@@ -61,6 +92,11 @@ async function runSqlFile(file) {
 async function main() {
   for (const file of files) {
     try {
+      if (await shouldSkipFile(file)) {
+        process.stdout.write(`SKIP: ${file} (schema already up to date)\n`);
+        continue;
+      }
+
       await runSqlFile(file);
       process.stdout.write(`OK: ${file}\n`);
     } catch (error) {
