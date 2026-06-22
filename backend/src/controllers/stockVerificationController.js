@@ -58,5 +58,7 @@ export const uploadStockVerification = async (req, res) => {
     foundCount: result.foundCount,
     missingCount: result.missingCount,
     newCount: result.newCount,
+    summary: result.summary,
+    byBarcode: result.byBarcode,
   });
 };

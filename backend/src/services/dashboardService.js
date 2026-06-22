@@ -162,20 +162,75 @@ const getInventorySummary = async () => {
 const getVerificationSummary = async () => {
   const [rows] = await pool.execute(
     `SELECT
-       COALESCE(SUM(found_count), 0) AS foundCount,
-       COALESCE(SUM(missing_count), 0) AS missingCount,
-       COALESCE(SUM(new_count), 0) AS newCount,
-       COALESCE(SUM(found_count + missing_count + new_count), 0) AS totalRecords
-     FROM stock_verification`,
+       sv.found_count AS foundCount,
+       sv.missing_count AS missingCount,
+       sv.new_count AS newCount,
+       sv.total_expected AS totalExpectedTags,
+       sv.total_products AS totalProducts,
+       sv.fully_verified_products AS fullyVerifiedProducts,
+       sv.partially_verified_products AS partiallyVerifiedProducts,
+       sv.not_verified_products AS notVerifiedProducts,
+       sv.overall_verification_percentage AS overallVerificationPercentage
+     FROM stock_verification sv
+     ORDER BY sv.verification_date DESC, sv.id DESC
+     LIMIT 1`,
   );
 
-  const row = rows[0] ?? {};
+  const row = rows[0];
+
+  if (!row) {
+    return {
+      tagCounts: {
+        foundCount: 0,
+        missingCount: 0,
+        newCount: 0,
+      },
+      productCounts: {
+        totalProducts: 0,
+        fullyVerifiedProducts: 0,
+        partiallyVerifiedProducts: 0,
+        notVerifiedProducts: 0,
+      },
+      totalExpectedTags: 0,
+      totalFoundTags: 0,
+      totalMissingTags: 0,
+      totalNewTags: 0,
+      overallVerificationPercentage: 0,
+      totalFound: 0,
+      totalMissing: 0,
+      totalNew: 0,
+      totalTags: 0,
+    };
+  }
+
+  const tagCounts = {
+    foundCount: Number(row.foundCount ?? 0),
+    missingCount: Number(row.missingCount ?? 0),
+    newCount: Number(row.newCount ?? 0),
+  };
+
+  const productCounts = {
+    totalProducts: Number(row.totalProducts ?? 0),
+    fullyVerifiedProducts: Number(row.fullyVerifiedProducts ?? 0),
+    partiallyVerifiedProducts: Number(row.partiallyVerifiedProducts ?? 0),
+    notVerifiedProducts: Number(row.notVerifiedProducts ?? 0),
+  };
 
   return {
-    totalFound: Number(row.foundCount ?? 0),
-    totalMissing: Number(row.missingCount ?? 0),
-    totalNew: Number(row.newCount ?? 0),
-    totalTags: Number(row.totalRecords ?? 0),
+    tagCounts,
+    productCounts,
+    totalExpectedTags: Number(row.totalExpectedTags ?? 0),
+    totalFoundTags: tagCounts.foundCount,
+    totalMissingTags: tagCounts.missingCount,
+    totalNewTags: tagCounts.newCount,
+    overallVerificationPercentage: Number(
+      row.overallVerificationPercentage ?? 0,
+    ),
+    totalFound: tagCounts.foundCount,
+    totalMissing: tagCounts.missingCount,
+    totalNew: tagCounts.newCount,
+    totalTags:
+      tagCounts.foundCount + tagCounts.missingCount + tagCounts.newCount,
   };
 };
 

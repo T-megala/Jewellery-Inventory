@@ -43,15 +43,19 @@ const STORED_REPORT_ORDER_SQL = `
     svd.id DESC
 `;
 
-const buildNotFoundCondition = () => `
-  NOT EXISTS (
-    SELECT 1
-    FROM stock_verification_details svd_found
-    WHERE svd_found.verification_id = sv.id
-      AND svd_found.tag_no = UPPER(TRIM(p.barcode))
-      AND svd_found.status = 'FOUND'
-  )
+const buildFoundQtyAggJoinSql = (verificationAlias = "sv") => `
+  LEFT JOIN (
+    SELECT verification_id, tag_no, SUM(found_qty) AS found_qty
+    FROM stock_verification_details
+    WHERE status = 'FOUND'
+    GROUP BY verification_id, tag_no
+  ) found_qty_agg ON
+    found_qty_agg.verification_id = ${verificationAlias}.id
+    AND found_qty_agg.tag_no = UPPER(TRIM(p.barcode))
 `;
+
+const buildMissingQtyExpr = () =>
+  "GREATEST(p.closing_bal_qty - COALESCE(found_qty_agg.found_qty, 0), 0)";
 
 const buildMissingRankedFromSql = (headerWhereClause) => `
   FROM (
@@ -65,13 +69,14 @@ const buildMissingRankedFromSql = (headerWhereClause) => `
       NULL AS created_at,
       p.id AS product_id,
       p.item_description AS inventory_item_description,
-      p.closing_bal_qty AS product_closing_bal_qty
+      ${buildMissingQtyExpr()} AS product_closing_bal_qty
     FROM stock_verification sv
     INNER JOIN products p ON
       p.batch_id = sv.batch_id
       AND p.barcode IS NOT NULL
       AND TRIM(p.barcode) != ''
-    WHERE ${buildNotFoundCondition()}
+    ${buildFoundQtyAggJoinSql("sv")}
+    WHERE ${buildMissingQtyExpr()} > 0
       AND ${headerWhereClause}
   ) missing_ranked
 `;
@@ -103,6 +108,15 @@ const buildHeaderFilterClause = (filters) => {
   if (filters.fromDate && filters.toDate) {
     conditions.push("AND DATE(sv.verification_date) BETWEEN ? AND ?");
     params.push(filters.fromDate, filters.toDate);
+  } else {
+    conditions.push(
+      `AND sv.id = (
+        SELECT latest.id
+        FROM stock_verification latest
+        ORDER BY latest.verification_date DESC, latest.id DESC
+        LIMIT 1
+      )`,
+    );
   }
 
   return { whereClause: conditions.join(" "), params };
@@ -130,6 +144,15 @@ const buildStoredDetailFilterClause = (filters) => {
   if (filters.fromDate && filters.toDate) {
     conditions.push("AND DATE(sv.verification_date) BETWEEN ? AND ?");
     params.push(filters.fromDate, filters.toDate);
+  } else {
+    conditions.push(
+      `AND sv.id = (
+        SELECT latest.id
+        FROM stock_verification latest
+        ORDER BY latest.verification_date DESC, latest.id DESC
+        LIMIT 1
+      )`,
+    );
   }
 
   return { whereClause: conditions.join(" "), params };
@@ -162,14 +185,14 @@ const buildExportQuery = (filters) => {
 
 const getStoredRecordCount = (summary, filters) => {
   if (filters.status === "FOUND") {
-    return summary.foundCount;
+    return summary.foundRowCount;
   }
 
   if (filters.status === "NEW") {
-    return summary.newCount;
+    return summary.newRowCount;
   }
 
-  return summary.foundCount + summary.newCount;
+  return summary.foundRowCount + summary.newRowCount;
 };
 
 const resolveItemDescription = (row) => {
@@ -227,13 +250,63 @@ const mapRow = (row) => {
 
 const getHeaderSummary = async (filters) => {
   const { whereClause, params } = buildHeaderFilterClause(filters);
+  const missingQtyExpr = buildMissingQtyExpr();
+
   const [summaryRows] = await pool.execute(
     `SELECT
-       COALESCE(SUM(sv.found_count), 0) AS foundCount,
-       COALESCE(SUM(sv.missing_count), 0) AS missingCount,
-       COALESCE(SUM(sv.new_count), 0) AS newCount,
-       COALESCE(SUM(sv.found_count + sv.missing_count + sv.new_count), 0) AS totalRecords
+       COALESCE(SUM(session_stats.foundQty), 0) AS foundCount,
+       COALESCE(SUM(session_stats.missingBarcodeCount), 0) AS missingCount,
+       COALESCE(SUM(session_stats.newQty), 0) AS newCount,
+       COALESCE(SUM(session_stats.foundRowCount), 0) AS foundRowCount,
+       COALESCE(SUM(session_stats.newRowCount), 0) AS newRowCount,
+       COALESCE(SUM(
+         session_stats.foundRowCount
+         + session_stats.newRowCount
+         + session_stats.missingBarcodeCount
+       ), 0) AS totalRecords
      FROM stock_verification sv
+     INNER JOIN (
+       SELECT
+         sv_inner.id AS verification_id,
+         COALESCE(found_agg.foundQty, 0) AS foundQty,
+         COALESCE(new_agg.newQty, 0) AS newQty,
+         COALESCE(found_agg.foundRowCount, 0) AS foundRowCount,
+         COALESCE(new_agg.newRowCount, 0) AS newRowCount,
+         COALESCE(missing_agg.missingBarcodeCount, 0) AS missingBarcodeCount
+       FROM stock_verification sv_inner
+       LEFT JOIN (
+         SELECT
+           verification_id,
+           COALESCE(SUM(found_qty), 0) AS foundQty,
+           COUNT(*) AS foundRowCount
+         FROM stock_verification_details
+         WHERE status = 'FOUND'
+         GROUP BY verification_id
+       ) found_agg ON found_agg.verification_id = sv_inner.id
+       LEFT JOIN (
+         SELECT
+           verification_id,
+           COALESCE(SUM(scanned_qty), 0) AS newQty,
+           COUNT(*) AS newRowCount
+         FROM stock_verification_details
+         WHERE status = 'NEW'
+         GROUP BY verification_id
+       ) new_agg ON new_agg.verification_id = sv_inner.id
+       LEFT JOIN (
+         SELECT
+           sv_miss.id AS verification_id,
+           SUM(
+             CASE WHEN ${missingQtyExpr} > 0 THEN 1 ELSE 0 END
+           ) AS missingBarcodeCount
+         FROM stock_verification sv_miss
+         INNER JOIN products p ON
+           p.batch_id = sv_miss.batch_id
+           AND p.barcode IS NOT NULL
+           AND TRIM(p.barcode) != ''
+         ${buildFoundQtyAggJoinSql("sv_miss")}
+         GROUP BY sv_miss.id
+       ) missing_agg ON missing_agg.verification_id = sv_inner.id
+     ) session_stats ON session_stats.verification_id = sv.id
      WHERE ${whereClause}`,
     params,
   );
@@ -242,6 +315,8 @@ const getHeaderSummary = async (filters) => {
     foundCount: Number(summaryRows[0].foundCount ?? 0),
     missingCount: Number(summaryRows[0].missingCount ?? 0),
     newCount: Number(summaryRows[0].newCount ?? 0),
+    foundRowCount: Number(summaryRows[0].foundRowCount ?? 0),
+    newRowCount: Number(summaryRows[0].newRowCount ?? 0),
     totalRecords: Number(summaryRows[0].totalRecords ?? 0),
   };
 };
@@ -461,7 +536,7 @@ const getReport = async (filters, pagination) => {
   }
 
   const totalRecords =
-    summary.foundCount + summary.newCount + summary.missingCount;
+    summary.foundRowCount + summary.newRowCount + summary.missingCount;
   const totalPages = totalRecords === 0 ? 0 : Math.ceil(totalRecords / limit);
   const dataRows = await getCombinedRows(filters, pagination);
 
@@ -648,7 +723,7 @@ const getExcelExportRows = async (filters) => {
   }
 
   const totalRecords =
-    summary.foundCount + summary.newCount + summary.missingCount;
+    summary.foundRowCount + summary.newRowCount + summary.missingCount;
   if (totalRecords > MAX_EXPORT_ROWS) {
     throw new ApiError(
       400,

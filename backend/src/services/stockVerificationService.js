@@ -6,6 +6,11 @@ import {
   buildActiveBatchInventoryFilter,
   normalizeTag,
 } from "../utils/verificationScope.js";
+import {
+  initializeProductSummary,
+  refreshProductSummaryForTags,
+  refreshSessionProductAggregates,
+} from "./verificationProductSummary.js";
 
 const DETAIL_BATCH_SIZE = 500;
 const TAG_LOOKUP_CHUNK_SIZE = 500;
@@ -34,9 +39,18 @@ const logVerificationDebug = (label, payload) => {
   console.info(`[stock-verification] ${label}`, payload);
 };
 
-const normalizeScannedTags = (tagData) => [
-  ...new Set(tagData.map((tag) => normalizeTag(tag)).filter(Boolean)),
-];
+const normalizeScannedTags = (tagData) =>
+  tagData.map((tag) => normalizeTag(tag)).filter(Boolean);
+
+const buildScanCounts = (tags) => {
+  const counts = new Map();
+
+  for (const tag of tags) {
+    counts.set(tag, (counts.get(tag) ?? 0) + 1);
+  }
+
+  return counts;
+};
 
 const fetchItemDescriptionsByTags = async (connection, tags, batchId) => {
   const map = new Map();
@@ -71,28 +85,79 @@ const fetchItemDescriptionsByTags = async (connection, tags, batchId) => {
   return map;
 };
 
-const insertDetailRecords = async (connection, verificationId, records, status) => {
+const upsertDetailRecords = async (
+  connection,
+  verificationId,
+  records,
+  status,
+) => {
   if (records.length === 0) {
     return;
   }
 
-  const placeholders = records.map(() => "(?, ?, ?, ?)").join(", ");
+  if (status === "FOUND") {
+    const placeholders = records.map(() => "(?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
+    const values = records.flatMap((record) => [
+      verificationId,
+      record.tag,
+      status,
+      record.itemDescription,
+      record.expectedQty,
+      record.scannedQty,
+      record.foundQty,
+      record.missingQty,
+    ]);
+
+    await connection.execute(
+      `INSERT INTO stock_verification_details
+        (verification_id, tag_no, status, item_description,
+         expected_qty, scanned_qty, found_qty, missing_qty)
+       VALUES ${placeholders}
+       ON DUPLICATE KEY UPDATE
+         item_description = COALESCE(VALUES(item_description), item_description),
+         expected_qty = VALUES(expected_qty),
+         scanned_qty = scanned_qty + VALUES(scanned_qty),
+         found_qty = LEAST(
+           VALUES(expected_qty),
+           scanned_qty + VALUES(scanned_qty)
+         ),
+         missing_qty = GREATEST(
+           VALUES(expected_qty) - LEAST(
+             VALUES(expected_qty),
+             scanned_qty + VALUES(scanned_qty)
+           ),
+           0
+         ),
+         status = 'FOUND'`,
+      values,
+    );
+    return;
+  }
+
+  const placeholders = records.map(() => "(?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
   const values = records.flatMap((record) => [
     verificationId,
     record.tag,
     status,
     record.itemDescription,
+    record.expectedQty,
+    record.scannedQty,
+    record.foundQty,
+    record.missingQty,
   ]);
 
   await connection.execute(
     `INSERT INTO stock_verification_details
-      (verification_id, tag_no, status, item_description)
-     VALUES ${placeholders}`,
+      (verification_id, tag_no, status, item_description,
+       expected_qty, scanned_qty, found_qty, missing_qty)
+     VALUES ${placeholders}
+     ON DUPLICATE KEY UPDATE
+       scanned_qty = scanned_qty + VALUES(scanned_qty)`,
     values,
   );
 };
 
-const insertDetailRecordsBatched = async (
+const upsertDetailRecordsBatched = async (
   connection,
   verificationId,
   records,
@@ -100,8 +165,90 @@ const insertDetailRecordsBatched = async (
 ) => {
   for (let index = 0; index < records.length; index += DETAIL_BATCH_SIZE) {
     const chunk = records.slice(index, index + DETAIL_BATCH_SIZE);
-    await insertDetailRecords(connection, verificationId, chunk, status);
+    await upsertDetailRecords(connection, verificationId, chunk, status);
   }
+};
+
+const refreshSessionHeaderCounts = async (connection, verificationId, batchId) => {
+  const [[inventory]] = await connection.execute(
+    `SELECT COUNT(DISTINCT ${TAG_EXPR}) AS totalExpected
+     FROM products
+     WHERE batch_id = ?
+       AND barcode IS NOT NULL
+       AND TRIM(barcode) != ''`,
+    [batchId],
+  );
+
+  const [[foundStats]] = await connection.execute(
+    `SELECT COALESCE(SUM(found_qty), 0) AS foundQty
+     FROM stock_verification_details
+     WHERE verification_id = ?
+       AND status = 'FOUND'`,
+    [verificationId],
+  );
+
+  const [[newStats]] = await connection.execute(
+    `SELECT COALESCE(SUM(scanned_qty), 0) AS newQty
+     FROM stock_verification_details
+     WHERE verification_id = ?
+       AND status = 'NEW'`,
+    [verificationId],
+  );
+
+  const [[missingStats]] = await connection.execute(
+    `SELECT
+       SUM(
+         CASE
+           WHEN GREATEST(
+             p.closing_bal_qty - COALESCE(fd.found_qty, 0),
+             0
+           ) > 0 THEN 1
+           ELSE 0
+         END
+       ) AS missingBarcodeCount
+     FROM products p
+     LEFT JOIN (
+       SELECT tag_no, SUM(found_qty) AS found_qty
+       FROM stock_verification_details
+       WHERE verification_id = ?
+         AND status = 'FOUND'
+       GROUP BY tag_no
+     ) fd ON fd.tag_no = ${TAG_EXPR}
+     WHERE p.batch_id = ?
+       AND p.barcode IS NOT NULL
+       AND TRIM(p.barcode) != ''`,
+    [verificationId, batchId],
+  );
+
+  await connection.execute(
+    `UPDATE stock_verification
+     SET total_expected = ?,
+         found_count = ?,
+         missing_count = ?,
+         new_count = ?,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = ?`,
+    [
+      Number(inventory?.totalExpected ?? 0),
+      Number(foundStats?.foundQty ?? 0),
+      Number(missingStats?.missingBarcodeCount ?? 0),
+      Number(newStats?.newQty ?? 0),
+      verificationId,
+    ],
+  );
+
+  return {
+    totalExpected: Number(inventory?.totalExpected ?? 0),
+    foundCount: Number(foundStats?.foundQty ?? 0),
+    missingCount: Number(missingStats?.missingBarcodeCount ?? 0),
+    newCount: Number(newStats?.newQty ?? 0),
+    tagStats: {
+      totalExpectedTags: Number(inventory?.totalExpected ?? 0),
+      totalFoundTags: Number(foundStats?.foundQty ?? 0),
+      totalMissingTags: Number(missingStats?.missingBarcodeCount ?? 0),
+      totalNewTags: Number(newStats?.newQty ?? 0),
+    },
+  };
 };
 
 const countExpectedTags = async (scope) => {
@@ -117,20 +264,40 @@ const countExpectedTags = async (scope) => {
   };
 };
 
-const findScannedTagsInInventory = async (scope, scannedTags) => {
-  if (scannedTags.length === 0) {
-    return [];
+const fetchInventoryByTags = async (connection, tags, batchId) => {
+  const map = new Map();
+
+  if (tags.length === 0) {
+    return map;
   }
 
-  const placeholders = scannedTags.map(() => "?").join(", ");
-  const sql = `SELECT DISTINCT ${TAG_EXPR} AS tag
-     FROM products
-     WHERE ${scope.whereClause}
-       AND ${TAG_EXPR} IN (${placeholders})`;
+  for (let index = 0; index < tags.length; index += TAG_LOOKUP_CHUNK_SIZE) {
+    const chunk = tags.slice(index, index + TAG_LOOKUP_CHUNK_SIZE);
+    const placeholders = chunk.map(() => "?").join(", ");
 
-  const [rows] = await pool.execute(sql, [...scope.params, ...scannedTags]);
+    const [rows] = await connection.execute(
+      `SELECT ${TAG_EXPR} AS tag, item_description, closing_bal_qty
+       FROM products
+       WHERE batch_id = ?
+         AND barcode IS NOT NULL
+         AND TRIM(barcode) != ''
+         AND ${TAG_EXPR} IN (${placeholders})`,
+      [batchId, ...chunk],
+    );
 
-  return rows.map((row) => normalizeTag(row.tag));
+    for (const row of rows) {
+      const tag = normalizeTag(row.tag);
+
+      if (!map.has(tag)) {
+        map.set(tag, {
+          itemDescription: String(row.item_description ?? "").trim() || null,
+          expectedQty: Number(row.closing_bal_qty ?? 0),
+        });
+      }
+    }
+  }
+
+  return map;
 };
 
 const findExistingVerificationId = async (connection, verificationEpochSeconds) => {
@@ -183,21 +350,17 @@ const upsertVerificationHeader = async (
            verification_date = FROM_UNIXTIME(?),
            verification_day = DATE(FROM_UNIXTIME(?)),
            verification_millis = ?,
-           total_expected = ?,
-           total_scanned = ?,
-           found_count = ?,
-           missing_count = ?,
-           new_count = ?,
+           total_scanned = total_scanned + ?,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
-      [...headerValues, existingId],
-    );
-
-    await connection.execute(
-      `DELETE FROM stock_verification_details
-       WHERE verification_id = ?
-         AND status IN ('FOUND', 'NEW')`,
-      [existingId],
+      [
+        batchId,
+        verificationEpochSeconds,
+        verificationEpochSeconds,
+        datetimeMillis,
+        scannedCount,
+        existingId,
+      ],
     );
 
     logVerificationDebug("verification-reused", {
@@ -252,17 +415,14 @@ const uploadStockVerification = async ({ datetimeMillis, tagData }) => {
     throw new ApiError(400, "No inventory barcodes found in the active batch.");
   }
 
+  // IMPORTANT: do NOT de-dupe scanned tags, we need quantity per barcode.
   const scannedTags = normalizeScannedTags(tagData);
-  const found = await findScannedTagsInInventory(scope, scannedTags);
-  const foundSet = new Set(found);
-  const newTags = scannedTags.filter((tag) => !foundSet.has(tag));
-  const missingCount = totalExpected - found.length;
+  const scanCounts = buildScanCounts(scannedTags);
+  const scannedDistinct = [...scanCounts.keys()];
 
   logVerificationDebug("classification", {
     scannedCount: scannedTags.length,
-    foundCount: found.length,
-    newCount: newTags.length,
-    missingCount,
+    scannedDistinctCount: scannedDistinct.length,
   });
 
   const connection = await pool.getConnection();
@@ -272,6 +432,56 @@ const uploadStockVerification = async ({ datetimeMillis, tagData }) => {
   try {
     await connection.beginTransaction();
 
+    const inventoryByTag = await fetchInventoryByTags(
+      connection,
+      scannedDistinct,
+      activeBatchId,
+    );
+
+    const foundRecords = [];
+    const newRecords = [];
+
+    let scanExpectedQty = 0;
+    let scanFoundQty = 0;
+    let scanMissingQty = 0;
+    let scanNewQty = 0;
+
+    for (const [tag, scannedQty] of scanCounts.entries()) {
+      const inventory = inventoryByTag.get(tag);
+
+      if (!inventory) {
+        scanNewQty += scannedQty;
+        newRecords.push({
+          tag,
+          itemDescription: null,
+          expectedQty: 0,
+          scannedQty,
+          foundQty: 0,
+          missingQty: 0,
+        });
+        continue;
+      }
+
+      const expectedQty = Number(inventory.expectedQty ?? 0);
+      const foundQty = Math.min(scannedQty, expectedQty);
+      const missingQty = Math.max(expectedQty - foundQty, 0);
+
+      scanExpectedQty += expectedQty;
+      scanFoundQty += foundQty;
+      scanMissingQty += missingQty;
+
+      foundRecords.push({
+        tag,
+        itemDescription: inventory.itemDescription,
+        expectedQty,
+        scannedQty,
+        foundQty,
+        missingQty,
+      });
+    }
+
+    scanNewQty = newRecords.reduce((sum, row) => sum + row.scannedQty, 0);
+
     const { verificationId, reused } = await upsertVerificationHeader(
       connection,
       {
@@ -280,40 +490,45 @@ const uploadStockVerification = async ({ datetimeMillis, tagData }) => {
         batchId: activeBatchId,
         totalExpected,
         scannedCount: scannedTags.length,
-        foundCount: found.length,
-        missingCount,
-        newCount: newTags.length,
+        foundCount: 0,
+        missingCount: 0,
+        newCount: 0,
       },
     );
 
-    const descriptionsByTag = await fetchItemDescriptionsByTags(
-      connection,
-      found,
-      activeBatchId,
-    );
+    await initializeProductSummary(connection, verificationId, activeBatchId);
 
-    const foundRecords = found.map((tag) => ({
-      tag,
-      itemDescription: descriptionsByTag.get(tag) || null,
-    }));
-
-    await insertDetailRecordsBatched(
+    await upsertDetailRecordsBatched(
       connection,
       verificationId,
       foundRecords,
       "FOUND",
     );
 
-    const newRecords = newTags.map((tag) => ({
-      tag,
-      itemDescription: null,
-    }));
-
-    await insertDetailRecordsBatched(
+    await upsertDetailRecordsBatched(
       connection,
       verificationId,
       newRecords,
       "NEW",
+    );
+
+    await refreshProductSummaryForTags(
+      connection,
+      verificationId,
+      scannedDistinct,
+    );
+
+    const sessionTotals = await refreshSessionHeaderCounts(
+      connection,
+      verificationId,
+      activeBatchId,
+    );
+
+    const productAggregates = await refreshSessionProductAggregates(
+      connection,
+      verificationId,
+      activeBatchId,
+      sessionTotals.tagStats,
     );
 
     await connection.commit();
@@ -322,11 +537,49 @@ const uploadStockVerification = async ({ datetimeMillis, tagData }) => {
       verificationId,
       reused,
       batchId: activeBatchId,
-      totalExpected,
+      totalExpected: sessionTotals.totalExpected,
       totalScanned: scannedTags.length,
-      foundCount: found.length,
-      missingCount,
-      newCount: newTags.length,
+      scanExpectedQty: Math.round(scanExpectedQty),
+      foundCount: sessionTotals.foundCount,
+      missingCount: sessionTotals.missingCount,
+      newCount: sessionTotals.newCount,
+      scanFoundQty: Math.round(scanFoundQty),
+      scanMissingQty: Math.round(scanMissingQty),
+      scanNewQty: Math.round(scanNewQty),
+      summary: {
+        tagCounts: {
+          foundCount: sessionTotals.foundCount,
+          missingCount: sessionTotals.missingCount,
+          newCount: sessionTotals.newCount,
+        },
+        productCounts: productAggregates.productCounts,
+        totalExpectedTags: sessionTotals.tagStats.totalExpectedTags,
+        totalFoundTags: sessionTotals.tagStats.totalFoundTags,
+        totalMissingTags: sessionTotals.tagStats.totalMissingTags,
+        totalNewTags: sessionTotals.tagStats.totalNewTags,
+        overallVerificationPercentage:
+          productAggregates.overallVerificationPercentage,
+      },
+      byBarcode: [
+        ...foundRecords.map((row) => ({
+          barcode: row.tag,
+          itemDescription: row.itemDescription,
+          expectedQty: row.expectedQty,
+          scannedQty: row.scannedQty,
+          foundQty: row.foundQty,
+          missingQty: row.missingQty,
+          status: "FOUND",
+        })),
+        ...newRecords.map((row) => ({
+          barcode: row.tag,
+          itemDescription: null,
+          expectedQty: 0,
+          scannedQty: row.scannedQty,
+          foundQty: 0,
+          missingQty: 0,
+          status: "NEW",
+        })),
+      ],
     };
   } catch (error) {
     await connection.rollback();
