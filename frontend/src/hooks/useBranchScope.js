@@ -3,13 +3,19 @@ import {
   BRANCH_CHANGE_EVENT,
   getActiveBranch,
   getActiveBranchId,
+  getOperationalBranchId,
+  getOperationalBranchValue,
   getSessionBranches,
+  isAllBranchesScope,
 } from '../services/auth.js'
 
 export function useBranchScope() {
   const [scope, setScope] = useState(() => ({
     activeBranchId: getActiveBranchId(),
     activeBranch: getActiveBranch(),
+    operationalBranchId: getOperationalBranchId(),
+    operationalValue: getOperationalBranchValue(),
+    isAllBranches: isAllBranchesScope(),
     sessionBranches: getSessionBranches(),
   }))
 
@@ -18,6 +24,9 @@ export function useBranchScope() {
       setScope({
         activeBranchId: getActiveBranchId(),
         activeBranch: getActiveBranch(),
+        operationalBranchId: getOperationalBranchId(),
+        operationalValue: getOperationalBranchValue(),
+        isAllBranches: isAllBranchesScope(),
         sessionBranches: getSessionBranches(),
       })
     }

@@ -1,5 +1,5 @@
 import { API_BASE, apiUrl } from '../config/apiConfig.js';
-import { getActiveBranchId, getToken } from './auth.js';
+import { getOperationalBranchId, getToken } from './auth.js';
 
 export { API_BASE, apiUrl };
 
@@ -9,7 +9,7 @@ export function getAuthHeaders({ branchId, scopeBranch = true } = {}) {
   const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
   if (scopeBranch) {
-    const resolvedBranchId = branchId ?? getActiveBranchId();
+    const resolvedBranchId = branchId !== undefined ? branchId : getOperationalBranchId();
     if (resolvedBranchId) {
       headers['X-Branch-Id'] = String(resolvedBranchId);
     }
@@ -19,7 +19,7 @@ export function getAuthHeaders({ branchId, scopeBranch = true } = {}) {
 }
 
 export function withBranchParams(params = {}, branchId) {
-  const resolvedBranchId = branchId ?? getActiveBranchId();
+  const resolvedBranchId = branchId !== undefined ? branchId : getOperationalBranchId();
   if (!resolvedBranchId) return params;
   return { ...params, branchId: resolvedBranchId };
 }

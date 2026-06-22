@@ -15,7 +15,7 @@ function formatValue(value) {
 }
 
 export default function Stock() {
-  const { activeBranchId } = useBranchScope()
+  const { operationalValue } = useBranchScope()
   const [rows, setRows] = useState([])
   const [pagination, setPagination] = useState(null)
   const [page, setPage] = useState(1)
@@ -57,7 +57,7 @@ export default function Stock() {
 
   useEffect(() => {
     loadStock(1, search)
-  }, [loadStock, search, activeBranchId])
+  }, [loadStock, search, operationalValue])
 
   function handleClearSearch() {
     setSearchInput('')

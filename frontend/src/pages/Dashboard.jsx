@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import ActiveBranchSelect from '../components/ActiveBranchSelect.jsx'
 import { useBranchScope } from '../hooks/useBranchScope.js'
 import {
   Area,
@@ -29,6 +30,7 @@ import {
 } from '../services/dashboard.js'
 import './Module.css'
 import './Dashboard.css'
+import '../components/ActiveBranchSelect.css'
 
 function DashboardTitleRow({ className = '', children }) {
   return (
@@ -1894,7 +1896,7 @@ function DashboardSkeleton() {
 }
 
 export default function Dashboard() {
-  const { activeBranchId } = useBranchScope()
+  const { operationalValue, sessionBranches } = useBranchScope()
   const [summary, setSummary] = useState(null)
   const [stocktake, setStocktake] = useState(EMPTY_STOCKTAKE)
   const [counterAccuracy, setCounterAccuracy] = useState(EMPTY_COUNTER_ACCURACY)
@@ -1949,7 +1951,7 @@ export default function Dashboard() {
 
     load()
     return () => { cancelled = true }
-  }, [activeBranchId])
+  }, [operationalValue])
 
   useEffect(() => {
     let cancelled = false
@@ -1978,7 +1980,7 @@ export default function Dashboard() {
 
     loadTopSold()
     return () => { cancelled = true }
-  }, [activeBranchId])
+  }, [operationalValue])
 
   useEffect(() => {
     let cancelled = false
@@ -2011,7 +2013,7 @@ export default function Dashboard() {
     }
 
     return () => { cancelled = true }
-  }, [loading, summary, salesPeriod, salesCounter, activeBranchId])
+  }, [loading, summary, salesPeriod, salesCounter, operationalValue])
 
   useEffect(() => {
     let cancelled = false
@@ -2044,7 +2046,7 @@ export default function Dashboard() {
     }
 
     return () => { cancelled = true }
-  }, [loading, summary, importPeriod, importCounter, activeBranchId])
+  }, [loading, summary, importPeriod, importCounter, operationalValue])
 
   useEffect(() => {
     let cancelled = false
@@ -2070,7 +2072,7 @@ export default function Dashboard() {
 
     loadBranchComparison()
     return () => { cancelled = true }
-  }, [activeBranchId])
+  }, [operationalValue])
 
   useEffect(() => {
     let cancelled = false
@@ -2096,7 +2098,7 @@ export default function Dashboard() {
 
     loadStockMovement()
     return () => { cancelled = true }
-  }, [activeBranchId])
+  }, [operationalValue])
 
   const totals = summary?.totals ?? {
     totalTags: 0,
@@ -2127,7 +2129,11 @@ export default function Dashboard() {
   )
 
   if (loading) {
-    return <DashboardSkeleton />
+    return (
+      <div className="dashboard">
+        <DashboardSkeleton />
+      </div>
+    )
   }
 
   if (error) {
@@ -2200,7 +2206,11 @@ export default function Dashboard() {
           <div className="module-header__main">
             <h2>Inventory Overview</h2>
           </div>
-          <span className="module-header__badge">Live Data</span>
+          <ActiveBranchSelect
+            branches={sessionBranches}
+            alwaysShow
+            layout="header"
+          />
         </div>
 
         <div className="dashboard-metrics">

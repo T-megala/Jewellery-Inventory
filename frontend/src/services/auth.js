@@ -3,8 +3,10 @@ import { decodeJwtPayload } from '../utils/jwt.js'
 
 const TOKEN_KEY = 'auth_token'
 const USER_KEY = 'auth_user'
+const OPERATIONAL_BRANCH_KEY = 'auth_operational_branch'
 export const PENDING_BRANCH_KEY = 'auth_pending_branch_selection'
 export const BRANCH_CHANGE_EVENT = 'auth:branch-changed'
+export const ALL_BRANCHES_VALUE = 'all'
 
 function normalizeBranch(branch) {
   return {
@@ -51,9 +53,49 @@ function dispatchBranchChange() {
   window.dispatchEvent(new CustomEvent(BRANCH_CHANGE_EVENT, {
     detail: {
       activeBranchId: getActiveBranchId(),
+      operationalBranchId: getOperationalBranchId(),
+      operationalValue: getOperationalBranchValue(),
       selectedBranchIds: getSelectedBranchIds(),
     },
   }))
+}
+
+export function isAllBranchesScope() {
+  const raw = sessionStorage.getItem(OPERATIONAL_BRANCH_KEY)
+  return !raw || raw === ALL_BRANCHES_VALUE
+}
+
+/** Branch used on API calls — null when "All branches" is selected (default). */
+export function getOperationalBranchId() {
+  const raw = sessionStorage.getItem(OPERATIONAL_BRANCH_KEY)
+  if (!raw || raw === ALL_BRANCHES_VALUE) return null
+
+  const parsed = Number(raw)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+}
+
+/** Current dashboard dropdown value — defaults to all branches. */
+export function getOperationalBranchValue() {
+  const raw = sessionStorage.getItem(OPERATIONAL_BRANCH_KEY)
+  if (!raw || raw === ALL_BRANCHES_VALUE) return ALL_BRANCHES_VALUE
+
+  const parsed = Number(raw)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : ALL_BRANCHES_VALUE
+}
+
+export function setOperationalBranch(value) {
+  if (value === ALL_BRANCHES_VALUE) {
+    sessionStorage.setItem(OPERATIONAL_BRANCH_KEY, ALL_BRANCHES_VALUE)
+  } else if (value) {
+    sessionStorage.setItem(OPERATIONAL_BRANCH_KEY, String(Number(value)))
+  } else {
+    sessionStorage.removeItem(OPERATIONAL_BRANCH_KEY)
+  }
+  dispatchBranchChange()
+}
+
+export function clearOperationalBranch() {
+  sessionStorage.removeItem(OPERATIONAL_BRANCH_KEY)
 }
 
 function parseAuthResponse(json, fallbackError = 'Request failed') {
@@ -109,6 +151,7 @@ export async function login(username, password, branchIds = null) {
 
   const data = parseAuthResponse(json, 'Login failed')
   applyAuthSession(data.token, data.user)
+  setOperationalBranch(ALL_BRANCHES_VALUE)
   return data
 }
 
@@ -141,6 +184,7 @@ export async function selectBranches(branchIds) {
 
   const data = parseAuthResponse(json, 'Failed to select branches')
   applyAuthSession(data.token, data.user)
+  setOperationalBranch(ALL_BRANCHES_VALUE)
   clearPendingBranchSelection()
   return data
 }
@@ -337,5 +381,6 @@ export function logout() {
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(USER_KEY)
   clearPendingBranchSelection()
+  clearOperationalBranch()
   dispatchBranchChange()
 }

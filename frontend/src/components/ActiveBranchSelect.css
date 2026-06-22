@@ -12,10 +12,29 @@
   white-space: nowrap;
 }
 
+.active-branch-select__field {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.active-branch-select__chevron {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9a8b78;
+  pointer-events: none;
+}
+
 .active-branch-select__control {
   min-width: 140px;
   max-width: 200px;
-  padding: 8px 28px 8px 10px;
+  padding: 8px 34px 8px 10px;
   border: 1px solid var(--color-border);
   border-radius: 10px;
   background-color: #fff;
@@ -24,10 +43,6 @@
   color: var(--color-text);
   cursor: pointer;
   appearance: none;
-  background-image: linear-gradient(45deg, transparent 50%, #9a8b78 50%), linear-gradient(135deg, #9a8b78 50%, transparent 50%);
-  background-position: calc(100% - 12px) calc(50% - 2px), calc(100% - 7px) calc(50% - 2px);
-  background-size: 5px 5px, 5px 5px;
-  background-repeat: no-repeat;
 }
 
 .active-branch-select__control:focus {

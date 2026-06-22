@@ -165,7 +165,7 @@ function getTodayDate() {
 }
 
 export default function Reports() {
-  const { activeBranchId } = useBranchScope()
+  const { operationalValue } = useBranchScope()
   const [product, setProduct] = useState('')
   const [subProduct, setSubProduct] = useState('')
   const [counter, setCounter] = useState('')
@@ -224,7 +224,7 @@ export default function Reports() {
 
     loadProducts()
     return () => { cancelled = true }
-  }, [activeBranchId])
+  }, [operationalValue])
 
   useEffect(() => {
     if (!hasSearched) return undefined
@@ -237,7 +237,7 @@ export default function Reports() {
 
     reloadForBranch()
     return () => { cancelled = true }
-  }, [activeBranchId])
+  }, [operationalValue])
 
   useEffect(() => {
     if (!product) {
