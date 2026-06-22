@@ -1,8 +1,12 @@
-import { TAG_EXPR } from "../utils/verificationScope.js";
+import { TAG_EXPR, tagNoEqualsBarcodeExpr } from "../utils/verificationScope.js";
 
 const SUMMARY_BATCH_SIZE = 1000;
 
-export const classifyVerificationStatus = (expectedQty, foundQty, missingQty) => {
+export const classifyVerificationStatus = (
+  expectedQty,
+  foundQty,
+  missingQty,
+) => {
   const expected = Number(expectedQty ?? 0);
   const found = Number(foundQty ?? 0);
   const missing = Number(missingQty ?? 0);
@@ -53,7 +57,10 @@ export const initializeProductSummary = async (
   verificationId,
   batchId,
 ) => {
-  const existingCount = await countProductSummaryRows(connection, verificationId);
+  const existingCount = await countProductSummaryRows(
+    connection,
+    verificationId,
+  );
 
   if (existingCount > 0) {
     return existingCount;
@@ -106,7 +113,7 @@ export const refreshProductSummaryForTags = async (
            AND status = 'FOUND'
            AND tag_no IN (${placeholders})
          GROUP BY tag_no
-       ) fd ON fd.tag_no = svps.barcode
+       ) fd ON ${tagNoEqualsBarcodeExpr("fd.tag_no", "svps.barcode")}
        SET
          svps.found_qty = fd.found_qty,
          svps.missing_qty = GREATEST(svps.expected_qty - fd.found_qty, 0),
@@ -176,7 +183,7 @@ export const rebuildProductSummary = async (
        WHERE verification_id = ?
          AND status = 'FOUND'
        GROUP BY tag_no
-     ) fd ON fd.tag_no = ${TAG_EXPR}
+     ) fd ON ${tagNoEqualsBarcodeExpr("fd.tag_no", TAG_EXPR)}
      WHERE p.batch_id = ?
        AND p.barcode IS NOT NULL
        AND TRIM(p.barcode) != ''`,
@@ -184,7 +191,10 @@ export const rebuildProductSummary = async (
   );
 };
 
-export const getProductSummaryAggregates = async (connection, verificationId) => {
+export const getProductSummaryAggregates = async (
+  connection,
+  verificationId,
+) => {
   const [[productCounts]] = await connection.execute(
     `SELECT
        COUNT(*) AS totalProducts,

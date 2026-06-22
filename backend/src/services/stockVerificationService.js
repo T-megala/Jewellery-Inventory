@@ -3,8 +3,11 @@ import { getActiveBatchId } from "../services/productBatchService.js";
 import ApiError from "../utils/ApiError.js";
 import {
   TAG_EXPR,
+  VERIFICATION_DATE_FROM_EPOCH_SQL,
+  VERIFICATION_DAY_FROM_EPOCH_SQL,
   buildActiveBatchInventoryFilter,
   normalizeTag,
+  verificationDayFromEpochSeconds,
 } from "../utils/verificationScope.js";
 import {
   initializeProductSummary,
@@ -96,7 +99,9 @@ const upsertDetailRecords = async (
   }
 
   if (status === "FOUND") {
-    const placeholders = records.map(() => "(?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
+    const placeholders = records
+      .map(() => "(?, ?, ?, ?, ?, ?, ?, ?)")
+      .join(", ");
     const values = records.flatMap((record) => [
       verificationId,
       record.tag,
@@ -169,7 +174,11 @@ const upsertDetailRecordsBatched = async (
   }
 };
 
-const refreshSessionHeaderCounts = async (connection, verificationId, batchId) => {
+const refreshSessionHeaderCounts = async (
+  connection,
+  verificationId,
+  batchId,
+) => {
   const [[inventory]] = await connection.execute(
     `SELECT COUNT(DISTINCT ${TAG_EXPR}) AS totalExpected
      FROM products
@@ -300,11 +309,14 @@ const fetchInventoryByTags = async (connection, tags, batchId) => {
   return map;
 };
 
-const findExistingVerificationId = async (connection, verificationEpochSeconds) => {
+const findExistingVerificationId = async (
+  connection,
+  verificationEpochSeconds,
+) => {
   const [rows] = await connection.execute(
     `SELECT id
      FROM stock_verification
-     WHERE verification_day = DATE(FROM_UNIXTIME(?))
+     WHERE verification_day = ${VERIFICATION_DAY_FROM_EPOCH_SQL}
      LIMIT 1
      FOR UPDATE`,
     [verificationEpochSeconds],
@@ -347,8 +359,8 @@ const upsertVerificationHeader = async (
     await connection.execute(
       `UPDATE stock_verification
        SET batch_id = ?,
-           verification_date = FROM_UNIXTIME(?),
-           verification_day = DATE(FROM_UNIXTIME(?)),
+           verification_date = ${VERIFICATION_DATE_FROM_EPOCH_SQL},
+           verification_day = ${VERIFICATION_DAY_FROM_EPOCH_SQL},
            verification_millis = ?,
            total_scanned = total_scanned + ?,
            updated_at = CURRENT_TIMESTAMP
@@ -365,7 +377,7 @@ const upsertVerificationHeader = async (
 
     logVerificationDebug("verification-reused", {
       verificationId: existingId,
-      verificationDay: verificationEpochSeconds,
+      verificationDay: verificationDayFromEpochSeconds(verificationEpochSeconds),
       batchId,
     });
 
@@ -376,7 +388,7 @@ const upsertVerificationHeader = async (
     `INSERT INTO stock_verification
       (batch_id, verification_date, verification_day, verification_millis,
        total_expected, total_scanned, found_count, missing_count, new_count)
-     VALUES (?, FROM_UNIXTIME(?), DATE(FROM_UNIXTIME(?)), ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ${VERIFICATION_DATE_FROM_EPOCH_SQL}, ${VERIFICATION_DAY_FROM_EPOCH_SQL}, ?, ?, ?, ?, ?, ?)`,
     headerValues,
   );
 
@@ -384,7 +396,7 @@ const upsertVerificationHeader = async (
 
   logVerificationDebug("verification-created", {
     verificationId,
-    verificationDay: verificationEpochSeconds,
+    verificationDay: verificationDayFromEpochSeconds(verificationEpochSeconds),
     batchId,
   });
 
@@ -402,7 +414,8 @@ const uploadStockVerification = async ({ datetimeMillis, tagData }) => {
   }
 
   const scope = buildActiveBatchInventoryFilter(activeBatchId);
-  const { total: totalExpected, sql: countSql } = await countExpectedTags(scope);
+  const { total: totalExpected, sql: countSql } =
+    await countExpectedTags(scope);
 
   logVerificationDebug("inventory-scope", {
     activeBatchId,

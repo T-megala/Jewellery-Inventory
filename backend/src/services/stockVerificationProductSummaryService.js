@@ -1,5 +1,6 @@
 import pool from "../config/database.js";
 import ApiError from "../utils/ApiError.js";
+import { buildVerificationDayFilterClause } from "../utils/verificationScope.js";
 import { rebuildProductSummary, refreshSessionProductAggregates } from "./verificationProductSummary.js";
 
 const VALID_PRODUCT_STATUSES = [
@@ -8,34 +9,8 @@ const VALID_PRODUCT_STATUSES = [
   "NOT_VERIFIED",
 ];
 
-const buildVerificationFilterClause = (filters) => {
-  const conditions = ["1 = 1"];
-  const params = [];
-
-  if (filters.fromDate && filters.toDate) {
-    if (filters.fromDate === filters.toDate) {
-      conditions.push("AND sv.verification_day = ?");
-      params.push(filters.fromDate);
-    } else {
-      conditions.push("AND sv.verification_day BETWEEN ? AND ?");
-      params.push(filters.fromDate, filters.toDate);
-    }
-  } else {
-    conditions.push(
-      `AND sv.id = (
-        SELECT latest.id
-        FROM stock_verification latest
-        ORDER BY latest.verification_date DESC, latest.id DESC
-        LIMIT 1
-      )`,
-    );
-  }
-
-  return { whereClause: conditions.join(" "), params };
-};
-
 const resolveVerificationSession = async (filters) => {
-  const { whereClause, params } = buildVerificationFilterClause(filters);
+  const { whereClause, params } = buildVerificationDayFilterClause(filters);
 
   const [rows] = await pool.execute(
     `SELECT sv.id, sv.batch_id
@@ -170,7 +145,7 @@ const getProductSummary = async (filters, pagination) => {
   await ensureProductSummaryReady(session.id, session.batch_id);
 
   const { whereClause: verificationWhere, params: verificationParams } =
-    buildVerificationFilterClause(filters);
+    buildVerificationDayFilterClause(filters);
 
   const [summaryRows] = await pool.execute(
     `SELECT
@@ -220,11 +195,11 @@ const getProductSummary = async (filters, pagination) => {
      ORDER BY
        FIELD(
          svps.verification_status,
+         'FULLY_VERIFIED',
          'PARTIALLY_VERIFIED',
-         'NOT_VERIFIED',
-         'FULLY_VERIFIED'
+         'NOT_VERIFIED'
        ),
-       svps.verification_percentage ASC,
+       svps.verification_percentage DESC,
        svps.item_description ASC,
        svps.product_id ASC
      LIMIT ${pagination.limit} OFFSET ${pagination.offset}`,

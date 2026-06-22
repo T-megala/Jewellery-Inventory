@@ -1,5 +1,6 @@
 import pool from "../config/database.js";
 import ApiError from "../utils/ApiError.js";
+import { buildVerificationDayFilterClause } from "../utils/verificationScope.js";
 import { getActiveBatchId } from "./productBatchService.js";
 import {
   buildExcelBuffer,
@@ -101,61 +102,35 @@ const formatDateTime = (value) => {
 const toNumber = (value) =>
   value === null || value === undefined ? null : Number(value);
 
-const buildHeaderFilterClause = (filters) => {
-  const conditions = ["1 = 1"];
-  const params = [];
-
-  if (filters.fromDate && filters.toDate) {
-    conditions.push("AND DATE(sv.verification_date) BETWEEN ? AND ?");
-    params.push(filters.fromDate, filters.toDate);
-  } else {
-    conditions.push(
-      `AND sv.id = (
-        SELECT latest.id
-        FROM stock_verification latest
-        ORDER BY latest.verification_date DESC, latest.id DESC
-        LIMIT 1
-      )`,
-    );
-  }
-
-  return { whereClause: conditions.join(" "), params };
-};
+const buildHeaderFilterClause = (filters) =>
+  buildVerificationDayFilterClause(filters);
 
 const buildStoredDetailFilterClause = (filters) => {
-  const conditions = ["1 = 1"];
-  const params = [];
+  const detailConditions = [];
+  const detailParams = [];
 
   if (filters.search) {
-    conditions.push(
+    detailConditions.push(
       "AND (svd.tag_no LIKE ? OR svd.item_description LIKE ?)",
     );
     const term = `%${filters.search}%`;
-    params.push(term, term);
+    detailParams.push(term, term);
   }
 
   if (filters.status === "FOUND" || filters.status === "NEW") {
-    conditions.push("AND svd.status = ?");
-    params.push(filters.status);
+    detailConditions.push("AND svd.status = ?");
+    detailParams.push(filters.status);
   } else {
-    conditions.push("AND svd.status IN ('FOUND', 'NEW')");
+    detailConditions.push("AND svd.status IN ('FOUND', 'NEW')");
   }
 
-  if (filters.fromDate && filters.toDate) {
-    conditions.push("AND DATE(sv.verification_date) BETWEEN ? AND ?");
-    params.push(filters.fromDate, filters.toDate);
-  } else {
-    conditions.push(
-      `AND sv.id = (
-        SELECT latest.id
-        FROM stock_verification latest
-        ORDER BY latest.verification_date DESC, latest.id DESC
-        LIMIT 1
-      )`,
-    );
-  }
+  const { whereClause: dayWhere, params: dayParams } =
+    buildVerificationDayFilterClause(filters);
 
-  return { whereClause: conditions.join(" "), params };
+  return {
+    whereClause: [dayWhere, ...detailConditions].join(" "),
+    params: [...dayParams, ...detailParams],
+  };
 };
 
 const buildStoredDetailQuery = (filters) => {
