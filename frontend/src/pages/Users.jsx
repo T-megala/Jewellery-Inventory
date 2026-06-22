@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
+import BranchMultiSelect from '../components/BranchMultiSelect.jsx'
 import TablePagination from '../components/TablePagination.jsx'
+import { fetchBranches } from '../services/branches.js'
+import { fetchRoles } from '../services/roles.js'
 import {
   createUser,
   deleteUser,
   fetchUsers,
   updateUser,
 } from '../services/users.js'
+import '../components/BranchMultiSelect.css'
 import './Users.css'
 
 const DEFAULT_PAGE_SIZE = 10
@@ -24,19 +28,62 @@ function formatDate(value) {
   })
 }
 
+function matchesUserSearch(user, term) {
+  if (!term) return true
+
+  const haystack = [
+    user.username,
+    user.role?.name,
+    ...(user.branches || []).map((branch) => branch.name),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+
+  return haystack.includes(term)
+}
+
+function UserBranchTags({ branches, defaultBranch }) {
+  if (!branches?.length) {
+    return <span className="users-table__branch-empty">—</span>
+  }
+
+  const defaultId = branches.find((branch) => branch.isDefault)?.id ?? defaultBranch?.id
+
+  return (
+    <div className="users-table__branch-tags">
+      {branches.map((branch) => (
+        <span
+          key={branch.id}
+          className={`users-table__branch-tag${defaultId === branch.id ? ' users-table__branch-tag--default' : ''}`}
+          title={defaultId === branch.id ? `${branch.name} (default)` : branch.name}
+        >
+          {branch.name}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 export default function Users() {
   const [users, setUsers] = useState([])
+  const [branches, setBranches] = useState([])
+  const [roles, setRoles] = useState([])
   const [searchInput, setSearchInput] = useState('')
+  const [branchFilterId, setBranchFilterId] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
 
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [roleId, setRoleId] = useState('')
+  const [selectedBranchIds, setSelectedBranchIds] = useState([])
   const [showPassword, setShowPassword] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [showForm, setShowForm] = useState(false)
 
   const [loading, setLoading] = useState(true)
+  const [optionsLoading, setOptionsLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
   const [error, setError] = useState('')
@@ -57,9 +104,29 @@ export default function Users() {
     }
   }, [])
 
+  const loadOptions = useCallback(async () => {
+    setOptionsLoading(true)
+
+    try {
+      const [branchesData, rolesData] = await Promise.all([
+        fetchBranches({ includeInactive: false }),
+        fetchRoles({ includeInactive: false }),
+      ])
+      setBranches(branchesData)
+      setRoles(rolesData)
+    } catch (err) {
+      setBranches([])
+      setRoles([])
+      setError(err.message || 'Failed to load branches or roles.')
+    } finally {
+      setOptionsLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     loadUsers()
-  }, [loadUsers])
+    loadOptions()
+  }, [loadUsers, loadOptions])
 
   useEffect(() => {
     if (!notice) return undefined
@@ -90,9 +157,16 @@ export default function Users() {
 
   const filteredUsers = useMemo(() => {
     const term = searchInput.trim().toLowerCase()
-    if (!term) return users
-    return users.filter((user) => user.username.toLowerCase().includes(term))
-  }, [users, searchInput])
+    const branchId = branchFilterId ? Number(branchFilterId) : null
+
+    return users.filter((user) => {
+      if (branchId && !(user.branches || []).some((branch) => branch.id === branchId)) {
+        return false
+      }
+
+      return matchesUserSearch(user, term)
+    })
+  }, [users, searchInput, branchFilterId])
 
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize))
 
@@ -103,7 +177,7 @@ export default function Users() {
 
   useEffect(() => {
     setPage(1)
-  }, [searchInput, pageSize])
+  }, [searchInput, branchFilterId, pageSize])
 
   useEffect(() => {
     if (page > totalPages) {
@@ -114,6 +188,8 @@ export default function Users() {
   function resetForm() {
     setUsername('')
     setPassword('')
+    setRoleId('')
+    setSelectedBranchIds([])
     setShowPassword(false)
     setEditingId(null)
     setShowForm(false)
@@ -123,6 +199,8 @@ export default function Users() {
     setEditingId(null)
     setUsername('')
     setPassword('')
+    setRoleId(roles[0]?.id ? String(roles[0].id) : '')
+    setSelectedBranchIds([])
     setShowPassword(false)
     setError('')
     setNotice('')
@@ -130,13 +208,25 @@ export default function Users() {
   }
 
   function handleEdit(user) {
+    const userBranchIds = user.branches.map((branch) => branch.id)
+
     setEditingId(user.id)
     setUsername(user.username)
     setPassword('')
+    setRoleId(user.role?.id ? String(user.role.id) : '')
+    setSelectedBranchIds(userBranchIds)
     setShowPassword(false)
     setError('')
     setNotice('')
     setShowForm(true)
+  }
+
+  function toggleBranch(branchId) {
+    setSelectedBranchIds((prev) => (
+      prev.includes(branchId)
+        ? prev.filter((id) => id !== branchId)
+        : [...prev, branchId]
+    ))
   }
 
   function validateForm() {
@@ -157,6 +247,16 @@ export default function Users() {
       return false
     }
 
+    if (!roleId) {
+      setError('Role is required.')
+      return false
+    }
+
+    if (selectedBranchIds.length === 0) {
+      setError('Select at least one branch.')
+      return false
+    }
+
     return true
   }
 
@@ -171,10 +271,15 @@ export default function Users() {
 
     try {
       const trimmedUsername = username.trim()
+      const parsedRoleId = Number(roleId)
       const isEdit = Boolean(editingId)
 
       if (isEdit) {
-        const payload = { username: trimmedUsername }
+        const payload = {
+          username: trimmedUsername,
+          roleId: parsedRoleId,
+          branchIds: selectedBranchIds,
+        }
         if (password) {
           payload.password = password
         }
@@ -183,6 +288,8 @@ export default function Users() {
         await createUser({
           username: trimmedUsername,
           password,
+          roleId: parsedRoleId,
+          branchIds: selectedBranchIds,
         })
       }
 
@@ -232,20 +339,46 @@ export default function Users() {
     <div className={`users-page${showForm ? ' users-page--modal-open' : ''}`}>
       <section className="users-list-card">
         <div className="users-list__toolbar">
-          <div className="users-search">
-            <span className="users-search__icon" aria-hidden="true">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8" />
-                <path d="M20 20l-3.5-3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-              </svg>
-            </span>
-            <input
-              type="search"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search username…"
-              aria-label="Search users"
-            />
+          <div className="users-list__filters">
+            <div className="users-search">
+              <span className="users-search__icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8" />
+                  <path d="M20 20l-3.5-3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </span>
+              <input
+                type="search"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Search user, role or branch…"
+                aria-label="Search users"
+              />
+              {searchInput && (
+                <button
+                  type="button"
+                  className="users-search__clear"
+                  onClick={() => setSearchInput('')}
+                  aria-label="Clear search"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+
+            <label className="users-branch-filter">
+              <span className="users-branch-filter__label">Branch</span>
+              <select
+                value={branchFilterId}
+                onChange={(e) => setBranchFilterId(e.target.value)}
+                aria-label="Filter by branch"
+              >
+                <option value="">All branches</option>
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>{branch.name}</option>
+                ))}
+              </select>
+            </label>
           </div>
 
           <div className="users-list__actions">
@@ -289,6 +422,8 @@ export default function Users() {
                 <tr>
                   <th>#</th>
                   <th>Username</th>
+                  <th>Role</th>
+                  <th>Branches</th>
                   <th>Created</th>
                   <th aria-label="Actions" />
                 </tr>
@@ -296,7 +431,7 @@ export default function Users() {
               <tbody>
                 {filteredUsers.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="users-table__empty">No users found.</td>
+                    <td colSpan={6} className="users-table__empty">No users found.</td>
                   </tr>
                 )}
 
@@ -304,6 +439,10 @@ export default function Users() {
                   <tr key={user.id} className={editingId === user.id ? 'users-table__row--active' : ''}>
                     <td>{(page - 1) * pageSize + index + 1}</td>
                     <td>{user.username}</td>
+                    <td>{user.role?.name || '—'}</td>
+                    <td className="users-table__branches">
+                      <UserBranchTags branches={user.branches} defaultBranch={user.branch} />
+                    </td>
                     <td>{formatDate(user.createdAt)}</td>
                     <td>
                       <div className="users-table__actions">
@@ -365,11 +504,11 @@ export default function Users() {
             disabled={saving}
           />
 
-          <div className="users-modal__panel">
+          <div className="users-modal__panel users-modal__panel--wide">
             <header className="users-modal__header">
               <div className="users-modal__titles">
                 <h2 id="users-form-title">{isEdit ? 'Edit user' : 'Add new user'}</h2>
-                <p>{isEdit ? 'Update username or password' : 'Create a user account for inventory access'}</p>
+                <p>{isEdit ? 'Update account details, role and branch access' : 'Create a user account for inventory access'}</p>
               </div>
               <button
                 type="button"
@@ -385,6 +524,7 @@ export default function Users() {
             </header>
 
             <form className="users-modal__form" onSubmit={handleSubmit}>
+              <div className="users-modal__body">
               <label className="users-field">
                 <span>
                   Username
@@ -441,9 +581,42 @@ export default function Users() {
                 )}
               </label>
 
+              <label className="users-field">
+                <span>
+                  Role
+                  <span className="users-field__required" aria-hidden="true">*</span>
+                </span>
+                <select
+                  value={roleId}
+                  onChange={(e) => setRoleId(e.target.value)}
+                  disabled={saving || optionsLoading}
+                >
+                  <option value="">Select role</option>
+                  {roles.map((role) => (
+                    <option key={role.id} value={role.id}>{role.name}</option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="users-field users-field--branches">
+                <span>
+                  Branches
+                  <span className="users-field__required" aria-hidden="true">*</span>
+                </span>
+                <BranchMultiSelect
+                  branches={branches}
+                  selectedIds={selectedBranchIds}
+                  onToggle={toggleBranch}
+                  onClearAll={() => setSelectedBranchIds([])}
+                  disabled={saving}
+                  loading={optionsLoading}
+                />
+              </div>
+
               {error && (
                 <p className="users-alert users-alert--error" role="alert">{error}</p>
               )}
+              </div>
 
               <footer className="users-modal__footer">
                 <button
