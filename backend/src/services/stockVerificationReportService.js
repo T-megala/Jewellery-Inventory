@@ -14,6 +14,16 @@ import {
 const VALID_STATUSES = ["FOUND", "MISSING", "NEW"];
 const MAX_EXPORT_ROWS = 50000;
 
+const LATEST_SCAN_SUBQUERY = `
+  SELECT verification_id, MAX(id) AS latest_scan_id
+  FROM latest_stock_verification
+  GROUP BY verification_id
+`;
+
+const LATEST_SCAN_JOIN_SQL = `
+  INNER JOIN (${LATEST_SCAN_SUBQUERY}) latest ON latest.verification_id = sv.id
+`;
+
 /**
  * Builds WHERE conditions for inventory scope matching.
  * Used to find expected tags that should be in the verification.
@@ -39,14 +49,13 @@ const buildInventoryScopeConditions = (batchIdParam) => `
 `;
 
 /**
- * Builds NOT EXISTS condition to exclude tags that were already FOUND.
- * Used to dynamically generate MISSING tags.
+ * Builds NOT EXISTS condition using latest_scan_id (indexed) instead of verification_id.
  */
 const buildNotFoundCondition = () => `
   NOT EXISTS (
     SELECT 1
     FROM stock_verification_details svd_found
-    WHERE svd_found.verification_id = sv.id
+    WHERE svd_found.latest_scan_id = lsv.id
       AND svd_found.tag_no = UPPER(TRIM(p.tag_packet_no))
       AND svd_found.status = 'FOUND'
   )
@@ -79,9 +88,78 @@ const formatDate = (value) => {
 const toNumber = (value) =>
   value === null || value === undefined ? null : Number(value);
 
+const formatVerificationDay = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) {
+      return null;
+    }
+
+    return value.toISOString().slice(0, 10);
+  }
+
+  return String(value).slice(0, 10);
+};
+
+const getLatestVerificationDay = async (branchId = null) => {
+  const [rows] = await pool.execute(
+    branchId
+      ? `SELECT MAX(verification_day) AS verificationDay
+         FROM stock_verification
+         WHERE branch_id = ?`
+      : `SELECT MAX(verification_day) AS verificationDay
+         FROM stock_verification`,
+    branchId ? [branchId] : [],
+  );
+
+  return formatVerificationDay(rows[0]?.verificationDay);
+};
+
+const resolveReportContext = async (filters) => {
+  const activeBatchId = (await getActiveBatchId(filters.branchId)) ?? null;
+  const resolvedFilters = { ...filters };
+
+  if (!resolvedFilters.fromDate && !resolvedFilters.toDate) {
+    const latestDay = await getLatestVerificationDay(resolvedFilters.branchId);
+
+    if (latestDay) {
+      resolvedFilters.fromDate = latestDay;
+      resolvedFilters.toDate = latestDay;
+    }
+  }
+
+  return { filters: resolvedFilters, activeBatchId };
+};
+
+const buildBranchFilterClause = (filters) => {
+  if (!filters.branchId) {
+    return { clause: "", params: [] };
+  }
+
+  return {
+    clause: "AND sv.branch_id = ?",
+    params: [filters.branchId],
+  };
+};
+
+const buildDateFilterClause = (filters) => {
+  if (!filters.fromDate || !filters.toDate) {
+    return { clause: "", params: [] };
+  }
+
+  return {
+    clause: "AND sv.verification_day BETWEEN ? AND ?",
+    params: [filters.fromDate, filters.toDate],
+  };
+};
+
 const DETAIL_FROM_SQL = `
   FROM stock_verification_details svd
   INNER JOIN stock_verification sv ON sv.id = svd.verification_id
+  ${LATEST_SCAN_JOIN_SQL}
 `;
 
 const PRODUCT_JOIN_SQL = `
@@ -146,6 +224,8 @@ const STORED_REPORT_ORDER_SQL = `
 const buildHeaderFilterClause = (filters) => {
   const conditions = ["1 = 1"];
   const params = [];
+  const branchFilter = buildBranchFilterClause(filters);
+  const dateFilter = buildDateFilterClause(filters);
 
   if (filters.productName) {
     conditions.push("AND sv.product_name = ?");
@@ -159,17 +239,23 @@ const buildHeaderFilterClause = (filters) => {
     conditions.push("AND sv.center_name = ?");
     params.push(filters.centerName);
   }
-  if (filters.fromDate && filters.toDate) {
-    conditions.push("AND DATE(sv.verification_date) BETWEEN ? AND ?");
-    params.push(filters.fromDate, filters.toDate);
+  if (branchFilter.clause) {
+    conditions.push(branchFilter.clause);
+    params.push(...branchFilter.params);
+  }
+  if (dateFilter.clause) {
+    conditions.push(dateFilter.clause);
+    params.push(...dateFilter.params);
   }
 
   return { whereClause: conditions.join(" "), params };
 };
 
-const buildStoredDetailFilterClause = (filters) => {
-  const conditions = ["1 = 1"];
+const buildStoredDetailFilterClause = (filters, { includeStatus = true } = {}) => {
+  const conditions = ["svd.latest_scan_id = latest.latest_scan_id"];
   const params = [];
+  const branchFilter = buildBranchFilterClause(filters);
+  const dateFilter = buildDateFilterClause(filters);
 
   if (filters.productName) {
     conditions.push("AND svd.product_name = ?");
@@ -183,15 +269,21 @@ const buildStoredDetailFilterClause = (filters) => {
     conditions.push("AND svd.center_name = ?");
     params.push(filters.centerName);
   }
-  if (filters.status === "FOUND" || filters.status === "NEW") {
-    conditions.push("AND svd.status = ?");
-    params.push(filters.status);
-  } else {
-    conditions.push("AND svd.status IN ('FOUND', 'NEW')");
+  if (includeStatus) {
+    if (filters.status === "FOUND" || filters.status === "NEW") {
+      conditions.push("AND svd.status = ?");
+      params.push(filters.status);
+    } else {
+      conditions.push("AND svd.status IN ('FOUND', 'NEW')");
+    }
   }
-  if (filters.fromDate && filters.toDate) {
-    conditions.push("AND DATE(sv.verification_date) BETWEEN ? AND ?");
-    params.push(filters.fromDate, filters.toDate);
+  if (branchFilter.clause) {
+    conditions.push(branchFilter.clause);
+    params.push(...branchFilter.params);
+  }
+  if (dateFilter.clause) {
+    conditions.push(dateFilter.clause);
+    params.push(...dateFilter.params);
   }
 
   return { whereClause: conditions.join(" "), params };
@@ -209,9 +301,9 @@ const buildStoredDetailQuery = (filters) => {
   };
 };
 
-const buildExportQuery = async (filters) => {
+const buildExportQuery = (filters, activeBatchId) => {
   const { whereClause, params } = buildStoredDetailFilterClause(filters);
-  const activeBatchId = (await getActiveBatchId(filters.branchId)) ?? -1;
+  const batchId = activeBatchId ?? -1;
 
   return {
     baseFrom: `
@@ -219,7 +311,7 @@ const buildExportQuery = async (filters) => {
       ${PRODUCT_JOIN_SQL}
       WHERE ${whereClause}
     `,
-    params: [...params, activeBatchId],
+    params: [...params, batchId],
   };
 };
 
@@ -259,7 +351,18 @@ const enrichRowsWithProducts = async (rows, activeBatchId) => {
     return rows;
   }
 
-  const tags = [...new Set(rows.map((row) => String(row.tag_no ?? "").trim()).filter(Boolean))];
+  const needsEnrichment = rows.filter((row) => !row.product_id);
+  if (needsEnrichment.length === 0) {
+    return rows;
+  }
+
+  const tags = [
+    ...new Set(
+      needsEnrichment
+        .map((row) => String(row.tag_no ?? "").trim())
+        .filter(Boolean),
+    ),
+  ];
 
   if (tags.length === 0) {
     return rows;
@@ -437,6 +540,8 @@ const buildMissingRankedFromSql = (headerWhereClause) => {
             p.id DESC
         ) AS row_num
       FROM stock_verification sv
+      INNER JOIN (${LATEST_SCAN_SUBQUERY}) latest ON latest.verification_id = sv.id
+      INNER JOIN latest_stock_verification lsv ON lsv.id = latest.latest_scan_id
       INNER JOIN products p ON ${inventoryScopeConditions}
       WHERE ${notFoundCondition}
         AND ${headerWhereClause}
@@ -445,20 +550,20 @@ const buildMissingRankedFromSql = (headerWhereClause) => {
   `;
 };
 
-const buildMissingQueryParts = async (filters) => {
+const buildMissingQueryParts = (filters, activeBatchId) => {
   const { whereClause, params } = buildHeaderFilterClause(filters);
-  const activeBatchId = (await getActiveBatchId(filters.branchId)) ?? -1;
+  const batchId = activeBatchId ?? -1;
 
   return {
     baseFrom: buildMissingRankedFromSql(whereClause),
-    // Placeholders bind in SQL text order: JOIN batch_id, then ROW_NUMBER batch_id, then filters.
-    params: [activeBatchId, activeBatchId, ...params],
-    activeBatchId,
+    // Placeholders bind in SQL text order: JOIN batch_id, ROW_NUMBER batch_id, then filters.
+    params: [batchId, batchId, ...params],
+    activeBatchId: batchId,
   };
 };
 
-const getMissingRows = async (filters, pagination) => {
-  const { baseFrom, params, activeBatchId } = await buildMissingQueryParts(filters);
+const getMissingRows = async (filters, pagination, activeBatchId) => {
+  const { baseFrom, params } = buildMissingQueryParts(filters, activeBatchId);
   const { limit, offset } = pagination;
 
   const [dataRows] = await pool.execute(
@@ -516,20 +621,14 @@ const getStoredDetailRows = async (filters, pagination) => {
  * Fetches combined FOUND, NEW, and MISSING records in a single query.
  * Used when no status filter is provided, returning all three types together.
  */
-const getCombinedRows = async (filters, pagination) => {
+const getCombinedRows = async (filters, pagination, activeBatchId) => {
   const { limit, offset } = pagination;
-  const { whereClause: headerWhereClause, params: headerParams } = buildHeaderFilterClause(filters);
-  const { whereClause: detailWhereClause, params: detailParams } = buildStoredDetailFilterClause(filters);
-  const activeBatchId = (await getActiveBatchId(filters.branchId)) ?? -1;
+  const { whereClause: headerWhereClause, params: headerParams } =
+    buildHeaderFilterClause(filters);
+  const { whereClause: detailWhereClause, params: detailParams } =
+    buildStoredDetailFilterClause(filters, { includeStatus: false });
+  const batchId = activeBatchId ?? -1;
 
-  /**
-   * UNION query that combines:
-   * 1. FOUND records from stock_verification_details
-   * 2. NEW records from stock_verification_details
-   * 3. MISSING records dynamically generated from products
-   *
-   * All three statuses are returned mixed together, sorted by date and tag.
-   */
   const [dataRows] = await pool.execute(
     `SELECT combined_data.* FROM (
       -- FOUND records
@@ -561,6 +660,7 @@ const getCombinedRows = async (filters, pagination) => {
         p.created_at AS product_created_at
       FROM stock_verification_details svd
       INNER JOIN stock_verification sv ON sv.id = svd.verification_id
+      ${LATEST_SCAN_JOIN_SQL}
       LEFT JOIN products p ON p.batch_id = ? AND p.tag_packet_no = svd.tag_no
       WHERE svd.status = 'FOUND' AND ${detailWhereClause}
 
@@ -595,6 +695,7 @@ const getCombinedRows = async (filters, pagination) => {
         p.created_at AS product_created_at
       FROM stock_verification_details svd
       INNER JOIN stock_verification sv ON sv.id = svd.verification_id
+      ${LATEST_SCAN_JOIN_SQL}
       LEFT JOIN products p ON p.batch_id = ? AND p.tag_packet_no = svd.tag_no
       WHERE svd.status = 'NEW' AND ${detailWhereClause}
 
@@ -635,12 +736,12 @@ const getCombinedRows = async (filters, pagination) => {
       combined_data.tag_no ASC
     LIMIT ${limit} OFFSET ${offset}`,
     [
+      batchId,
       ...detailParams,
-      activeBatchId,
+      batchId,
       ...detailParams,
-      activeBatchId,
-      activeBatchId,
-      activeBatchId,
+      batchId,
+      batchId,
       ...headerParams,
     ],
   );
@@ -650,13 +751,15 @@ const getCombinedRows = async (filters, pagination) => {
 
 const getReport = async (filters, pagination) => {
   const { page, limit } = pagination;
-  const summary = await getHeaderSummary(filters);
+  const { filters: resolvedFilters, activeBatchId } =
+    await resolveReportContext(filters);
+  const summary = await getHeaderSummary(resolvedFilters);
 
   // If specific status requested, fetch only that status
-  if (filters.status === "MISSING") {
+  if (resolvedFilters.status === "MISSING") {
     const totalRecords = summary.missingCount;
     const totalPages = totalRecords === 0 ? 0 : Math.ceil(totalRecords / limit);
-    const data = await getMissingRows(filters, pagination);
+    const data = await getMissingRows(resolvedFilters, pagination, activeBatchId);
 
     return {
       pagination: {
@@ -674,11 +777,10 @@ const getReport = async (filters, pagination) => {
     };
   }
 
-  if (filters.status === "FOUND" || filters.status === "NEW") {
-    const totalRecords = getStoredRecordCount(summary, filters);
+  if (resolvedFilters.status === "FOUND" || resolvedFilters.status === "NEW") {
+    const totalRecords = getStoredRecordCount(summary, resolvedFilters);
     const totalPages = totalRecords === 0 ? 0 : Math.ceil(totalRecords / limit);
-    const activeBatchId = await getActiveBatchId(filters.branchId);
-    const dataRows = await getStoredDetailRows(filters, pagination);
+    const dataRows = await getStoredDetailRows(resolvedFilters, pagination);
     const enrichedRows = await enrichRowsWithProducts(dataRows, activeBatchId);
 
     return {
@@ -700,8 +802,11 @@ const getReport = async (filters, pagination) => {
   // If no status filter, return combined FOUND + NEW + MISSING
   const totalRecords = summary.foundCount + summary.newCount + summary.missingCount;
   const totalPages = totalRecords === 0 ? 0 : Math.ceil(totalRecords / limit);
-  const activeBatchId = await getActiveBatchId(filters.branchId);
-  const dataRows = await getCombinedRows(filters, pagination);
+  const dataRows = await getCombinedRows(
+    resolvedFilters,
+    pagination,
+    activeBatchId,
+  );
   const enrichedRows = await enrichRowsWithProducts(dataRows, activeBatchId);
 
   return {
@@ -720,7 +825,7 @@ const getReport = async (filters, pagination) => {
   };
 };
 
-const getAllStoredReportRows = async (filters) => {
+const getAllStoredReportRows = async (filters, activeBatchId) => {
   const summary = await getHeaderSummary(filters);
   const exportableCount = getStoredRecordCount(summary, filters);
 
@@ -731,7 +836,7 @@ const getAllStoredReportRows = async (filters) => {
     );
   }
 
-  const { baseFrom, params } = await buildExportQuery(filters);
+  const { baseFrom, params } = buildExportQuery(filters, activeBatchId);
 
   const [dataRows] = await pool.execute(
     `${DETAIL_SELECT_SQL},
@@ -751,7 +856,7 @@ const getAllStoredReportRows = async (filters) => {
   };
 };
 
-const getAllMissingReportRows = async (filters) => {
+const getAllMissingReportRows = async (filters, activeBatchId) => {
   const summary = await getHeaderSummary(filters);
 
   if (summary.missingCount > MAX_EXPORT_ROWS) {
@@ -761,7 +866,7 @@ const getAllMissingReportRows = async (filters) => {
     );
   }
 
-  const { baseFrom, params } = await buildMissingQueryParts(filters);
+  const { baseFrom, params } = buildMissingQueryParts(filters, activeBatchId);
 
   const [dataRows] = await pool.execute(
     `SELECT
@@ -805,11 +910,11 @@ const getAllMissingReportRows = async (filters) => {
   };
 };
 
-const getAllCombinedReportRows = async (filters) => {
+const getAllCombinedReportRows = async (filters, activeBatchId) => {
   const summary = await getHeaderSummary(filters);
 
-  const stored = await getAllStoredReportRows(filters);
-  const missing = await getAllMissingReportRows(filters);
+  const stored = await getAllStoredReportRows(filters, activeBatchId);
+  const missing = await getAllMissingReportRows(filters, activeBatchId);
 
   // Combine stored (FOUND/NEW) and dynamically generated MISSING rows
   const combined = [...stored.data, ...missing.data];
@@ -834,22 +939,27 @@ const getAllCombinedReportRows = async (filters) => {
 };
 
 const getAllReportRows = async (filters) => {
-  if (filters.status === "MISSING") {
-    return getAllMissingReportRows(filters);
+  const { filters: resolvedFilters, activeBatchId } =
+    await resolveReportContext(filters);
+
+  if (resolvedFilters.status === "MISSING") {
+    return getAllMissingReportRows(resolvedFilters, activeBatchId);
   }
 
-  if (filters.status === "FOUND" || filters.status === "NEW") {
-    return getAllStoredReportRows(filters);
+  if (resolvedFilters.status === "FOUND" || resolvedFilters.status === "NEW") {
+    return getAllStoredReportRows(resolvedFilters, activeBatchId);
   }
 
-  return getAllCombinedReportRows(filters);
+  return getAllCombinedReportRows(resolvedFilters, activeBatchId);
 };
 
 const getExcelExportRows = async (filters) => {
-  const summary = await getHeaderSummary(filters);
+  const { filters: resolvedFilters, activeBatchId } =
+    await resolveReportContext(filters);
+  const summary = await getHeaderSummary(resolvedFilters);
 
   // If explicit MISSING requested, export only missing rows
-  if (filters.status === "MISSING") {
+  if (resolvedFilters.status === "MISSING") {
     if (summary.missingCount > MAX_EXPORT_ROWS) {
       throw new ApiError(
         400,
@@ -857,7 +967,10 @@ const getExcelExportRows = async (filters) => {
       );
     }
 
-    const { baseFrom, params } = await buildMissingQueryParts(filters);
+    const { baseFrom, params } = buildMissingQueryParts(
+      resolvedFilters,
+      activeBatchId,
+    );
     const [dataRows] = await pool.execute(
       `SELECT
          missing_ranked.verification_date,
@@ -895,8 +1008,8 @@ const getExcelExportRows = async (filters) => {
   }
 
   // If explicit FOUND or NEW requested, export stored rows only
-  if (filters.status === "FOUND" || filters.status === "NEW") {
-    const exportableCount = getStoredRecordCount(summary, filters);
+  if (resolvedFilters.status === "FOUND" || resolvedFilters.status === "NEW") {
+    const exportableCount = getStoredRecordCount(summary, resolvedFilters);
 
     if (exportableCount > MAX_EXPORT_ROWS) {
       throw new ApiError(
@@ -905,8 +1018,8 @@ const getExcelExportRows = async (filters) => {
       );
     }
 
-    const { whereClause, params } = buildStoredDetailFilterClause(filters);
-    const activeBatchId = (await getActiveBatchId(filters.branchId)) ?? -1;
+    const { whereClause, params } = buildStoredDetailFilterClause(resolvedFilters);
+    const batchId = activeBatchId ?? -1;
 
     const [dataRows] = await pool.execute(
       `${EXCEL_DETAIL_SELECT_SQL},
@@ -915,7 +1028,7 @@ const getExcelExportRows = async (filters) => {
        ${PRODUCT_JOIN_SQL}
        WHERE ${whereClause}
        ${STORED_REPORT_ORDER_SQL}`,
-      [...params, activeBatchId],
+      [...params, batchId],
     );
 
     return {
@@ -938,8 +1051,8 @@ const getExcelExportRows = async (filters) => {
   }
 
   // Stored rows (FOUND + NEW)
-  const { whereClause, params } = buildStoredDetailFilterClause(filters);
-  const activeBatchId = (await getActiveBatchId(filters.branchId)) ?? -1;
+  const { whereClause, params } = buildStoredDetailFilterClause(resolvedFilters);
+  const batchId = activeBatchId ?? -1;
 
   const [storedRows] = await pool.execute(
     `${EXCEL_DETAIL_SELECT_SQL},
@@ -948,11 +1061,12 @@ const getExcelExportRows = async (filters) => {
      ${PRODUCT_JOIN_SQL}
      WHERE ${whereClause}
      ${STORED_REPORT_ORDER_SQL}`,
-    [...params, activeBatchId],
+    [...params, batchId],
   );
 
   // Missing rows (dynamic)
-  const { baseFrom: missingBaseFrom, params: missingParams } = await buildMissingQueryParts(filters);
+  const { baseFrom: missingBaseFrom, params: missingParams } =
+    buildMissingQueryParts(resolvedFilters, activeBatchId);
   const [missingRows] = await pool.execute(
     `SELECT
        missing_ranked.verification_date,

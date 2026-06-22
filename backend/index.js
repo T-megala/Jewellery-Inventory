@@ -35,7 +35,7 @@ app.use((req, res, next) => {
 
   res.header(
     "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept, Authorization",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Branch-Id",
   );
   res.header(
     "Access-Control-Allow-Methods",
@@ -89,7 +89,7 @@ const startServer = async () => {
       console.log(`Server running on port ${PORT}`);
     });
   } catch (error) {
-    console.error("Database connection failed:", error.message);
+    console.error("Database connection failed:", error);
     process.exit(1);
   }
 };

@@ -27,6 +27,7 @@ const files = [
   "023_drop_users_branch_id.sql",
   "024_drop_branch_is_main_is_active.sql",
   "025_split_master_permissions.sql",
+  "026_stock_verification_report_indexes.sql",
 ];
 
 const SKIPPABLE_ERROR_CODES = new Set([

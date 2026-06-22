@@ -11,6 +11,7 @@ router.get(
   authorize(PERMISSIONS.BRANCHES_VIEW, PERMISSIONS.BRANCHES_VIEW_ALL),
   asyncHandler(branchController.listBranches),
 );
+
 router.get(
   "/branches/:id",
   authorize(PERMISSIONS.BRANCHES_VIEW, PERMISSIONS.BRANCHES_VIEW_ALL),

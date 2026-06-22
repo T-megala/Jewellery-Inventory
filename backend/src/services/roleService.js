@@ -19,6 +19,8 @@ const toPermission = (row) => ({
   description: row.description ?? null,
 });
 
+export const SUPER_ADMIN_ROLE_NAME = "Super Admin";
+
 export const getAllPermissions = async () => {
   const [rows] = await pool.execute(
     `SELECT id, name, module, action, description
@@ -88,6 +90,11 @@ export const getRoleById = async (id) => {
     ...toRole(rows[0]),
     permissions,
   };
+};
+
+export const isSuperAdminRole = async (roleId) => {
+  const role = await getRoleById(roleId);
+  return role?.name === SUPER_ADMIN_ROLE_NAME;
 };
 
 const replaceRolePermissions = async (connection, roleId, permissionIds) => {
@@ -254,6 +261,7 @@ export default {
   getAllPermissions,
   getAllRoles,
   getRoleById,
+  isSuperAdminRole,
   getPermissionNamesForRole,
   createRole,
   updateRole,

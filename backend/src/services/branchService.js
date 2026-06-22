@@ -29,6 +29,31 @@ export const getAllBranches = async () => {
   return rows.map(toBranch);
 };
 
+export const getBranchesByIds = async (branchIds = []) => {
+  const uniqueIds = [
+    ...new Set(
+      branchIds
+        .map((id) => Number.parseInt(String(id), 10))
+        .filter((id) => Number.isInteger(id) && id > 0),
+    ),
+  ];
+
+  if (uniqueIds.length === 0) {
+    return [];
+  }
+
+  const placeholders = uniqueIds.map(() => "?").join(", ");
+  const [rows] = await pool.execute(
+    `SELECT id, name, address, city, phone, created_at, updated_at
+     FROM branches
+     WHERE id IN (${placeholders})
+     ORDER BY name ASC`,
+    uniqueIds,
+  );
+
+  return rows.map(toBranch);
+};
+
 export const getBranchById = async (id) => {
   const [rows] = await pool.execute(
     `SELECT id, name, address, city, phone, created_at, updated_at
@@ -140,6 +165,7 @@ export const deleteBranch = async (id) => {
 export default {
   getDefaultBranchId,
   getAllBranches,
+  getBranchesByIds,
   getBranchById,
   createBranch,
   updateBranch,

@@ -2,6 +2,8 @@ import pool from "../config/database.js";
 import { hashPassword } from "../utils/passwordHasher.js";
 import ApiError from "../utils/ApiError.js";
 import userBranchService from "./userBranchService.js";
+import branchService from "./branchService.js";
+import roleService, { SUPER_ADMIN_ROLE_NAME } from "./roleService.js";
 
 const USER_SELECT_SQL = `
   SELECT
@@ -91,6 +93,62 @@ const resolveBranchAssignment = ({ branchId, branchIds, defaultBranchId }) => {
   return null;
 };
 
+const buildSuperAdminBranchAssignment = async ({
+  branchId,
+  branchIds,
+  defaultBranchId,
+}) => {
+  const allBranches = await branchService.getAllBranches();
+
+  if (allBranches.length === 0) {
+    throw new ApiError(400, "No branches available to assign");
+  }
+
+  const allBranchIds = allBranches.map((branch) => branch.id);
+  const explicitDefault =
+    defaultBranchId !== undefined && defaultBranchId !== null && defaultBranchId !== ""
+      ? parseOptionalId(defaultBranchId, "defaultBranchId")
+      : branchId !== undefined && branchId !== null && branchId !== ""
+        ? parseOptionalId(branchId, "branchId")
+        : null;
+
+  const resolvedDefault =
+    explicitDefault && allBranchIds.includes(explicitDefault)
+      ? explicitDefault
+      : allBranchIds[0];
+
+  return {
+    branchIds: allBranchIds,
+    defaultBranchId: resolvedDefault,
+  };
+};
+
+const resolveCreateBranchAssignment = async ({
+  roleId,
+  branchId,
+  branchIds,
+  defaultBranchId,
+}) => {
+  const role = await roleService.getRoleById(roleId);
+
+  if (role?.name === SUPER_ADMIN_ROLE_NAME) {
+    return buildSuperAdminBranchAssignment({
+      branchId,
+      branchIds,
+      defaultBranchId,
+    });
+  }
+
+  const branchAssignment = resolveBranchAssignment({
+    branchId,
+    branchIds,
+    defaultBranchId,
+  });
+
+  assertBranchAssignment(branchAssignment);
+  return branchAssignment;
+};
+
 const toSafeUser = async (row) => {
   const branches = await userBranchService.getBranchesForUser(row.id);
   const defaultBranch =
@@ -157,13 +215,12 @@ export const createUser = async ({
 
   const hashedPassword = await hashPassword(password);
   const parsedRoleId = parseRequiredId(roleId, "roleId");
-  const branchAssignment = resolveBranchAssignment({
+  const branchAssignment = await resolveCreateBranchAssignment({
+    roleId: parsedRoleId,
     branchId,
     branchIds,
     defaultBranchId,
   });
-
-  assertBranchAssignment(branchAssignment);
 
   const connection = await pool.getConnection();
 
@@ -210,11 +267,24 @@ export const createUser = async ({
 };
 
 export const updateUser = async (id, fields) => {
-  const branchAssignment = resolveBranchAssignment({
+  let branchAssignment = resolveBranchAssignment({
     branchId: fields.branchId,
     branchIds: fields.branchIds,
     defaultBranchId: fields.defaultBranchId,
   });
+
+  if (fields.roleId !== undefined) {
+    const parsedRoleId = parseRequiredId(fields.roleId, "roleId");
+    const role = await roleService.getRoleById(parsedRoleId);
+
+    if (role?.name === SUPER_ADMIN_ROLE_NAME) {
+      branchAssignment = await buildSuperAdminBranchAssignment({
+        branchId: fields.branchId,
+        branchIds: fields.branchIds,
+        defaultBranchId: fields.defaultBranchId,
+      });
+    }
+  }
 
   const setClauses = [];
   const params = [];

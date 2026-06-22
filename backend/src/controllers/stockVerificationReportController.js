@@ -163,10 +163,7 @@ const parseScanId = (req) => {
   const parsed = Number.parseInt(String(rawValue), 10);
 
   if (!Number.isInteger(parsed) || parsed < 1) {
-    throw new ApiError(
-      400,
-      "scanId must be a positive integer when provided",
-    );
+    throw new ApiError(400, "scanId must be a positive integer when provided");
   }
 
   return parsed;

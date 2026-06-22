@@ -27,7 +27,7 @@ const isAsyncImport = (req) => {
   return isTruthyParam(value);
 };
 
-import { resolveOperationalBranchId } from '../utils/branchRequest.js';
+import { resolveRequestBranchId } from '../utils/branchRequest.js';
 
 export const importProducts = async (req, res) => {
   if (!req.file) {
@@ -37,9 +37,7 @@ export const importProducts = async (req, res) => {
   const uploadedBy = req.body?.uploadedBy
     ? String(req.body.uploadedBy).trim()
     : null;
-  const branchId = await resolveOperationalBranchId({
-    branchId: req.branchId ?? req.body?.branchId,
-  });
+  const branchId = await resolveRequestBranchId(req);
 
   if (isAsyncImport(req)) {
     console.info('[product-import] upload received', {

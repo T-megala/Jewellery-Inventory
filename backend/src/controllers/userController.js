@@ -1,5 +1,6 @@
 import ApiError from "../utils/ApiError.js";
 import * as userService from "../services/userService.js";
+import { isSuperAdminRole } from "../services/roleService.js";
 
 const MAX_USERNAME_LENGTH = 100;
 const MAX_PASSWORD_BYTES = 72;
@@ -121,16 +122,24 @@ export const createUser = async (req, res) => {
     throw new ApiError(400, "Password is too long (max 72 bytes)");
   }
 
-  const branchInput = validateBranchInput({
-    branchId: req.body?.branchId,
-    branchIds: req.body?.branchIds,
-  });
+  const roleId = parseRequiredIdField(req.body?.roleId, "roleId");
+  const isSuperAdmin = await isSuperAdminRole(roleId);
+
+  const branchInput = isSuperAdmin
+    ? {
+        branchId: parseOptionalIdField(req.body?.branchId, "branchId"),
+        branchIds: parseBranchIdsField(req.body?.branchIds),
+      }
+    : validateBranchInput({
+        branchId: req.body?.branchId,
+        branchIds: req.body?.branchIds,
+      });
 
   const user = await userService.createUser({
     username,
     password,
     fullName: req.body?.fullName,
-    roleId: parseRequiredIdField(req.body?.roleId, "roleId"),
+    roleId,
     branchId: branchInput.branchId,
     branchIds: branchInput.branchIds,
     defaultBranchId: parseOptionalIdField(

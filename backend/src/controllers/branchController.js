@@ -1,5 +1,7 @@
 import ApiError from "../utils/ApiError.js";
 import branchService from "../services/branchService.js";
+import userBranchService from "../services/userBranchService.js";
+import { SUPER_ADMIN_ROLE_NAME } from "../services/roleService.js";
 
 const parseId = (raw) => {
   const id = Number.parseInt(String(raw), 10);
@@ -11,8 +13,25 @@ const parseId = (raw) => {
   return id;
 };
 
+const resolveListedBranches = async (req) => {
+  if (req.user?.roleName === SUPER_ADMIN_ROLE_NAME) {
+    return branchService.getAllBranches();
+  }
+
+  if (req.user?.id) {
+    const branchIds =
+      Array.isArray(req.user.branchIds) && req.user.branchIds.length > 0
+        ? req.user.branchIds
+        : await userBranchService.getBranchIdsForUser(req.user.id);
+
+    return branchService.getBranchesByIds(branchIds);
+  }
+
+  return branchService.getAllBranches();
+};
+
 export const listBranches = async (req, res) => {
-  const branches = await branchService.getAllBranches();
+  const branches = await resolveListedBranches(req);
 
   res.status(200).json({ success: true, data: branches });
 };
