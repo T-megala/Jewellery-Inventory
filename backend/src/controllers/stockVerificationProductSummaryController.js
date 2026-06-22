@@ -89,7 +89,7 @@ const validateFilters = (req) => {
   ) {
     throw new ApiError(
       400,
-      "verificationStatus must be FULLY_VERIFIED, PARTIALLY_VERIFIED, or NOT_VERIFIED",
+      "verificationStatus must be FULLY_VERIFIED, PARTIALLY_VERIFIED, NOT_VERIFIED, or NEW",
     );
   }
 
