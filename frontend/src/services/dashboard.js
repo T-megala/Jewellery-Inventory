@@ -196,3 +196,70 @@ export async function fetchDailyImports({ period = 'week', counter = 'ALL' } = {
     })),
   };
 }
+
+export async function fetchBranchComparison() {
+  const data = await apiFetch('/dashboard/branch-comparison') ?? {};
+  return {
+    mode: data.mode ?? 'single',
+    currentBranch: data.currentBranch ?? null,
+    branches: (data.branches || []).map((row) => ({
+      id: row.id ?? null,
+      name: row.name ?? '',
+      itemCount: Number(row.itemCount ?? row.totalExpected ?? 0),
+      totalExpected: Number(row.totalExpected ?? row.itemCount ?? 0),
+      itemsScanned: Number(row.itemsScanned ?? 0),
+      accuracyPercent: Number(row.accuracyPercent ?? 0),
+    })),
+    erpVsPhysical: {
+      erp: Number(data.erpVsPhysical?.erp ?? 0),
+      physical: Number(data.erpVsPhysical?.physical ?? 0),
+      matched: Number(data.erpVsPhysical?.matched ?? 0),
+      difference: Number(data.erpVsPhysical?.difference ?? 0),
+      missing: Number(data.erpVsPhysical?.missing ?? 0),
+      new: Number(data.erpVsPhysical?.new ?? 0),
+    },
+  };
+}
+
+export async function fetchStockMovement({ slowDays = 60, fastDays = 30, limit = 3 } = {}) {
+  const query = buildQueryString({ slowDays, fastDays, limit });
+  const res = await fetch(apiUrl(`/dashboard/stock-movement?${query}`), {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(),
+    },
+  });
+
+  let json;
+  try {
+    json = await res.json();
+  } catch {
+    throw new Error('Unexpected server response');
+  }
+
+  if (!res.ok || json?.success === false) {
+    throw new Error(json?.message || 'Failed to load stock movement');
+  }
+
+  const data = json.data ?? json ?? {};
+
+  return {
+    slowMovers: {
+      thresholdDays: Number(data.slowMovers?.thresholdDays ?? slowDays),
+      items: (data.slowMovers?.items || []).map((row) => ({
+        productName: row.productName ?? row.name ?? '',
+        pieceCount: Number(row.pieceCount ?? row.pieces ?? 0),
+        avgDaysSinceMovement: Number(row.avgDaysSinceMovement ?? row.days ?? 0),
+      })),
+    },
+    fastMovers: {
+      periodDays: Number(data.fastMovers?.periodDays ?? fastDays),
+      items: (data.fastMovers?.items || []).map((row) => ({
+        productName: row.productName ?? row.name ?? '',
+        restockedPieces: Number(row.restockedPieces ?? row.restocked ?? 0),
+        restockedTags: Number(row.restockedTags ?? 0),
+      })),
+    },
+  };
+}

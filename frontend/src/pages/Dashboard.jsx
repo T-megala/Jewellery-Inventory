@@ -9,6 +9,8 @@ import {
   ComposedChart,
   LabelList,
   Line,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -17,9 +19,11 @@ import {
 import {
   EMPTY_COUNTER_ACCURACY,
   EMPTY_STOCKTAKE,
+  fetchBranchComparison,
   fetchDailyImports,
   fetchDashboard,
   fetchDayWiseSales,
+  fetchStockMovement,
   fetchTopSoldProducts,
 } from '../services/dashboard.js'
 import './Module.css'
@@ -35,6 +39,21 @@ function DashboardTitleRow({ className = '', children }) {
 }
 
 const CHART_COLORS = ['#b8860b', '#d4af37', '#c9a227', '#a67c00', '#e8c547', '#9a7209', '#f0c75e', '#8b6914']
+
+const CATEGORY_CHART_COLORS = [
+  '#b8860b',
+  '#3b8ad9',
+  '#21a371',
+  '#d15b31',
+  '#8378d9',
+  '#d15b8a',
+  '#6ba331',
+  '#5c8ea8',
+]
+
+const CATEGORY_OTHERS_COLOR = '#c49a6c'
+
+const BRANCH_CHART_COLORS = ['#b8860b', '#3b8ad9', '#8378d9', '#21a371', '#d15b31', '#6ba331']
 
 const DAY_SALES_PERIODS = [
   { value: 'week', label: 'Week' },
@@ -183,10 +202,42 @@ function truncate(text, max = 18) {
   return str.length > max ? `${str.slice(0, max)}…` : str
 }
 
-function pct(part, whole) {
-  const total = Number(whole)
-  if (!total) return '0'
-  return ((Number(part) / total) * 100).toFixed(1)
+function shortBranchLabel(name) {
+  const str = String(name || '').trim()
+  if (!str) return '—'
+  if (str.length <= 8) return str
+  const first = str.split(/[\s(–-]+/)[0]
+  return first.length <= 8 ? first : `${first.slice(0, 7)}…`
+}
+
+function buildCategoryChartRows(data, totalPieces, { maxCategories = 7 } = {}) {
+  const sorted = [...(data || [])]
+    .map((row) => ({
+      name: String(row.name || 'Unknown'),
+      count: Number(row.pieceCount ?? 0),
+    }))
+    .filter((row) => row.count > 0)
+    .sort((a, b) => b.count - a.count)
+
+  const total = Number(totalPieces) || sorted.reduce((sum, row) => sum + row.count, 0)
+
+  let rows = sorted
+  if (sorted.length > maxCategories + 1) {
+    const top = sorted.slice(0, maxCategories)
+    const othersCount = sorted.slice(maxCategories).reduce((sum, row) => sum + row.count, 0)
+    rows = othersCount > 0 ? [...top, { name: 'Others', count: othersCount }] : top
+  }
+
+  return {
+    total,
+    rows: rows.map((row, index) => ({
+      ...row,
+      color: row.name === 'Others'
+        ? CATEGORY_OTHERS_COLOR
+        : CATEGORY_CHART_COLORS[index % CATEGORY_CHART_COLORS.length],
+      percent: total ? Math.round((row.count / total) * 100) : 0,
+    })),
+  }
 }
 
 function formatStocktakeDate(dateStr) {
@@ -393,6 +444,124 @@ function StocktakeHistory({ stocktake }) {
         )}
       </div>
     </article>
+  )
+}
+
+function buildAccuracyTrendRows(sessions) {
+  return (sessions || []).map((session) => ({
+    label: session.label || formatStocktakeDate(session.date),
+    accuracy: Number(session.accuracyPercent ?? 0),
+  }))
+}
+
+function buildAccuracyYAxis(yMin, yMax) {
+  const range = yMax - yMin
+  const step = range <= 6 ? 0.5 : range <= 12 ? 1 : 0.5
+  const ticks = []
+  for (let value = yMin; value <= yMax + 0.001; value += step) {
+    ticks.push(Math.round(value * 10) / 10)
+  }
+  return ticks
+}
+
+function buildAccuracyYDomain(chartData) {
+  if (!chartData.length) return { yMin: 97, yMax: 100 }
+
+  const values = chartData.map((row) => row.accuracy)
+  const minAccuracy = Math.min(...values)
+  const maxAccuracy = Math.max(...values)
+  const spread = maxAccuracy - minAccuracy
+
+  if (maxAccuracy < 90 || spread < 8) {
+    const padding = Math.max(1, spread < 1 ? 2 : spread * 0.35 + 1)
+    const yMin = Math.max(0, Math.floor((minAccuracy - padding) * 2) / 2)
+    const yMax = Math.min(100, Math.ceil((maxAccuracy + padding) * 2) / 2)
+    return { yMin, yMax: Math.max(yMin + 1, yMax) }
+  }
+
+  return {
+    yMin: Math.max(0, Math.floor(minAccuracy * 2) / 2 - 0.5),
+    yMax: 100,
+  }
+}
+
+function AccuracyTrendTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+  const accuracy = Number(payload[0]?.value ?? 0)
+  return (
+    <div className="accuracy-trend-tooltip">
+      <span className="accuracy-trend-tooltip__label">{label}</span>
+      <strong className="accuracy-trend-tooltip__value dashboard-num">
+        {formatAccuracyPercent(accuracy)}%
+      </strong>
+    </div>
+  )
+}
+
+function AccuracyTrendChart({ stocktake }) {
+  const chartData = useMemo(
+    () => buildAccuracyTrendRows(stocktake?.history?.sessions ?? []),
+    [stocktake],
+  )
+
+  const { yMin, yMax } = useMemo(() => buildAccuracyYDomain(chartData), [chartData])
+  const yTicks = useMemo(() => buildAccuracyYAxis(yMin, yMax), [yMin, yMax])
+
+  if (!chartData.length) {
+    return <p className="analytics-empty">Stocktake history will appear after verification sessions.</p>
+  }
+
+  return (
+    <div className="accuracy-trend-chart">
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart
+          data={chartData}
+          margin={{ top: 8, right: 10, left: 0, bottom: 0 }}
+        >
+          <defs>
+            <linearGradient id="accuracy-trend-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#d4af37" stopOpacity={0.3} />
+              <stop offset="85%" stopColor="#f5ecd4" stopOpacity={0.1} />
+              <stop offset="100%" stopColor="#faf7ef" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid stroke="#ebe4d8" vertical={false} />
+          <XAxis
+            dataKey="label"
+            tick={{ fontSize: 11, fill: '#9a8b78', fontWeight: 500 }}
+            axisLine={{ stroke: '#e0d8cc' }}
+            tickLine={false}
+            height={28}
+          />
+          <YAxis
+            domain={[yMin, yMax]}
+            ticks={yTicks}
+            tick={{ fontSize: 11, fill: '#9a8b78' }}
+            axisLine={{ stroke: '#e0d8cc' }}
+            tickLine={false}
+            width={44}
+            tickFormatter={(value) => `${value}%`}
+          />
+          <Tooltip content={<AccuracyTrendTooltip />} cursor={{ stroke: 'rgba(184, 134, 11, 0.18)', strokeWidth: 1, strokeDasharray: '4 4' }} />
+          <Area
+            type="natural"
+            dataKey="accuracy"
+            fill="url(#accuracy-trend-fill)"
+            stroke="none"
+            isAnimationActive={false}
+          />
+          <Line
+            type="natural"
+            dataKey="accuracy"
+            stroke="#d4af37"
+            strokeWidth={2.5}
+            dot={{ r: 5, fill: '#d4af37', stroke: '#fff', strokeWidth: 2 }}
+            activeDot={{ r: 6, fill: '#d4af37', stroke: '#fff', strokeWidth: 2 }}
+            isAnimationActive={false}
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
   )
 }
 
@@ -1083,41 +1252,260 @@ function DailyImportsCard({
   )
 }
 
-function CounterDisplayAccuracy({ counterAccuracy, loading }) {
+function CounterDisplayAccuracyPanel({ counterAccuracy, loading }) {
   const locations = counterAccuracy?.locations ?? []
   const hasData = locations.length > 0
 
+  if (loading) {
+    return <p className="analytics-empty">Loading counter accuracy…</p>
+  }
+
+  if (!hasData) {
+    return <p className="analytics-empty">Counter accuracy will appear after stock verification.</p>
+  }
+
   return (
-    <article className="counter-accuracy-card">
-      <header className="counter-accuracy-card__head">
+    <div className="counter-display-panel">
+      <ul className="counter-display-panel__list">
+        {locations.map((row) => {
+          const tone = getStocktakeAccuracyTone(row.accuracyPercent)
+          const label = row.label || row.name
+
+          return (
+            <li key={row.name} className="counter-display-panel__row">
+              <span className="counter-display-panel__label" title={label}>{label}</span>
+              <span className={`counter-display-panel__value dashboard-num counter-display-panel__value--${tone}`}>
+                {formatAccuracyPercent(row.accuracyPercent)}%
+              </span>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
+function ErpPhysicalBarChart({ data }) {
+  if (!data.length) {
+    return <p className="analytics-empty">No branch comparison data available.</p>
+  }
+
+  const maxValue = Math.max(...data.flatMap((row) => [row.erp, row.physical]), 1)
+  const chartHeight = Math.min(188, Math.max(132, 88 + data.length * 32))
+
+  return (
+    <div className="erp-physical-chart">
+      <ResponsiveContainer width="100%" height={chartHeight}>
+        <BarChart
+          data={data}
+          margin={{ top: 8, right: 10, left: 0, bottom: 0 }}
+          barGap={4}
+          barCategoryGap="20%"
+        >
+          <CartesianGrid stroke="#ebe4d8" vertical={false} />
+          <XAxis
+            dataKey="shortName"
+            tick={{ fontSize: 11, fill: '#9a8b78', fontWeight: 500 }}
+            axisLine={{ stroke: '#e0d8cc' }}
+            tickLine={false}
+            height={28}
+          />
+          <YAxis
+            domain={[0, maxValue]}
+            tick={{ fontSize: 11, fill: '#9a8b78' }}
+            axisLine={{ stroke: '#e0d8cc' }}
+            tickLine={false}
+            width={42}
+            tickFormatter={formatHeatmapCount}
+          />
+          <Tooltip
+            formatter={(value, name) => [formatCount(value), name]}
+            contentStyle={{
+              borderRadius: 10,
+              border: '1px solid #ebe3d6',
+              fontSize: 12,
+            }}
+          />
+          <Bar dataKey="erp" name="ERP" fill="#8ecae6" radius={[4, 4, 0, 0]} maxBarSize={26} />
+          <Bar dataKey="physical" name="Physical" fill="#21a371" radius={[4, 4, 0, 0]} maxBarSize={26} />
+        </BarChart>
+      </ResponsiveContainer>
+      <div className="erp-physical-chart__legend" aria-hidden="true">
+        <span><i className="erp-physical-chart__swatch erp-physical-chart__swatch--erp" /> ERP</span>
+        <span><i className="erp-physical-chart__swatch erp-physical-chart__swatch--physical" /> Physical</span>
+      </div>
+    </div>
+  )
+}
+
+function ErpPhysicalSummary({ erpVsPhysical }) {
+  const erp = Number(erpVsPhysical?.erp ?? 0)
+  const physical = Number(erpVsPhysical?.physical ?? 0)
+  const matched = Number(erpVsPhysical?.matched ?? 0)
+
+  return (
+    <div className="insight-erp-summary" aria-label="ERP vs physical summary">
+      <div className="insight-erp-summary__item">
+        <span className="insight-erp-summary__label">ERP items</span>
+        <strong className="insight-erp-summary__value dashboard-num">{formatCount(erp)}</strong>
+      </div>
+      <div className="insight-erp-summary__item insight-erp-summary__item--physical">
+        <span className="insight-erp-summary__label">Physical scan</span>
+        <strong className="insight-erp-summary__value dashboard-num">{formatCount(physical)}</strong>
+      </div>
+      <div className="insight-erp-summary__item insight-erp-summary__item--matched">
+        <span className="insight-erp-summary__label">Matched</span>
+        <strong className="insight-erp-summary__value dashboard-num">{formatCount(matched)}</strong>
+      </div>
+    </div>
+  )
+}
+
+function MultiBranchComparisonCard({ data, loading, error }) {
+  const branches = data?.branches ?? []
+  const erpVsPhysical = data?.erpVsPhysical
+  const chartData = useMemo(
+    () => branches.map((branch, index) => ({
+      name: branch.name,
+      shortName: shortBranchLabel(branch.name),
+      erp: Number(branch.totalExpected ?? branch.itemCount ?? 0),
+      physical: Number(branch.itemsScanned ?? 0),
+      color: BRANCH_CHART_COLORS[index % BRANCH_CHART_COLORS.length],
+    })),
+    [branches],
+  )
+
+  return (
+    <article className="analytics-tile insight-card insight-card--branch">
+      <header className="analytics-tile__head">
         <DashboardTitleRow>
-          <h3>Counter / display accuracy</h3>
+          <h3>Multi-branch comparison</h3>
         </DashboardTitleRow>
-        <p className="counter-accuracy-card__subtitle">By physical location in store</p>
       </header>
 
-      <div className="counter-accuracy-card__body">
-        {loading && <p className="analytics-empty">Loading counter accuracy…</p>}
-        {!loading && !hasData && (
-          <p className="analytics-empty">Counter accuracy will appear after stock verification.</p>
-        )}
-        {!loading && hasData && (
-          <ul className="counter-accuracy-list">
-            {locations.map((row) => {
-              const tone = getStocktakeAccuracyTone(row.accuracyPercent)
-              const label = row.label || row.name
+      <div className="analytics-tile__body insight-card__body">
+        {loading && <p className="analytics-empty">Loading branch comparison…</p>}
+        {!loading && error && <p className="analytics-empty">{error}</p>}
+        {!loading && !error && (
+          <>
+            <section className="insight-card__section">
+              <p className="insight-card__eyebrow">All branches — last stocktake accuracy</p>
+              {!branches.length ? (
+                <p className="analytics-empty insight-card__empty">Branch comparison will appear after stock verification.</p>
+              ) : (
+                <ul className="branch-compare-list">
+                  {branches.map((branch, index) => {
+                    const tone = getStocktakeAccuracyTone(branch.accuracyPercent)
+                    const color = BRANCH_CHART_COLORS[index % BRANCH_CHART_COLORS.length]
+                    const itemCount = Number(branch.itemCount ?? branch.totalExpected ?? 0)
 
-              return (
-                <li key={row.name} className="counter-accuracy-list__row">
-                  <span className="counter-accuracy-list__label" title={label}>{label}</span>
-                  <span className={`counter-accuracy-list__value dashboard-num counter-accuracy-list__value--${tone}`}>
-                    {formatAccuracyPercent(row.accuracyPercent)}
-                    %
-                  </span>
-                </li>
-              )
-            })}
-          </ul>
+                    return (
+                      <li key={branch.id ?? branch.name} className="branch-compare-list__row">
+                        <span className="branch-compare-list__dot" style={{ background: color }} aria-hidden="true" />
+                        <span className="branch-compare-list__name" title={branch.name}>{branch.name}</span>
+                        <span className="branch-compare-list__items dashboard-num">
+                          {formatCount(itemCount)}
+                          {' '}
+                          items
+                        </span>
+                        <span className={`branch-compare-list__accuracy dashboard-num branch-compare-list__accuracy--${tone}`}>
+                          {formatAccuracyPercent(branch.accuracyPercent)}
+                          %
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </section>
+
+            <section className="insight-card__section insight-card__section--chart">
+              <p className="insight-card__eyebrow">ERP vs. physical item count</p>
+              <ErpPhysicalSummary erpVsPhysical={erpVsPhysical} />
+              <ErpPhysicalBarChart data={chartData} />
+            </section>
+          </>
+        )}
+      </div>
+    </article>
+  )
+}
+
+function StockMovementCard({ data, loading, error }) {
+  const slowItems = data?.slowMovers?.items ?? []
+  const fastItems = data?.fastMovers?.items ?? []
+  const slowDays = data?.slowMovers?.thresholdDays ?? 60
+  const fastDays = data?.fastMovers?.periodDays ?? 30
+
+  return (
+    <article className="analytics-tile insight-card insight-card--movement">
+      <header className="analytics-tile__head">
+        <DashboardTitleRow>
+          <h3>Stock movement</h3>
+        </DashboardTitleRow>
+      </header>
+
+      <div className="analytics-tile__body insight-card__body">
+        {loading && <p className="analytics-empty">Loading stock movement…</p>}
+        {!loading && error && <p className="analytics-empty">{error}</p>}
+        {!loading && !error && (
+          <>
+            <section className="insight-card__section">
+              <p className="insight-card__eyebrow">
+                Slow movers — not seen in
+                {' '}
+                {slowDays}
+                + days
+              </p>
+              {!slowItems.length ? (
+                <p className="analytics-empty insight-card__empty">No slow-moving products found.</p>
+              ) : (
+                <ul className="movement-list">
+                  {slowItems.map((item) => (
+                    <li key={item.productName} className="movement-list__row movement-list__row--slow">
+                      <span className="movement-list__name" title={item.productName}>{item.productName}</span>
+                      <span className="movement-list__count dashboard-num">
+                        {formatCount(item.pieceCount)}
+                        {' '}
+                        pcs
+                      </span>
+                      <span className="movement-pill movement-pill--slow dashboard-num">
+                        {formatCount(item.avgDaysSinceMovement)}
+                        d avg
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section className="insight-card__section insight-card__section--chart">
+              <p className="insight-card__eyebrow">
+                Fast movers — top restocked (last
+                {' '}
+                {fastDays}
+                {' '}
+                days)
+              </p>
+              {!fastItems.length ? (
+                <p className="analytics-empty insight-card__empty">No fast-moving products recorded yet.</p>
+              ) : (
+                <ul className="movement-list">
+                  {fastItems.map((item) => (
+                    <li key={item.productName} className="movement-list__row">
+                      <span className="movement-list__name" title={item.productName}>{item.productName}</span>
+                      <span className="movement-pill movement-pill--fast dashboard-num">
+                        +
+                        {formatCount(item.restockedPieces || item.restockedTags)}
+                        {' '}
+                        restocked
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </>
         )}
       </div>
     </article>
@@ -1190,51 +1578,92 @@ function DayWiseSalesCard({
   )
 }
 
-function ProductCategoryBreakdown({ data, totalPieces }) {
-  const rows = [...(data || [])]
-    .map((row) => ({
-      name: truncate(row.name, 24),
-      fullName: row.name,
-      count: Number(row.pieceCount ?? 0),
-      tagCount: Number(row.tagCount ?? 0),
-    }))
-    .filter((row) => row.count > 0)
-    .sort((a, b) => b.count - a.count)
+function ProductCategoryDonut({ data, totalPieces }) {
+  const { rows, total } = useMemo(
+    () => buildCategoryChartRows(data, totalPieces),
+    [data, totalPieces],
+  )
 
   if (!rows.length) return <p className="analytics-empty">No product category data available.</p>
 
-  const max = Math.max(...rows.map((row) => row.count), 1)
-  const total = Number(totalPieces) || rows.reduce((sum, row) => sum + row.count, 0)
+  return (
+    <div className="category-mix-donut">
+      <ul className="category-mix-donut__legend" aria-label="Category legend">
+        {rows.map((row) => (
+          <li key={row.name}>
+            <span className="category-mix-donut__swatch" style={{ background: row.color }} aria-hidden="true" />
+            <span className="category-mix-donut__name" title={row.name}>{row.name}</span>
+            <span className="category-mix-donut__pct">{row.percent}%</span>
+          </li>
+        ))}
+      </ul>
+
+      <div className="category-mix-donut__chart">
+        <div className="category-mix-donut__chart-visual">
+          <ResponsiveContainer width="100%" height={240}>
+            <PieChart>
+              <Pie
+                data={rows}
+                dataKey="count"
+                nameKey="name"
+                cx="50%"
+                cy="50%"
+                innerRadius={68}
+                outerRadius={98}
+                paddingAngle={2}
+                stroke="#fff"
+                strokeWidth={2}
+              >
+                {rows.map((row) => (
+                  <Cell key={row.name} fill={row.color} />
+                ))}
+              </Pie>
+              <Tooltip
+                formatter={(value) => formatCount(value)}
+                contentStyle={{
+                  borderRadius: 10,
+                  border: '1px solid #ebe3d6',
+                  fontSize: 12,
+                }}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="category-mix-donut__center" aria-hidden="true">
+            <strong>{formatCount(total)}</strong>
+            <span>Items</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CategoryBreakdownTable({ data, totalPieces }) {
+  const { rows } = useMemo(
+    () => buildCategoryChartRows(data, totalPieces),
+    [data, totalPieces],
+  )
+
+  if (!rows.length) return <p className="analytics-empty">No product category data available.</p>
 
   return (
-    <div className="product-category-breakdown">
-      <div className="product-category-breakdown__columns" aria-hidden="true">
+    <div className="category-breakdown-table">
+      <div className="category-breakdown-table__header" aria-hidden="true">
         <span>Category</span>
-        <span />
-        <span>Pieces</span>
-        <span>Share</span>
+        <span>Items</span>
+        <span>%</span>
       </div>
-
-      <ul className="product-category-breakdown__list">
-        {rows.map((row, index) => {
-          const width = Math.max((row.count / max) * 100, row.count > 0 ? 3 : 0)
-          return (
-            <li key={row.fullName} className="product-category-breakdown__row">
-              <span className="product-category-breakdown__name" title={row.fullName}>{row.name}</span>
-              <div className="product-category-breakdown__track" aria-hidden="true">
-                <span
-                  className="product-category-breakdown__fill"
-                  style={{
-                    width: `${width}%`,
-                    background: `linear-gradient(90deg, ${CHART_COLORS[index % CHART_COLORS.length]}, ${CHART_COLORS[(index + 1) % CHART_COLORS.length]})`,
-                  }}
-                />
-              </div>
-              <span className="product-category-breakdown__count">{formatCount(row.count)}</span>
-              <span className="product-category-breakdown__pct">{pct(row.count, total)}%</span>
-            </li>
-          )
-        })}
+      <ul className="category-breakdown-table__list">
+        {rows.map((row) => (
+          <li key={row.name} className="category-breakdown-table__row">
+            <span className="category-breakdown-table__category">
+              <span className="category-breakdown-table__swatch" style={{ background: row.color }} aria-hidden="true" />
+              <span title={row.name}>{row.name}</span>
+            </span>
+            <span className="category-breakdown-table__count">{formatCount(row.count)}</span>
+            <span className="category-breakdown-table__pct">{row.percent}%</span>
+          </li>
+        ))}
       </ul>
     </div>
   )
@@ -1482,6 +1911,12 @@ export default function Dashboard() {
   const [dailyImportsLoading, setDailyImportsLoading] = useState(true)
   const [dailyImportsError, setDailyImportsError] = useState('')
   const [error, setError] = useState('')
+  const [branchComparison, setBranchComparison] = useState(null)
+  const [stockMovement, setStockMovement] = useState(null)
+  const [branchComparisonLoading, setBranchComparisonLoading] = useState(true)
+  const [branchComparisonError, setBranchComparisonError] = useState('')
+  const [stockMovementLoading, setStockMovementLoading] = useState(true)
+  const [stockMovementError, setStockMovementError] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -1608,6 +2043,58 @@ export default function Dashboard() {
 
     return () => { cancelled = true }
   }, [loading, summary, importPeriod, importCounter])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadBranchComparison() {
+      setBranchComparisonLoading(true)
+      setBranchComparisonError('')
+
+      try {
+        const branchData = await fetchBranchComparison()
+        if (!cancelled) {
+          setBranchComparison(branchData)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setBranchComparison(null)
+          setBranchComparisonError(err.message || 'Failed to load branch comparison.')
+        }
+      } finally {
+        if (!cancelled) setBranchComparisonLoading(false)
+      }
+    }
+
+    loadBranchComparison()
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadStockMovement() {
+      setStockMovementLoading(true)
+      setStockMovementError('')
+
+      try {
+        const movementData = await fetchStockMovement({ limit: 3 })
+        if (!cancelled) {
+          setStockMovement(movementData)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setStockMovement(null)
+          setStockMovementError(err.message || 'Failed to load stock movement.')
+        }
+      } finally {
+        if (!cancelled) setStockMovementLoading(false)
+      }
+    }
+
+    loadStockMovement()
+    return () => { cancelled = true }
+  }, [])
 
   const totals = summary?.totals ?? {
     totalTags: 0,
@@ -1751,16 +2238,31 @@ export default function Dashboard() {
         </div>
 
         <div className="analytics-grid">
-          <AnalyticsTile
-            title="Product Category Breakdown"
-            subtitle={`${formatCount(totals.totalPieces)} total pieces across ${formatCount(byProduct.length)} product groups`}
-          >
-            <ProductCategoryBreakdown data={byProduct} totalPieces={totals.totalPieces} />
-          </AnalyticsTile>
+          <div className="category-mix-row">
+            <AnalyticsTile
+              title="Product mix by category"
+              subtitle="Distribution of inventory across product groups"
+            >
+              <ProductCategoryDonut data={byProduct} totalPieces={totals.totalPieces} />
+            </AnalyticsTile>
 
-          <AnalyticsTile title="Counter split" subtitle="Tag count in showroom vs safe storage">
-            <CounterSplitChart data={counterSplitData} />
-          </AnalyticsTile>
+            <AnalyticsTile
+              title="Category breakdown"
+              subtitle={`${formatCount(totals.totalPieces)} total items across ${formatCount(byProduct.length)} groups`}
+            >
+              <CategoryBreakdownTable data={byProduct} totalPieces={totals.totalPieces} />
+            </AnalyticsTile>
+          </div>
+
+          <div className="accuracy-split-row">
+            <AnalyticsTile title="Accuracy trend" subtitle="Last 6 stocktakes">
+              <AccuracyTrendChart stocktake={stocktake} />
+            </AnalyticsTile>
+
+            <AnalyticsTile title="Counter / display accuracy" subtitle="By physical location in store">
+              <CounterDisplayAccuracyPanel counterAccuracy={counterAccuracy} loading={loading} />
+            </AnalyticsTile>
+          </div>
 
           <div className="sales-accuracy-row">
             <DayWiseSalesCard
@@ -1774,10 +2276,9 @@ export default function Dashboard() {
               totalSoldPieces={dayWiseSales.totalSoldPieces}
             />
 
-            <CounterDisplayAccuracy
-              counterAccuracy={counterAccuracy}
-              loading={loading}
-            />
+            <AnalyticsTile title="Counter split" subtitle="Tag count in showroom vs safe storage">
+              <CounterSplitChart data={counterSplitData} />
+            </AnalyticsTile>
           </div>
 
           <DailyImportsCard
@@ -1799,6 +2300,27 @@ export default function Dashboard() {
               <ProductBarChart data={topSoldBarData} />
             )}
           </AnalyticsTile>
+        </div>
+      </section>
+
+      <section className="dashboard-insights">
+        <div className="insight-section__nav" aria-label="Insight categories">
+          <span className="insight-section__nav-item insight-section__nav-item--active">Branch</span>
+          <span className="insight-section__nav-item insight-section__nav-item--active">Movement</span>
+          <span className="insight-section__nav-item">Compliance</span>
+        </div>
+
+        <div className="insight-grid">
+          <MultiBranchComparisonCard
+            data={branchComparison}
+            loading={branchComparisonLoading}
+            error={branchComparisonError}
+          />
+          <StockMovementCard
+            data={stockMovement}
+            loading={stockMovementLoading}
+            error={stockMovementError}
+          />
         </div>
       </section>
 
