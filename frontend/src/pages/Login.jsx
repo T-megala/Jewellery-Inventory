@@ -12,7 +12,6 @@ import {
   login,
   logout,
   markPendingBranchSelection,
-  setSelectedBranchIds,
 } from '../services/auth.js'
 import '../components/FieldError.css'
 import { scrollToFirstFieldError } from '../utils/formValidation.js'
@@ -22,8 +21,8 @@ function getInitialBranchIds(user) {
   const allowedIds = (user?.branches ?? []).map((branch) => branch.id)
   if (!allowedIds.length) return []
 
-  const stored = getSelectedBranchIds(user).filter((id) => allowedIds.includes(id))
-  if (stored.length) return stored
+  const sessionIds = getSelectedBranchIds(user).filter((id) => allowedIds.includes(id))
+  if (sessionIds.length) return sessionIds
 
   return allowedIds
 }
@@ -125,7 +124,6 @@ export default function Login() {
       const userBranches = data.user?.branches ?? []
 
       if (userBranches.length <= 1) {
-        setSelectedBranchIds(userBranches.map((branch) => branch.id))
         clearPendingBranchSelection()
         navigate(redirectTo, { replace: true })
         return

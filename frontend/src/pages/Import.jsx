@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { getUserBranch, getUserBranches } from '../services/auth.js'
+import { useEffect, useRef, useState } from 'react'
+import { useBranchScope } from '../hooks/useBranchScope.js'
 import { uploadStockExcel } from '../services/import.js'
 import './Import.css'
 
@@ -30,10 +30,10 @@ function StepItem({ number, label, state }) {
 
 export default function Import() {
   const fileInputRef = useRef(null)
-  const userBranches = useMemo(() => getUserBranches(), [])
-  const showBranchSelect = userBranches.length > 1
-  const singleBranchId = userBranches.length === 1 ? userBranches[0].id : null
-  const defaultBranchId = getUserBranch()?.id ?? userBranches[0]?.id ?? ''
+  const { activeBranchId, sessionBranches } = useBranchScope()
+  const showBranchSelect = sessionBranches.length > 1
+  const singleBranchId = sessionBranches.length === 1 ? sessionBranches[0].id : null
+  const defaultBranchId = activeBranchId ?? sessionBranches[0]?.id ?? ''
   const [selectedBranchId, setSelectedBranchId] = useState(
     defaultBranchId ? String(defaultBranchId) : '',
   )
@@ -51,6 +51,12 @@ export default function Import() {
     const timer = setTimeout(() => setToast(''), 5000)
     return () => clearTimeout(timer)
   }, [toast])
+
+  useEffect(() => {
+    if (showBranchSelect && activeBranchId) {
+      setSelectedBranchId(String(activeBranchId))
+    }
+  }, [activeBranchId, showBranchSelect])
 
   function selectFile(file) {
     if (!file) return
@@ -145,7 +151,7 @@ export default function Import() {
                 aria-label="Choose branch"
               >
                 <option value="">Choose branch</option>
-                {userBranches.map((branch) => (
+                {sessionBranches.map((branch) => (
                   <option key={branch.id} value={branch.id}>{branch.name}</option>
                 ))}
               </select>

@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { MASTER_GROUPS } from '../config/masters.js'
 import {
   getUser,
-  getUserBranch,
+  getActiveBranch,
   getUserDisplayName,
   getUserRoleLabel,
   hasAnyPermission,
@@ -74,7 +74,7 @@ function MasterCard({ item }) {
 
 export default function Masters() {
   const user = getUser()
-  const currentBranch = getUserBranch(user)
+  const currentBranch = getActiveBranch(user)
   const displayName = getUserDisplayName(user)
   const roleLabel = getUserRoleLabel(user)
 

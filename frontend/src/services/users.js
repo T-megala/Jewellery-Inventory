@@ -24,6 +24,10 @@ function normalizeUser(user) {
       id: Number(branch.id),
       name: branch.name,
     })),
+    selectedBranches: (user.selectedBranches || []).map((branch) => ({
+      id: Number(branch.id),
+      name: branch.name,
+    })),
   };
 }
 

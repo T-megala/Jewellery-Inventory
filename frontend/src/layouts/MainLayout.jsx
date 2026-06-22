@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { MASTER_PATHS } from '../config/masters.js'
+import ActiveBranchSelect from '../components/ActiveBranchSelect.jsx'
+import { useBranchScope } from '../hooks/useBranchScope.js'
 import { getUser, getUserDisplayName, getUserRoleLabel, logout } from '../services/auth.js'
+import '../components/ActiveBranchSelect.css'
 import './MainLayout.css'
 
 const MAIN_NAV_ITEMS = [
@@ -99,6 +102,7 @@ export default function MainLayout() {
   const location = useLocation()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const user = getUser()
+  const { sessionBranches } = useBranchScope()
   const displayName = getUserDisplayName(user)
   const roleLabel = getUserRoleLabel(user)
   const page = PAGE_META[location.pathname] || PAGE_META['/dashboard']
@@ -211,6 +215,8 @@ export default function MainLayout() {
           </div>
 
           <div className="topbar-right">
+            <ActiveBranchSelect branches={sessionBranches} />
+
             <button
               type="button"
               className={`topbar-settings${isMastersArea ? ' topbar-settings--active' : ''}`}

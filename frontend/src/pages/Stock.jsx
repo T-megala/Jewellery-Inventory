@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import TablePagination from '../components/TablePagination.jsx'
+import { useBranchScope } from '../hooks/useBranchScope.js'
 import { fetchProductList } from '../services/stock.js'
 import './Stock.css'
 
@@ -14,6 +15,7 @@ function formatValue(value) {
 }
 
 export default function Stock() {
+  const { activeBranchId } = useBranchScope()
   const [rows, setRows] = useState([])
   const [pagination, setPagination] = useState(null)
   const [page, setPage] = useState(1)
@@ -55,7 +57,7 @@ export default function Stock() {
 
   useEffect(() => {
     loadStock(1, search)
-  }, [loadStock, search])
+  }, [loadStock, search, activeBranchId])
 
   function handleClearSearch() {
     setSearchInput('')

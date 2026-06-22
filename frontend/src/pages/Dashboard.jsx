@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useBranchScope } from '../hooks/useBranchScope.js'
 import {
   Area,
   Bar,
@@ -1893,6 +1894,7 @@ function DashboardSkeleton() {
 }
 
 export default function Dashboard() {
+  const { activeBranchId } = useBranchScope()
   const [summary, setSummary] = useState(null)
   const [stocktake, setStocktake] = useState(EMPTY_STOCKTAKE)
   const [counterAccuracy, setCounterAccuracy] = useState(EMPTY_COUNTER_ACCURACY)
@@ -1947,7 +1949,7 @@ export default function Dashboard() {
 
     load()
     return () => { cancelled = true }
-  }, [])
+  }, [activeBranchId])
 
   useEffect(() => {
     let cancelled = false
@@ -1976,7 +1978,7 @@ export default function Dashboard() {
 
     loadTopSold()
     return () => { cancelled = true }
-  }, [])
+  }, [activeBranchId])
 
   useEffect(() => {
     let cancelled = false
@@ -2009,7 +2011,7 @@ export default function Dashboard() {
     }
 
     return () => { cancelled = true }
-  }, [loading, summary, salesPeriod, salesCounter])
+  }, [loading, summary, salesPeriod, salesCounter, activeBranchId])
 
   useEffect(() => {
     let cancelled = false
@@ -2042,7 +2044,7 @@ export default function Dashboard() {
     }
 
     return () => { cancelled = true }
-  }, [loading, summary, importPeriod, importCounter])
+  }, [loading, summary, importPeriod, importCounter, activeBranchId])
 
   useEffect(() => {
     let cancelled = false
@@ -2068,7 +2070,7 @@ export default function Dashboard() {
 
     loadBranchComparison()
     return () => { cancelled = true }
-  }, [])
+  }, [activeBranchId])
 
   useEffect(() => {
     let cancelled = false
@@ -2094,7 +2096,7 @@ export default function Dashboard() {
 
     loadStockMovement()
     return () => { cancelled = true }
-  }, [])
+  }, [activeBranchId])
 
   const totals = summary?.totals ?? {
     totalTags: 0,

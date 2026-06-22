@@ -1,12 +1,27 @@
 import { API_BASE, apiUrl } from '../config/apiConfig.js';
-import { getToken } from './auth.js';
+import { getActiveBranchId, getToken } from './auth.js';
 
 export { API_BASE, apiUrl };
 
-/** Bearer token for all API calls except login. */
-export function getAuthHeaders() {
+/** Bearer token and optional active branch scope for protected APIs. */
+export function getAuthHeaders({ branchId, scopeBranch = true } = {}) {
   const token = getToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+  if (scopeBranch) {
+    const resolvedBranchId = branchId ?? getActiveBranchId();
+    if (resolvedBranchId) {
+      headers['X-Branch-Id'] = String(resolvedBranchId);
+    }
+  }
+
+  return headers;
+}
+
+export function withBranchParams(params = {}, branchId) {
+  const resolvedBranchId = branchId ?? getActiveBranchId();
+  if (!resolvedBranchId) return params;
+  return { ...params, branchId: resolvedBranchId };
 }
 
 export function buildQueryString(params) {
@@ -93,7 +108,7 @@ export async function apiFetchPaged(path, options = {}) {
 }
 
 export async function apiFetchReport(path, params = {}) {
-  const query = buildQueryString(params);
+  const query = buildQueryString(withBranchParams(params));
   const url = query ? `${path}?${query}` : path;
 
   const res = await fetch(apiUrl(url), {
@@ -106,6 +121,7 @@ export async function apiFetchReport(path, params = {}) {
   return {
     rows: (json.data || []).map(normalizeReportRow),
     pagination: json.pagination || null,
+    branchId: json.branchId ?? null,
     summary: {
       totalTags: json.pagination?.totalRecords ?? json.data?.length ?? 0,
       totalFound: json.summary?.foundCount ?? 0,
@@ -136,5 +152,8 @@ function normalizeReportRow(row) {
     tagNo: row.tagNo ?? '',
     pieces: row.pieces ?? row.product?.pieces ?? null,
     status: row.status ?? '',
+    branch: row.branch
+      ? { id: row.branch.id, name: row.branch.name }
+      : null,
   };
 }

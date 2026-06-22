@@ -6,6 +6,7 @@ import {
 } from '../services/reports.js'
 import TablePagination from '../components/TablePagination.jsx'
 import FieldError from '../components/FieldError.jsx'
+import { useBranchScope } from '../hooks/useBranchScope.js'
 import '../components/FieldError.css'
 import { scrollToFirstFieldError } from '../utils/formValidation.js'
 import './Reports.css'
@@ -164,6 +165,7 @@ function getTodayDate() {
 }
 
 export default function Reports() {
+  const { activeBranchId } = useBranchScope()
   const [product, setProduct] = useState('')
   const [subProduct, setSubProduct] = useState('')
   const [counter, setCounter] = useState('')
@@ -222,7 +224,20 @@ export default function Reports() {
 
     loadProducts()
     return () => { cancelled = true }
-  }, [])
+  }, [activeBranchId])
+
+  useEffect(() => {
+    if (!hasSearched) return undefined
+
+    let cancelled = false
+
+    async function reloadForBranch() {
+      await loadReport(1, pageSize)
+    }
+
+    reloadForBranch()
+    return () => { cancelled = true }
+  }, [activeBranchId])
 
   useEffect(() => {
     if (!product) {
@@ -562,6 +577,7 @@ export default function Reports() {
                     <tr>
                       <th>S.No</th>
                       <th>Date</th>
+                      <th>Branch</th>
                       <th>Product</th>
                       <th>Sub Product</th>
                       <th>Counter</th>
@@ -582,6 +598,7 @@ export default function Reports() {
                             <span className="reports-table__date-time">{dateCell.timeLine}</span>
                           )}
                         </td>
+                        <td>{row.branch?.name || '—'}</td>
                         <td className="reports-table__product">
                           {formatScopeDisplay(row.product, row.status)}
                         </td>

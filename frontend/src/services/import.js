@@ -64,7 +64,7 @@ export async function startAsyncImport(file, { branchId } = {}) {
   const res = await fetch(apiUrl(`/products/import?${query}`), {
     method: 'POST',
     headers: {
-      ...getAuthHeaders(),
+      ...getAuthHeaders({ branchId }),
     },
     body: formData,
   });

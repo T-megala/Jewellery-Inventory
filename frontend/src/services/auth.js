@@ -1,22 +1,59 @@
 import { apiUrl } from './api.js'
+import { decodeJwtPayload } from '../utils/jwt.js'
 
 const TOKEN_KEY = 'auth_token'
 const USER_KEY = 'auth_user'
 export const PENDING_BRANCH_KEY = 'auth_pending_branch_selection'
-export const SELECTED_BRANCHES_KEY = 'auth_selected_branch_ids'
+export const BRANCH_CHANGE_EVENT = 'auth:branch-changed'
 
-function normalizeUser(user) {
+function normalizeBranch(branch) {
+  return {
+    id: Number(branch.id),
+    name: branch.name,
+  }
+}
+
+function resolveActiveBranch(branches, selectedBranches, branchId) {
+  const activeId = Number(branchId) || null
+  if (!activeId) return null
+
+  return (
+    selectedBranches.find((branch) => branch.id === activeId)
+    ?? branches.find((branch) => branch.id === activeId)
+    ?? { id: activeId, name: `Branch ${activeId}` }
+  )
+}
+
+export function normalizeUser(user, token = getToken()) {
   if (!user) return null
+
+  const branches = (user.branches || []).map(normalizeBranch)
+  const selectedBranches = (user.selectedBranches || branches).map(normalizeBranch)
+  const payload = token ? decodeJwtPayload(token) : null
+  const activeBranchId = Number(
+    payload?.branchId
+    ?? selectedBranches[0]?.id
+    ?? branches[0]?.id
+    ?? 0,
+  ) || null
 
   return {
     ...user,
-    branches: (user.branches || []).map((branch) => ({
-      id: branch.id,
-      name: branch.name,
-    })),
-    branch: user.branch ?? null,
+    branches,
+    selectedBranches,
+    activeBranchId,
+    activeBranch: resolveActiveBranch(branches, selectedBranches, activeBranchId),
     permissions: Array.isArray(user.permissions) ? user.permissions : [],
   }
+}
+
+function dispatchBranchChange() {
+  window.dispatchEvent(new CustomEvent(BRANCH_CHANGE_EVENT, {
+    detail: {
+      activeBranchId: getActiveBranchId(),
+      selectedBranchIds: getSelectedBranchIds(),
+    },
+  }))
 }
 
 function parseAuthResponse(json, fallbackError = 'Request failed') {
@@ -30,7 +67,7 @@ function parseAuthResponse(json, fallbackError = 'Request failed') {
     throw new Error('Authentication response is missing token data')
   }
 
-  const user = normalizeUser(data.user)
+  const user = normalizeUser(data.user, data.token)
 
   return {
     token: data.token,
@@ -39,12 +76,24 @@ function parseAuthResponse(json, fallbackError = 'Request failed') {
   }
 }
 
-/** Login only — no access token sent (token is received from this response). */
-export async function login(username, password) {
+function applyAuthSession(token, user) {
+  localStorage.setItem(TOKEN_KEY, token)
+  localStorage.setItem(USER_KEY, JSON.stringify(normalizeUser(user, token)))
+  dispatchBranchChange()
+}
+
+/** Login — optional branchIds for one-step session selection. */
+export async function login(username, password, branchIds = null) {
+  const body = { username, password }
+
+  if (Array.isArray(branchIds) && branchIds.length) {
+    body.branchIds = branchIds
+  }
+
   const res = await fetch(apiUrl('/auth/login'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify(body),
   })
 
   let json
@@ -59,7 +108,40 @@ export async function login(username, password) {
   }
 
   const data = parseAuthResponse(json, 'Login failed')
-  setSession(data.token, data.user)
+  applyAuthSession(data.token, data.user)
+  return data
+}
+
+export async function selectBranches(branchIds) {
+  const token = getToken()
+
+  if (!token) {
+    throw new Error('Authentication token is required')
+  }
+
+  const res = await fetch(apiUrl('/auth/select-branches'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ branchIds }),
+  })
+
+  let json
+  try {
+    json = await res.json()
+  } catch {
+    throw new Error('Unexpected server response')
+  }
+
+  if (!res.ok) {
+    throw new Error(json?.message || 'Failed to select branches')
+  }
+
+  const data = parseAuthResponse(json, 'Failed to select branches')
+  applyAuthSession(data.token, data.user)
+  clearPendingBranchSelection()
   return data
 }
 
@@ -91,14 +173,41 @@ export async function switchBranch(branchId) {
   }
 
   const data = parseAuthResponse(json, 'Failed to switch branch')
-  setSession(data.token, data.user)
-  sessionStorage.removeItem(PENDING_BRANCH_KEY)
+  applyAuthSession(data.token, data.user)
   return data
 }
 
+export async function fetchProfile() {
+  const token = getToken()
+
+  if (!token) {
+    throw new Error('Authentication token is required')
+  }
+
+  const res = await fetch(apiUrl('/auth/profile'), {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+
+  let json
+  try {
+    json = await res.json()
+  } catch {
+    throw new Error('Unexpected server response')
+  }
+
+  if (!res.ok || json?.success === false) {
+    throw new Error(json?.message || 'Failed to load profile')
+  }
+
+  const data = json.data ?? json
+  const user = normalizeUser(data.user, token)
+  localStorage.setItem(USER_KEY, JSON.stringify(user))
+  dispatchBranchChange()
+  return user
+}
+
 export function setSession(token, user) {
-  localStorage.setItem(TOKEN_KEY, token)
-  localStorage.setItem(USER_KEY, JSON.stringify(normalizeUser(user)))
+  applyAuthSession(token, user)
 }
 
 export function markPendingBranchSelection() {
@@ -126,68 +235,72 @@ export function getUser() {
   }
 }
 
+/** All branches assigned to the user (login picker). */
 export function getUserBranches(user = getUser()) {
   return user?.branches ?? []
 }
 
-export function setSelectedBranchIds(branchIds) {
-  const ids = [...new Set((branchIds || []).map(Number).filter(Boolean))]
-  localStorage.setItem(SELECTED_BRANCHES_KEY, JSON.stringify(ids))
+/** Branches selected for this session (Level 1). */
+export function getSessionBranches(user = getUser()) {
+  return user?.selectedBranches ?? []
 }
 
 export function getSelectedBranchIds(user = getUser()) {
-  try {
-    const raw = localStorage.getItem(SELECTED_BRANCHES_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed) && parsed.length) {
-        return parsed.map(Number)
-      }
-    }
-  } catch {
-    // ignore invalid storage
+  const fromUser = getSessionBranches(user).map((branch) => branch.id)
+  if (fromUser.length) return fromUser
+
+  const payload = decodeJwtPayload(getToken())
+  if (Array.isArray(payload?.selectedBranchIds) && payload.selectedBranchIds.length) {
+    return payload.selectedBranchIds.map(Number)
   }
 
   return getUserBranches(user).map((branch) => branch.id)
 }
 
-export function clearSelectedBranchIds() {
-  localStorage.removeItem(SELECTED_BRANCHES_KEY)
+export function getActiveBranchId(user = getUser()) {
+  if (user?.activeBranchId) return user.activeBranchId
+
+  const payload = decodeJwtPayload(getToken())
+  const fromToken = Number(payload?.branchId)
+  if (fromToken) return fromToken
+
+  const selected = getSelectedBranchIds(user)
+  return selected[0] ?? null
 }
 
-export function resolveActiveBranchId(selectedIds, user = getUser()) {
-  const allowed = new Set(getUserBranches(user).map((branch) => branch.id))
-  const valid = selectedIds.filter((id) => allowed.has(id))
+export function getActiveBranch(user = getUser()) {
+  if (user?.activeBranch) return user.activeBranch
 
-  if (!valid.length) return null
+  const activeId = getActiveBranchId(user)
+  if (!activeId) return null
 
-  const currentId = user?.branch?.id
-  if (currentId && valid.includes(currentId)) return currentId
+  return getSessionBranches(user).find((branch) => branch.id === activeId)
+    ?? getUserBranches(user).find((branch) => branch.id === activeId)
+    ?? { id: activeId, name: `Branch ${activeId}` }
+}
 
-  return valid[0]
+/** @deprecated Use getActiveBranch() */
+export function getUserBranch(user = getUser()) {
+  return getActiveBranch(user)
 }
 
 export async function completeBranchSelection(selectedIds) {
-  const user = getUser()
-  const activeId = resolveActiveBranchId(selectedIds, user)
+  const ids = [...new Set((selectedIds || []).map(Number).filter(Boolean))]
 
-  if (!activeId) {
+  if (!ids.length) {
     throw new Error('Please select at least one branch.')
   }
 
-  setSelectedBranchIds(selectedIds)
-
-  if (user?.branch?.id !== activeId) {
-    await switchBranch(activeId)
-  } else {
-    clearPendingBranchSelection()
-  }
-
-  return activeId
+  await selectBranches(ids)
+  return getActiveBranchId()
 }
 
 export function needsBranchSelection(user = getUser()) {
   return getUserBranches(user).length > 1
+}
+
+export function needsActiveBranchSwitcher(user = getUser()) {
+  return getSessionBranches(user).length > 1
 }
 
 export function getUserDisplayName(user = getUser()) {
@@ -199,10 +312,6 @@ export function getUserRoleLabel(user = getUser()) {
   if (!user?.role) return 'Staff'
   if (typeof user.role === 'string') return user.role
   return user.role.name || 'Staff'
-}
-
-export function getUserBranch(user = getUser()) {
-  return user?.branch ?? null
 }
 
 export function getUserPermissions(user = getUser()) {
@@ -227,6 +336,6 @@ export function isAuthenticated() {
 export function logout() {
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(USER_KEY)
-  clearSelectedBranchIds()
   clearPendingBranchSelection()
+  dispatchBranchChange()
 }
