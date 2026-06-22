@@ -9,6 +9,11 @@ function matchesBranchSearch(branch, term) {
   return haystack.includes(term)
 }
 
+function isBranchSelected(selectedIds, branchId) {
+  const id = Number(branchId)
+  return selectedIds.some((selectedId) => Number(selectedId) === id)
+}
+
 export default function BranchMultiSelect({
   branches,
   selectedIds,
@@ -33,7 +38,7 @@ export default function BranchMultiSelect({
   )
 
   const selectedBranches = useMemo(
-    () => activeBranches.filter((branch) => selectedIds.includes(branch.id)),
+    () => activeBranches.filter((branch) => isBranchSelected(selectedIds, branch.id)),
     [activeBranches, selectedIds],
   )
 
@@ -124,7 +129,7 @@ export default function BranchMultiSelect({
         {!loading && filteredBranches.length > 0 && (
           <ul className="branch-multi-select__list">
             {filteredBranches.map((branch) => {
-              const isSelected = selectedIds.includes(branch.id)
+              const isSelected = isBranchSelected(selectedIds, branch.id)
 
               return (
                 <li key={branch.id}>

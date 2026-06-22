@@ -2,7 +2,7 @@ import { apiFetch } from './api.js';
 
 function normalizeBranch(branch) {
   return {
-    id: branch.id,
+    id: Number(branch.id),
     name: branch.name,
     address: branch.address ?? '',
     city: branch.city ?? '',

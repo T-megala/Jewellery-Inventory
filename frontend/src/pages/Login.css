@@ -3,7 +3,21 @@
   inset: 0;
   display: grid;
   grid-template-columns: 1.05fr 0.95fr;
+  height: 100dvh;
+  min-height: 100dvh;
   overflow: hidden;
+}
+
+.login-page--branch .login-hero {
+  min-height: 0;
+}
+
+.login-page--branch .login-main {
+  min-height: 0;
+  overflow-y: auto;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 20px 40px;
 }
 
 /* ── Left hero — jewellery background image ── */
@@ -102,9 +116,11 @@
 .login-main {
   position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 56px 48px;
+  min-height: 0;
+  padding: 32px 48px;
   background: #f8f5f0;
   box-shadow: -12px 0 40px rgba(60, 40, 10, 0.06);
 }
@@ -123,6 +139,7 @@
 .login-card {
   width: 100%;
   max-width: 420px;
+  margin: auto;
   padding: 40px 36px;
   background: #ffffff;
   border: 1px solid rgba(200, 170, 90, 0.2);
@@ -131,6 +148,7 @@
     0 4px 6px rgba(60, 40, 10, 0.04),
     0 20px 50px rgba(60, 40, 10, 0.1);
   animation: fadeUp 0.7s ease-out 0.12s both;
+  flex-shrink: 0;
 }
 
 .login-card::before {
@@ -311,6 +329,149 @@
   cursor: not-allowed;
 }
 
+.login-btn--ghost {
+  background: #fff;
+  color: #6b5c48;
+  border: 1.5px solid #e0d8cc;
+  box-shadow: none;
+}
+
+.login-btn--ghost:hover:not(:disabled) {
+  transform: none;
+  border-color: rgba(184, 134, 11, 0.45);
+  color: #a67c00;
+  box-shadow: 0 2px 8px rgba(60, 40, 10, 0.06);
+}
+
+.login-branch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.login-branch-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1.5px solid #e0d8cc;
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.login-branch-option:hover {
+  border-color: rgba(184, 134, 11, 0.35);
+  background: #fffdf8;
+}
+
+.login-branch-option--selected {
+  border-color: rgba(184, 134, 11, 0.55);
+  background: linear-gradient(180deg, #fffdf8 0%, #fdf6e8 100%);
+  box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.1);
+}
+
+.login-branch-option input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: #b8860b;
+  cursor: pointer;
+}
+
+.login-branch-option__content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.login-branch-option__name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1c1410;
+}
+
+.login-branch-option__badge {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border-radius: 100px;
+  background: #fdf6e8;
+  border: 1px solid rgba(184, 134, 11, 0.22);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #9a7209;
+}
+
+.login-branch-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  flex-shrink: 0;
+  margin-top: 0;
+  padding-top: 14px;
+  border-top: 1px solid #ebe3d6;
+}
+
+.login-branch-actions .login-btn {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  margin-top: 0;
+  padding: 14px 18px;
+  font-size: 0.92rem;
+}
+
+.login-card--branch {
+  max-width: 460px;
+  max-height: calc(100dvh - 40px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.login-card--branch .login-form-header {
+  flex-shrink: 0;
+  margin-bottom: 18px;
+}
+
+.login-card--branch .login-form-header h2 {
+  font-size: clamp(1.55rem, 3.2vw, 2rem);
+}
+
+.login-card--branch .login-form-header p {
+  font-size: 0.88rem;
+}
+
+.login-form--branch {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow: hidden;
+}
+
+.login-branch-picker {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.login-form-header strong {
+  color: #1c1410;
+  font-weight: 700;
+}
+
 @keyframes fadeUp {
   from {
     opacity: 0;
@@ -384,6 +545,37 @@
   .login-form-header h2 {
     font-size: 1.75rem;
   }
+
+  .login-page--branch {
+    overflow-y: auto;
+  }
+
+  .login-page--branch .login-main {
+    padding: 20px 20px 28px;
+    min-height: min-content;
+  }
+
+  .login-card--branch {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .login-form--branch {
+    overflow: visible;
+  }
+
+  .login-branch-picker {
+    overflow: visible;
+  }
+
+  .login-branch-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin-top: 4px;
+    padding-top: 16px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.85) 0%, #fff 28%);
+  }
 }
 
 @media (max-height: 640px) {
@@ -397,7 +589,27 @@
   }
 
   .login-main {
-    padding: 28px 36px;
+    padding: 16px 28px;
+  }
+
+  .login-page--branch .login-main {
+    padding: 12px 24px;
+  }
+
+  .login-card {
+    padding: 28px 24px;
+  }
+
+  .login-card::before {
+    margin: -28px -24px 20px;
+  }
+
+  .login-card--branch {
+    max-height: calc(100dvh - 24px);
+  }
+
+  .login-card--branch .login-form-header {
+    margin-bottom: 14px;
   }
 
   .login-form-header {

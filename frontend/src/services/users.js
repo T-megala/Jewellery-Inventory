@@ -1,17 +1,28 @@
 import { apiFetch } from './api.js';
 
+function normalizeBranchIds(branchIds) {
+  if (branchIds === undefined) return undefined;
+
+  return [
+    ...new Set(
+      branchIds
+        .map((id) => Number(id))
+        .filter((id) => Number.isInteger(id) && id > 0),
+    ),
+  ];
+}
+
 function normalizeUser(user) {
   return {
-    id: user.id,
+    id: Number(user.id),
     username: user.username,
     fullName: user.fullName ?? null,
     createdAt: user.created_at ?? user.createdAt ?? null,
     role: user.role ?? null,
     branch: user.branch ?? null,
     branches: (user.branches || []).map((branch) => ({
-      id: branch.id,
+      id: Number(branch.id),
       name: branch.name,
-      isDefault: Boolean(branch.isDefault),
     })),
   };
 }
@@ -27,8 +38,8 @@ export function createUser({ username, password, roleId, branchIds }) {
     body: JSON.stringify({
       username,
       password,
-      roleId,
-      branchIds,
+      roleId: Number(roleId),
+      branchIds: normalizeBranchIds(branchIds),
     }),
   }).then(normalizeUser);
 }
@@ -45,11 +56,12 @@ export function updateUser(id, { username, password, roleId, branchIds }) {
   }
 
   if (roleId !== undefined) {
-    body.roleId = roleId;
+    body.roleId = Number(roleId);
   }
 
-  if (branchIds !== undefined) {
-    body.branchIds = branchIds;
+  const normalizedBranchIds = normalizeBranchIds(branchIds);
+  if (normalizedBranchIds !== undefined) {
+    body.branchIds = normalizedBranchIds;
   }
 
   return apiFetch(`/users/${id}`, {

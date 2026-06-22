@@ -208,6 +208,15 @@ body.users-modal-open {
   line-height: 1.4;
 }
 
+.users-field__hint--info {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(184, 134, 11, 0.2);
+  border-radius: 10px;
+  background: #fffdf8;
+  color: #7a6a55;
+}
+
 /* Direct field inputs only — avoid overriding nested components like BranchMultiSelect */
 .users-field > input {
   width: 100%;
@@ -679,12 +688,6 @@ body.users-modal-open {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.users-table__branch-tag--default {
-  background: #fdf6e8;
-  border-color: rgba(184, 134, 11, 0.28);
-  color: #9a7209;
 }
 
 .users-table__branch-empty {

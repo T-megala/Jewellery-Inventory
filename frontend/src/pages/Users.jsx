@@ -14,6 +14,45 @@ import '../components/BranchMultiSelect.css'
 import './Users.css'
 
 const DEFAULT_PAGE_SIZE = 10
+const SUPER_ADMIN_ROLE = 'Super Admin'
+
+function normalizeBranchIds(branchIds) {
+  return [
+    ...new Set(
+      (branchIds || [])
+        .map((id) => Number(id))
+        .filter((id) => Number.isInteger(id) && id > 0),
+    ),
+  ]
+}
+
+function isSuperAdminRole(role) {
+  return role?.name === SUPER_ADMIN_ROLE
+}
+
+function mergeBranchOptions(...lists) {
+  const map = new Map()
+
+  for (const list of lists) {
+    for (const branch of list || []) {
+      if (!branch?.id) continue
+      map.set(Number(branch.id), {
+        ...branch,
+        id: Number(branch.id),
+      })
+    }
+  }
+
+  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name))
+}
+
+function branchIdsEqual(left, right) {
+  const a = normalizeBranchIds(left).sort((x, y) => x - y)
+  const b = normalizeBranchIds(right).sort((x, y) => x - y)
+
+  if (a.length !== b.length) return false
+  return a.every((id, index) => id === b[index])
+}
 
 function formatDate(value) {
   if (!value) return '—'
@@ -43,20 +82,18 @@ function matchesUserSearch(user, term) {
   return haystack.includes(term)
 }
 
-function UserBranchTags({ branches, defaultBranch }) {
+function UserBranchTags({ branches }) {
   if (!branches?.length) {
     return <span className="users-table__branch-empty">—</span>
   }
-
-  const defaultId = branches.find((branch) => branch.isDefault)?.id ?? defaultBranch?.id
 
   return (
     <div className="users-table__branch-tags">
       {branches.map((branch) => (
         <span
           key={branch.id}
-          className={`users-table__branch-tag${defaultId === branch.id ? ' users-table__branch-tag--default' : ''}`}
-          title={defaultId === branch.id ? `${branch.name} (default)` : branch.name}
+          className="users-table__branch-tag"
+          title={branch.name}
         >
           {branch.name}
         </span>
@@ -80,6 +117,7 @@ export default function Users() {
   const [selectedBranchIds, setSelectedBranchIds] = useState([])
   const [showPassword, setShowPassword] = useState(false)
   const [editingId, setEditingId] = useState(null)
+  const [editingUser, setEditingUser] = useState(null)
   const [showForm, setShowForm] = useState(false)
 
   const [loading, setLoading] = useState(true)
@@ -109,7 +147,7 @@ export default function Users() {
 
     try {
       const [branchesData, rolesData] = await Promise.all([
-        fetchBranches({ includeInactive: false }),
+        fetchBranches({ includeInactive: true }),
         fetchRoles({ includeInactive: false }),
       ])
       setBranches(branchesData)
@@ -185,6 +223,18 @@ export default function Users() {
     }
   }, [page, totalPages])
 
+  const selectedRole = useMemo(
+    () => roles.find((role) => Number(role.id) === Number(roleId)) ?? null,
+    [roles, roleId],
+  )
+
+  const isSuperAdmin = isSuperAdminRole(selectedRole)
+
+  const formBranches = useMemo(
+    () => mergeBranchOptions(branches, editingUser?.branches),
+    [branches, editingUser],
+  )
+
   function resetForm() {
     setUsername('')
     setPassword('')
@@ -192,11 +242,13 @@ export default function Users() {
     setSelectedBranchIds([])
     setShowPassword(false)
     setEditingId(null)
+    setEditingUser(null)
     setShowForm(false)
   }
 
   function handleAddClick() {
     setEditingId(null)
+    setEditingUser(null)
     setUsername('')
     setPassword('')
     setRoleId(roles[0]?.id ? String(roles[0].id) : '')
@@ -208,9 +260,10 @@ export default function Users() {
   }
 
   function handleEdit(user) {
-    const userBranchIds = user.branches.map((branch) => branch.id)
+    const userBranchIds = normalizeBranchIds((user.branches || []).map((branch) => branch.id))
 
     setEditingId(user.id)
+    setEditingUser(user)
     setUsername(user.username)
     setPassword('')
     setRoleId(user.role?.id ? String(user.role.id) : '')
@@ -222,11 +275,17 @@ export default function Users() {
   }
 
   function toggleBranch(branchId) {
-    setSelectedBranchIds((prev) => (
-      prev.includes(branchId)
-        ? prev.filter((id) => id !== branchId)
-        : [...prev, branchId]
-    ))
+    const id = Number(branchId)
+
+    setSelectedBranchIds((prev) => {
+      const normalized = normalizeBranchIds(prev)
+
+      if (normalized.includes(id)) {
+        return normalized.filter((value) => value !== id)
+      }
+
+      return [...normalized, id]
+    })
   }
 
   function validateForm() {
@@ -252,7 +311,7 @@ export default function Users() {
       return false
     }
 
-    if (selectedBranchIds.length === 0) {
+    if (!isSuperAdmin && selectedBranchIds.length === 0) {
       setError('Select at least one branch.')
       return false
     }
@@ -277,20 +336,38 @@ export default function Users() {
       if (isEdit) {
         const payload = {
           username: trimmedUsername,
-          roleId: parsedRoleId,
-          branchIds: selectedBranchIds,
         }
+
         if (password) {
           payload.password = password
         }
+
+        if (Number(editingUser?.role?.id) !== parsedRoleId) {
+          payload.roleId = parsedRoleId
+        }
+
+        if (!isSuperAdmin) {
+          const nextBranchIds = normalizeBranchIds(selectedBranchIds)
+          const currentBranchIds = (editingUser?.branches || []).map((branch) => branch.id)
+
+          if (!branchIdsEqual(nextBranchIds, currentBranchIds)) {
+            payload.branchIds = nextBranchIds
+          }
+        }
+
         await updateUser(editingId, payload)
       } else {
-        await createUser({
+        const createPayload = {
           username: trimmedUsername,
           password,
           roleId: parsedRoleId,
-          branchIds: selectedBranchIds,
-        })
+        }
+
+        if (!isSuperAdmin) {
+          createPayload.branchIds = normalizeBranchIds(selectedBranchIds)
+        }
+
+        await createUser(createPayload)
       }
 
       await loadUsers()
@@ -441,7 +518,7 @@ export default function Users() {
                     <td>{user.username}</td>
                     <td>{user.role?.name || '—'}</td>
                     <td className="users-table__branches">
-                      <UserBranchTags branches={user.branches} defaultBranch={user.branch} />
+                      <UserBranchTags branches={user.branches} />
                     </td>
                     <td>{formatDate(user.createdAt)}</td>
                     <td>
@@ -601,16 +678,24 @@ export default function Users() {
               <div className="users-field users-field--branches">
                 <span>
                   Branches
-                  <span className="users-field__required" aria-hidden="true">*</span>
+                  {!isSuperAdmin && (
+                    <span className="users-field__required" aria-hidden="true">*</span>
+                  )}
                 </span>
-                <BranchMultiSelect
-                  branches={branches}
-                  selectedIds={selectedBranchIds}
-                  onToggle={toggleBranch}
-                  onClearAll={() => setSelectedBranchIds([])}
-                  disabled={saving}
-                  loading={optionsLoading}
-                />
+                {isSuperAdmin ? (
+                  <p className="users-field__hint users-field__hint--info">
+                    Super Admin users automatically have access to all branches.
+                  </p>
+                ) : (
+                  <BranchMultiSelect
+                    branches={formBranches}
+                    selectedIds={selectedBranchIds}
+                    onToggle={toggleBranch}
+                    onClearAll={() => setSelectedBranchIds([])}
+                    disabled={saving}
+                    loading={optionsLoading}
+                  />
+                )}
               </div>
 
               {error && (
