@@ -191,15 +191,16 @@ body.users-modal-open {
   min-width: 0;
 }
 
-.users-field span {
+.users-field > span {
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--color-text);
 }
 
-.users-field__required {
+.users-field .users-field__required {
   margin-left: 2px;
-  color: #b8860b;
+  color: #dc2626;
+  font-weight: 600;
 }
 
 .users-field__hint {

@@ -5,6 +5,9 @@ import {
   fetchStockVerificationReport,
 } from '../services/reports.js'
 import TablePagination from '../components/TablePagination.jsx'
+import FieldError from '../components/FieldError.jsx'
+import '../components/FieldError.css'
+import { scrollToFirstFieldError } from '../utils/formValidation.js'
 import './Reports.css'
 
 const DEFAULT_PAGE_SIZE = 10
@@ -183,6 +186,7 @@ export default function Reports() {
   const [loadingReport, setLoadingReport] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
   const [filtersNotice, setFiltersNotice] = useState('')
 
   const filterParams = useMemo(() => ({
@@ -274,23 +278,39 @@ export default function Reports() {
     return () => { cancelled = true }
   }, [product, subProduct])
 
+  function clearFieldError(key) {
+    setFieldErrors((prev) => {
+      if (!prev[key]) return prev
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+  }
+
   function validateDates() {
+    const errors = {}
+
     if (!fromDate && !toDate) {
+      setFieldErrors({})
       return true
     }
 
     if (!fromDate) {
-      setError('From Date is required when To Date is set.')
-      return false
+      errors.fromDate = 'From Date is required when To Date is set.'
     }
 
     if (!toDate) {
-      setError('To Date is required when From Date is set.')
-      return false
+      errors.toDate = 'To Date is required when From Date is set.'
     }
 
-    if (fromDate > toDate) {
-      setError('From Date cannot be later than To Date.')
+    if (fromDate && toDate && fromDate > toDate) {
+      errors.toDate = 'To Date cannot be earlier than From Date.'
+    }
+
+    setFieldErrors(errors)
+
+    if (Object.keys(errors).length) {
+      scrollToFirstFieldError(errors)
       return false
     }
 
@@ -345,6 +365,7 @@ export default function Reports() {
     setPageSize(DEFAULT_PAGE_SIZE)
     setHasSearched(false)
     setError('')
+    setFieldErrors({})
   }
 
   async function handleExport(exportType, label) {
@@ -390,25 +411,41 @@ export default function Reports() {
       <section className="reports-filters-card">
         <form className="report-filters" onSubmit={handleGenerate}>
           <div className="report-filters__grid">
-            <label className="report-field">
+            <label className={`report-field${fieldErrors.fromDate ? ' field-invalid' : ''}`}>
               <span>From Date</span>
               <input
+                id="field-fromDate"
                 type="date"
                 value={fromDate}
                 max={toDate || getTodayDate()}
-                onChange={(e) => setFromDate(e.target.value)}
+                onChange={(e) => {
+                  setFromDate(e.target.value)
+                  clearFieldError('fromDate')
+                  clearFieldError('toDate')
+                }}
+                aria-invalid={Boolean(fieldErrors.fromDate)}
+                aria-describedby={fieldErrors.fromDate ? 'field-error-fromDate' : undefined}
               />
+              <FieldError id="field-error-fromDate" message={fieldErrors.fromDate} />
             </label>
 
-            <label className="report-field">
+            <label className={`report-field${fieldErrors.toDate ? ' field-invalid' : ''}`}>
               <span>To Date</span>
               <input
+                id="field-toDate"
                 type="date"
                 value={toDate}
                 min={fromDate || undefined}
                 max={getTodayDate()}
-                onChange={(e) => setToDate(e.target.value)}
+                onChange={(e) => {
+                  setToDate(e.target.value)
+                  clearFieldError('fromDate')
+                  clearFieldError('toDate')
+                }}
+                aria-invalid={Boolean(fieldErrors.toDate)}
+                aria-describedby={fieldErrors.toDate ? 'field-error-toDate' : undefined}
               />
+              <FieldError id="field-error-toDate" message={fieldErrors.toDate} />
             </label>
 
             <label className="report-field">

@@ -198,7 +198,8 @@ body.branches-modal-open {
 
 .branches-field__required {
   margin-left: 2px;
-  color: #b8860b;
+  color: #dc2626;
+  font-weight: 600;
 }
 
 .branches-field__optional {

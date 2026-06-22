@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import LoginBranchSelect from '../components/LoginBranchSelect.jsx'
+import FieldError from '../components/FieldError.jsx'
 import {
   clearPendingBranchSelection,
   completeBranchSelection,
@@ -13,6 +14,8 @@ import {
   markPendingBranchSelection,
   setSelectedBranchIds,
 } from '../services/auth.js'
+import '../components/FieldError.css'
+import { scrollToFirstFieldError } from '../utils/formValidation.js'
 import './Login.css'
 
 function getInitialBranchIds(user) {
@@ -35,6 +38,7 @@ export default function Login() {
   const [selectedBranchIds, setSelectedBranchIdsState] = useState([])
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
   const [loading, setLoading] = useState(false)
   const formRef = useRef(null)
   const passwordRef = useRef(null)
@@ -72,6 +76,15 @@ export default function Login() {
     }
   }
 
+  function clearFieldError(key) {
+    setFieldErrors((prev) => {
+      if (!prev[key]) return prev
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+  }
+
   function toggleBranch(branchId) {
     setSelectedBranchIdsState((current) => {
       if (current.includes(branchId)) {
@@ -79,22 +92,30 @@ export default function Login() {
       }
       return [...current, branchId]
     })
+    clearFieldError('branches')
   }
 
   function handleSelectAllBranches(branchIds) {
     setSelectedBranchIdsState(branchIds)
+    clearFieldError('branches')
   }
 
   async function handleCredentialsSubmit(e) {
     e.preventDefault()
     setError('')
+    const errors = {}
 
     if (!username.trim()) {
-      setError('Username is required')
-      return
+      errors.username = 'Username is required.'
     }
     if (!password) {
-      setError('Password is required')
+      errors.password = 'Password is required.'
+    }
+
+    setFieldErrors(errors)
+
+    if (Object.keys(errors).length) {
+      scrollToFirstFieldError(errors)
       return
     }
 
@@ -115,6 +136,7 @@ export default function Login() {
       setStep('branch')
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.')
+      setFieldErrors({})
     } finally {
       setLoading(false)
     }
@@ -125,10 +147,13 @@ export default function Login() {
     setError('')
 
     if (selectedBranchIds.length === 0) {
-      setError('Please select at least one branch to continue.')
+      const errors = { branches: 'Please select at least one branch to continue.' }
+      setFieldErrors(errors)
+      scrollToFirstFieldError(errors)
       return
     }
 
+    setFieldErrors({})
     setLoading(true)
     try {
       await completeBranchSelection(selectedBranchIds)
@@ -147,6 +172,7 @@ export default function Login() {
     setPassword('')
     setSelectedBranchIdsState([])
     setError('')
+    setFieldErrors({})
   }
 
   return (
@@ -193,12 +219,12 @@ export default function Login() {
 
               <form ref={formRef} className="login-form" onSubmit={handleCredentialsSubmit} noValidate>
                 {error && (
-                  <div className="login-error" role="alert">
+                  <div className="form-banner-error" role="alert">
                     {error}
                   </div>
                 )}
 
-                <div className="form-field">
+                <div className={`form-field${fieldErrors.username ? ' field-invalid' : ''}`}>
                   <label htmlFor="username">Username</label>
                   <div className="input-box">
                     <svg className="field-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -210,15 +236,21 @@ export default function Login() {
                       type="text"
                       placeholder="Enter your username"
                       value={username}
-                      onChange={(e) => setUsername(e.target.value)}
+                      onChange={(e) => {
+                        setUsername(e.target.value)
+                        clearFieldError('username')
+                      }}
                       onKeyDown={handleUsernameKeyDown}
                       autoComplete="username"
                       disabled={loading}
+                      aria-invalid={Boolean(fieldErrors.username)}
+                      aria-describedby={fieldErrors.username ? 'field-error-username' : undefined}
                     />
                   </div>
+                  <FieldError id="field-error-username" message={fieldErrors.username} />
                 </div>
 
-                <div className="form-field">
+                <div className={`form-field${fieldErrors.password ? ' field-invalid' : ''}`}>
                   <label htmlFor="password">Password</label>
                   <div className="input-box">
                     <svg className="field-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -231,10 +263,15 @@ export default function Login() {
                       type={showPassword ? 'text' : 'password'}
                       placeholder="Enter your password"
                       value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      onChange={(e) => {
+                        setPassword(e.target.value)
+                        clearFieldError('password')
+                      }}
                       onKeyDown={handlePasswordKeyDown}
                       autoComplete="current-password"
                       disabled={loading}
+                      aria-invalid={Boolean(fieldErrors.password)}
+                      aria-describedby={fieldErrors.password ? 'field-error-password' : undefined}
                     />
                     <button
                       type="button"
@@ -246,6 +283,7 @@ export default function Login() {
                       {showPassword ? 'Hide' : 'Show'}
                     </button>
                   </div>
+                  <FieldError id="field-error-password" message={fieldErrors.password} />
                 </div>
 
                 <button ref={submitRef} type="submit" className="login-btn" disabled={loading}>
@@ -268,21 +306,25 @@ export default function Login() {
 
               <form className="login-form login-form--branch" onSubmit={handleBranchSubmit} noValidate>
                 {error && (
-                  <div className="login-error" role="alert">
+                  <div className="form-banner-error" role="alert">
                     {error}
                   </div>
                 )}
 
-                <div className="login-branch-picker">
+                <div className={`login-branch-picker${fieldErrors.branches ? ' field-invalid' : ''}`}>
                   <LoginBranchSelect
                     branches={branches}
                     selectedIds={selectedBranchIds}
                     onToggle={toggleBranch}
                     onSelectAll={handleSelectAllBranches}
-                    onClearAll={() => setSelectedBranchIdsState([])}
+                    onClearAll={() => {
+                      setSelectedBranchIdsState([])
+                      clearFieldError('branches')
+                    }}
                     disabled={loading}
                     emptyMessage="No branches are assigned to your account."
                   />
+                  <FieldError id="field-error-branches" message={fieldErrors.branches} />
                 </div>
 
                 <div className="login-branch-actions">

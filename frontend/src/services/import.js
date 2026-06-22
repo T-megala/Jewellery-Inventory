@@ -1,4 +1,4 @@
-import { apiUrl, getAuthHeaders } from './api.js';
+import { apiUrl, buildQueryString, getAuthHeaders } from './api.js';
 
 /** Bulk stock import — POST multipart/form-data with field name "file" */
 export const BULK_STOCK_IMPORT_URL = apiUrl('/products/import');
@@ -44,17 +44,24 @@ async function parseJsonResponse(res) {
   return json;
 }
 
-export async function startAsyncImport(file) {
+export async function startAsyncImport(file, { branchId } = {}) {
   const formData = new FormData();
   formData.append('file', file);
+
+  if (branchId) {
+    formData.append('branchId', String(branchId));
+  }
+
+  const query = buildQueryString({ async: true, branchId });
 
   console.info('[import] starting upload', {
     fileName: file?.name,
     fileSize: file?.size,
     fileType: file?.type,
+    branchId,
   });
 
-  const res = await fetch(apiUrl('/products/import?async=true'), {
+  const res = await fetch(apiUrl(`/products/import?${query}`), {
     method: 'POST',
     headers: {
       ...getAuthHeaders(),
@@ -94,8 +101,8 @@ function wait(ms) {
   });
 }
 
-export async function uploadStockExcel(file, { onProgress } = {}) {
-  const { jobId } = await startAsyncImport(file);
+export async function uploadStockExcel(file, { branchId, onProgress } = {}) {
+  const { jobId } = await startAsyncImport(file, { branchId });
 
   if (onProgress) {
     onProgress({

@@ -198,7 +198,8 @@ body.roles-modal-open {
 
 .roles-field__required {
   margin-left: 2px;
-  color: #b8860b;
+  color: #dc2626;
+  font-weight: 600;
 }
 
 .roles-field__optional {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import TablePagination from '../components/TablePagination.jsx'
+import FieldError from '../components/FieldError.jsx'
 import {
   createRole,
   deleteRole,
@@ -8,6 +9,8 @@ import {
   fetchRoles,
   updateRole,
 } from '../services/roles.js'
+import '../components/FieldError.css'
+import { mapRoleSaveError, scrollToFirstFieldError } from '../utils/formValidation.js'
 import './Roles.css'
 
 const DEFAULT_PAGE_SIZE = 10
@@ -58,6 +61,8 @@ export default function Roles() {
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
   const [error, setError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
+  const [formError, setFormError] = useState('')
   const [notice, setNotice] = useState('')
 
   const permissionGroups = useMemo(
@@ -149,11 +154,26 @@ export default function Roles() {
     }
   }, [page, totalPages])
 
+  function resetFormErrors() {
+    setFieldErrors({})
+    setFormError('')
+  }
+
+  function clearFieldError(key) {
+    setFieldErrors((prev) => {
+      if (!prev[key]) return prev
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+  }
+
   function resetForm() {
     setForm(EMPTY_FORM)
     setEditingId(null)
     setEditingIsSystem(false)
     setShowForm(false)
+    resetFormErrors()
   }
 
   function handleAddClick() {
@@ -161,6 +181,7 @@ export default function Roles() {
     setEditingIsSystem(false)
     setForm(EMPTY_FORM)
     setError('')
+    resetFormErrors()
     setNotice('')
     setShowForm(true)
   }
@@ -174,12 +195,14 @@ export default function Roles() {
       permissionIds: role.permissions.map((permission) => permission.id),
     })
     setError('')
+    resetFormErrors()
     setNotice('')
     setShowForm(true)
   }
 
   function updateField(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }))
+    clearFieldError(key)
   }
 
   function togglePermission(permissionId) {
@@ -195,16 +218,26 @@ export default function Roles() {
   }
 
   function validateForm() {
+    const errors = {}
+
     if (!form.name.trim()) {
-      setError('Role name is required.')
+      errors.name = 'Role name is required.'
+    }
+
+    setFieldErrors(errors)
+    setFormError('')
+
+    if (Object.keys(errors).length) {
+      scrollToFirstFieldError(errors)
       return false
     }
+
     return true
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
-    setError('')
+    resetFormErrors()
     setNotice('')
 
     if (!validateForm()) return
@@ -230,7 +263,13 @@ export default function Roles() {
       resetForm()
       setNotice(isEdit ? 'Role updated successfully.' : 'Role created successfully.')
     } catch (err) {
-      setError(err.message || 'Failed to save role.')
+      const mapped = mapRoleSaveError(err.message)
+      if (mapped._form) {
+        setFormError(mapped._form)
+      } else {
+        setFieldErrors(mapped)
+      }
+      scrollToFirstFieldError(mapped)
     } finally {
       setSaving(false)
     }
@@ -439,19 +478,27 @@ export default function Roles() {
 
             <form className="roles-modal__form" onSubmit={handleSubmit}>
               <div className="roles-modal__body">
-                <label className="roles-field">
+                {formError && (
+                  <p className="form-banner-error" role="alert">{formError}</p>
+                )}
+
+                <label className={`roles-field${fieldErrors.name ? ' field-invalid' : ''}`}>
                   <span className="roles-field__label">
                     Role name
                     <span className="roles-field__required" aria-hidden="true">*</span>
                   </span>
                   <input
+                    id="field-name"
                     type="text"
                     value={form.name}
                     onChange={(e) => updateField('name', e.target.value)}
                     placeholder="Enter role name"
                     autoComplete="off"
                     disabled={saving}
+                    aria-invalid={Boolean(fieldErrors.name)}
+                    aria-describedby={fieldErrors.name ? 'field-error-name' : undefined}
                   />
+                  <FieldError id="field-error-name" message={fieldErrors.name} />
                 </label>
 
                 <label className="roles-field">
@@ -513,10 +560,6 @@ export default function Roles() {
                     </div>
                   )}
                 </div>
-
-                {error && (
-                  <p className="roles-alert roles-alert--error" role="alert">{error}</p>
-                )}
               </div>
 
               <footer className="roles-modal__footer">

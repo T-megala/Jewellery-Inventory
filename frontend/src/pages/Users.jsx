@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import BranchMultiSelect from '../components/BranchMultiSelect.jsx'
+import FieldError from '../components/FieldError.jsx'
 import TablePagination from '../components/TablePagination.jsx'
 import { fetchBranches } from '../services/branches.js'
 import { fetchRoles } from '../services/roles.js'
@@ -11,6 +12,8 @@ import {
   updateUser,
 } from '../services/users.js'
 import '../components/BranchMultiSelect.css'
+import '../components/FieldError.css'
+import { mapUserSaveError, scrollToFirstFieldError } from '../utils/formValidation.js'
 import './Users.css'
 
 const DEFAULT_PAGE_SIZE = 10
@@ -125,6 +128,8 @@ export default function Users() {
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
   const [error, setError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
+  const [formError, setFormError] = useState('')
   const [notice, setNotice] = useState('')
 
   const loadUsers = useCallback(async () => {
@@ -235,6 +240,20 @@ export default function Users() {
     [branches, editingUser],
   )
 
+  function resetFormErrors() {
+    setFieldErrors({})
+    setFormError('')
+  }
+
+  function clearFieldError(key) {
+    setFieldErrors((prev) => {
+      if (!prev[key]) return prev
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+  }
+
   function resetForm() {
     setUsername('')
     setPassword('')
@@ -244,6 +263,7 @@ export default function Users() {
     setEditingId(null)
     setEditingUser(null)
     setShowForm(false)
+    resetFormErrors()
   }
 
   function handleAddClick() {
@@ -255,6 +275,7 @@ export default function Users() {
     setSelectedBranchIds([])
     setShowPassword(false)
     setError('')
+    resetFormErrors()
     setNotice('')
     setShowForm(true)
   }
@@ -270,6 +291,7 @@ export default function Users() {
     setSelectedBranchIds(userBranchIds)
     setShowPassword(false)
     setError('')
+    resetFormErrors()
     setNotice('')
     setShowForm(true)
   }
@@ -286,33 +308,36 @@ export default function Users() {
 
       return [...normalized, id]
     })
+    clearFieldError('branches')
   }
 
   function validateForm() {
+    const errors = {}
     const trimmedUsername = username.trim()
 
     if (!trimmedUsername) {
-      setError('Username is required.')
-      return false
+      errors.username = 'Username is required.'
     }
 
     if (!editingId && !password) {
-      setError('Password is required.')
-      return false
-    }
-
-    if (password && password.length < 6) {
-      setError('Password must be at least 6 characters.')
-      return false
+      errors.password = 'Password is required.'
+    } else if (password && password.length < 6) {
+      errors.password = 'Password must be at least 6 characters.'
     }
 
     if (!roleId) {
-      setError('Role is required.')
-      return false
+      errors.roleId = 'Role is required.'
     }
 
     if (!isSuperAdmin && selectedBranchIds.length === 0) {
-      setError('Select at least one branch.')
+      errors.branches = 'Select at least one branch.'
+    }
+
+    setFieldErrors(errors)
+    setFormError('')
+
+    if (Object.keys(errors).length) {
+      scrollToFirstFieldError(errors)
       return false
     }
 
@@ -321,7 +346,7 @@ export default function Users() {
 
   async function handleSubmit(e) {
     e.preventDefault()
-    setError('')
+    resetFormErrors()
     setNotice('')
 
     if (!validateForm()) return
@@ -374,7 +399,13 @@ export default function Users() {
       resetForm()
       setNotice(isEdit ? 'User updated successfully.' : 'User created successfully.')
     } catch (err) {
-      setError(err.message || 'Failed to save user.')
+      const mapped = mapUserSaveError(err.message)
+      if (mapped._form) {
+        setFormError(mapped._form)
+      } else {
+        setFieldErrors(mapped)
+      }
+      scrollToFirstFieldError(mapped)
     } finally {
       setSaving(false)
     }
@@ -602,34 +633,51 @@ export default function Users() {
 
             <form className="users-modal__form" onSubmit={handleSubmit}>
               <div className="users-modal__body">
-              <label className="users-field">
+              {formError && (
+                <p className="form-banner-error" role="alert">{formError}</p>
+              )}
+
+              <label className={`users-field${fieldErrors.username ? ' field-invalid' : ''}`}>
                 <span>
                   Username
                   <span className="users-field__required" aria-hidden="true">*</span>
                 </span>
                 <input
+                  id="field-username"
                   type="text"
                   value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  onChange={(e) => {
+                    setUsername(e.target.value)
+                    clearFieldError('username')
+                  }}
                   placeholder="Enter username"
                   autoComplete="off"
                   disabled={saving}
+                  aria-invalid={Boolean(fieldErrors.username)}
+                  aria-describedby={fieldErrors.username ? 'field-error-username' : undefined}
                 />
+                <FieldError id="field-error-username" message={fieldErrors.username} />
               </label>
 
-              <label className="users-field">
+              <label className={`users-field${fieldErrors.password ? ' field-invalid' : ''}`}>
                 <span>
                   Password
                   {!isEdit && <span className="users-field__required" aria-hidden="true">*</span>}
                 </span>
                 <div className="users-field__password">
                   <input
+                    id="field-password"
                     type={showPassword ? 'text' : 'password'}
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => {
+                      setPassword(e.target.value)
+                      clearFieldError('password')
+                    }}
                     placeholder="Enter password"
                     autoComplete="new-password"
                     disabled={saving}
+                    aria-invalid={Boolean(fieldErrors.password)}
+                    aria-describedby={fieldErrors.password ? 'field-error-password' : undefined}
                   />
                   <button
                     type="button"
@@ -656,26 +704,34 @@ export default function Users() {
                     Leave blank to keep the current password (min. 6 characters if changing)
                   </span>
                 )}
+                <FieldError id="field-error-password" message={fieldErrors.password} />
               </label>
 
-              <label className="users-field">
+              <label className={`users-field${fieldErrors.roleId ? ' field-invalid' : ''}`}>
                 <span>
                   Role
                   <span className="users-field__required" aria-hidden="true">*</span>
                 </span>
                 <select
+                  id="field-roleId"
                   value={roleId}
-                  onChange={(e) => setRoleId(e.target.value)}
+                  onChange={(e) => {
+                    setRoleId(e.target.value)
+                    clearFieldError('roleId')
+                  }}
                   disabled={saving || optionsLoading}
+                  aria-invalid={Boolean(fieldErrors.roleId)}
+                  aria-describedby={fieldErrors.roleId ? 'field-error-roleId' : undefined}
                 >
                   <option value="">Select role</option>
                   {roles.map((role) => (
                     <option key={role.id} value={role.id}>{role.name}</option>
                   ))}
                 </select>
+                <FieldError id="field-error-roleId" message={fieldErrors.roleId} />
               </label>
 
-              <div className="users-field users-field--branches">
+              <div className={`users-field users-field--branches${fieldErrors.branches ? ' field-invalid' : ''}`}>
                 <span>
                   Branches
                   {!isSuperAdmin && (
@@ -696,11 +752,8 @@ export default function Users() {
                     loading={optionsLoading}
                   />
                 )}
+                <FieldError id="field-error-branches" message={fieldErrors.branches} />
               </div>
-
-              {error && (
-                <p className="users-alert users-alert--error" role="alert">{error}</p>
-              )}
               </div>
 
               <footer className="users-modal__footer">

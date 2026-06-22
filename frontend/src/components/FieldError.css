@@ -1,0 +1,34 @@
+.field-error {
+  margin: 6px 0 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #b91c1c;
+  line-height: 1.35;
+}
+
+.field-invalid > input,
+.field-invalid > select,
+.field-invalid > textarea,
+.field-invalid .users-field__password,
+.field-invalid .input-box {
+  border-color: #f87171 !important;
+}
+
+.field-invalid > input:focus,
+.field-invalid > select:focus,
+.field-invalid > textarea:focus,
+.field-invalid .users-field__password:focus-within,
+.field-invalid .input-box:focus-within {
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.15) !important;
+}
+
+.form-banner-error {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+}

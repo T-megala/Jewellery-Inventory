@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { getUserBranch, getUserBranches } from '../services/auth.js'
 import { uploadStockExcel } from '../services/import.js'
 import './Import.css'
 
@@ -29,6 +30,14 @@ function StepItem({ number, label, state }) {
 
 export default function Import() {
   const fileInputRef = useRef(null)
+  const userBranches = useMemo(() => getUserBranches(), [])
+  const showBranchSelect = userBranches.length > 1
+  const singleBranchId = userBranches.length === 1 ? userBranches[0].id : null
+  const defaultBranchId = getUserBranch()?.id ?? userBranches[0]?.id ?? ''
+  const [selectedBranchId, setSelectedBranchId] = useState(
+    defaultBranchId ? String(defaultBranchId) : '',
+  )
+  const importBranchId = singleBranchId ?? (selectedBranchId ? Number(selectedBranchId) : null)
   const [selectedFile, setSelectedFile] = useState(null)
   const [result, setResult] = useState(null)
   const [importStatus, setImportStatus] = useState(null)
@@ -65,7 +74,7 @@ export default function Import() {
   }
 
   async function handleSend() {
-    if (!selectedFile || isUploading) return
+    if (!selectedFile || isUploading || !importBranchId) return
 
     setError('')
     setImportStatus(null)
@@ -73,6 +82,7 @@ export default function Import() {
 
     try {
       const importResult = await uploadStockExcel(selectedFile, {
+        branchId: importBranchId,
         onProgress: setImportStatus,
       })
       setResult(importResult)
@@ -125,6 +135,23 @@ export default function Import() {
 
       <section className="import-workspace">
         <div className="import-workspace__col">
+          {showBranchSelect && (
+            <label className="import-branch-field">
+              <span className="import-branch-field__label">Branch</span>
+              <select
+                value={selectedBranchId}
+                onChange={(e) => setSelectedBranchId(e.target.value)}
+                disabled={isUploading}
+                aria-label="Choose branch"
+              >
+                <option value="">Choose branch</option>
+                {userBranches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>{branch.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
+
           <p className="import-workspace__label">Choose Excel file</p>
           <div
             className={`import-drop${isDragging ? ' import-drop--active' : ''}${isUploading ? ' import-drop--locked' : ''}`}
@@ -222,7 +249,7 @@ export default function Import() {
                 type="button"
                 className="import-send"
                 onClick={handleSend}
-                disabled={isUploading}
+                disabled={isUploading || !importBranchId}
               >
                 {isUploading ? (
                   <>

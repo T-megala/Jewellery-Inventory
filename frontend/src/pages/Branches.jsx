@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import TablePagination from '../components/TablePagination.jsx'
+import FieldError from '../components/FieldError.jsx'
 import {
   createBranch,
   deleteBranch,
   fetchBranches,
   updateBranch,
 } from '../services/branches.js'
+import '../components/FieldError.css'
+import { mapBranchSaveError, scrollToFirstFieldError } from '../utils/formValidation.js'
 import './Branches.css'
 
 const DEFAULT_PAGE_SIZE = 10
@@ -45,6 +48,8 @@ export default function Branches() {
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
   const [error, setError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
+  const [formError, setFormError] = useState('')
   const [notice, setNotice] = useState('')
 
   const loadBranches = useCallback(async () => {
@@ -122,16 +127,32 @@ export default function Branches() {
     }
   }, [page, totalPages])
 
+  function resetFormErrors() {
+    setFieldErrors({})
+    setFormError('')
+  }
+
+  function clearFieldError(key) {
+    setFieldErrors((prev) => {
+      if (!prev[key]) return prev
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+  }
+
   function resetForm() {
     setForm(EMPTY_FORM)
     setEditingId(null)
     setShowForm(false)
+    resetFormErrors()
   }
 
   function handleAddClick() {
     setEditingId(null)
     setForm(EMPTY_FORM)
     setError('')
+    resetFormErrors()
     setNotice('')
     setShowForm(true)
   }
@@ -145,25 +166,37 @@ export default function Branches() {
       phone: branch.phone || '',
     })
     setError('')
+    resetFormErrors()
     setNotice('')
     setShowForm(true)
   }
 
   function updateField(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }))
+    clearFieldError(key)
   }
 
   function validateForm() {
+    const errors = {}
+
     if (!form.name.trim()) {
-      setError('Branch name is required.')
+      errors.name = 'Branch name is required.'
+    }
+
+    setFieldErrors(errors)
+    setFormError('')
+
+    if (Object.keys(errors).length) {
+      scrollToFirstFieldError(errors)
       return false
     }
+
     return true
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
-    setError('')
+    resetFormErrors()
     setNotice('')
 
     if (!validateForm()) return
@@ -190,7 +223,13 @@ export default function Branches() {
       resetForm()
       setNotice(isEdit ? 'Branch updated successfully.' : 'Branch created successfully.')
     } catch (err) {
-      setError(err.message || 'Failed to save branch.')
+      const mapped = mapBranchSaveError(err.message)
+      if (mapped._form) {
+        setFormError(mapped._form)
+      } else {
+        setFieldErrors(mapped)
+      }
+      scrollToFirstFieldError(mapped)
     } finally {
       setSaving(false)
     }
@@ -390,19 +429,27 @@ export default function Branches() {
 
             <form className="branches-modal__form" onSubmit={handleSubmit}>
               <div className="branches-modal__body">
-                <label className="branches-field">
+                {formError && (
+                  <p className="form-banner-error" role="alert">{formError}</p>
+                )}
+
+                <label className={`branches-field${fieldErrors.name ? ' field-invalid' : ''}`}>
                   <span className="branches-field__label">
                     Branch name
                     <span className="branches-field__required" aria-hidden="true">*</span>
                   </span>
                   <input
+                    id="field-name"
                     type="text"
                     value={form.name}
                     onChange={(e) => updateField('name', e.target.value)}
                     placeholder="Enter branch name"
                     autoComplete="off"
                     disabled={saving}
+                    aria-invalid={Boolean(fieldErrors.name)}
+                    aria-describedby={fieldErrors.name ? 'field-error-name' : undefined}
                   />
+                  <FieldError id="field-error-name" message={fieldErrors.name} />
                 </label>
 
                 <label className="branches-field">
@@ -451,10 +498,6 @@ export default function Branches() {
                     />
                   </label>
                 </div>
-
-                {error && (
-                  <p className="branches-alert branches-alert--error" role="alert">{error}</p>
-                )}
               </div>
 
               <footer className="branches-modal__footer">
