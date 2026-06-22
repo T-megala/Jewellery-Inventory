@@ -199,6 +199,51 @@
   cursor: default;
 }
 
+.report-field.active-branch-select--filter .active-branch-select__field {
+  width: 100%;
+}
+
+.report-field.active-branch-select--filter .active-branch-select__control {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  padding: 11px 34px 11px 14px;
+  border: 1px solid #e8dfd3;
+  border-radius: 10px;
+  background: #fdfbf8;
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  color: var(--color-text);
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.report-field.active-branch-select--filter .active-branch-select__control:hover:not(:disabled) {
+  border-color: rgba(184, 134, 11, 0.35);
+  background: #fff;
+}
+
+.report-field.active-branch-select--filter .active-branch-select__control:focus {
+  outline: none;
+  border-color: rgba(184, 134, 11, 0.55);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(184, 134, 11, 0.12);
+}
+
+.report-field.active-branch-select--filter .active-branch-select__control:disabled {
+  background: #f5f0ea;
+  color: #a89888;
+  cursor: not-allowed;
+}
+
+.report-field.active-branch-select--filter .active-branch-select__chevron {
+  right: 14px;
+  color: #9a8b78;
+}
+
+.report-field.active-branch-select--filter .active-branch-select__error {
+  white-space: normal;
+}
+
 .report-filters__actions {
   display: flex;
   justify-content: flex-end;

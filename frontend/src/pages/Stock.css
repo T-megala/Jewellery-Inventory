@@ -16,6 +16,18 @@
   flex-wrap: wrap;
 }
 
+.stock-meta__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.stock-meta .active-branch-select--header {
+  margin-left: 0;
+}
+
 .stock-meta__badge {
   padding: 6px 14px;
   background: var(--color-gold-soft);
@@ -341,6 +353,12 @@
 
   .stock-search {
     max-width: none;
+  }
+
+  .stock-meta__actions {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
   }
 
   .stock-table-scroll {

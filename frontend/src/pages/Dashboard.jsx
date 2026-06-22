@@ -30,7 +30,6 @@ import {
 } from '../services/dashboard.js'
 import './Module.css'
 import './Dashboard.css'
-import '../components/ActiveBranchSelect.css'
 
 function DashboardTitleRow({ className = '', children }) {
   return (
