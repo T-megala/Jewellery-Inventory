@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import TablePagination from '../components/TablePagination.jsx'
 import {
@@ -10,6 +10,8 @@ import {
 import './Users.css'
 
 const DEFAULT_PAGE_SIZE = 10
+
+const EMPTY_FIELD_ERRORS = { username: '', password: '' }
 
 function formatDate(value) {
   if (!value) return '—'
@@ -39,8 +41,18 @@ export default function Users() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
+  const [userToDelete, setUserToDelete] = useState(null)
   const [error, setError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState(EMPTY_FIELD_ERRORS)
   const [notice, setNotice] = useState('')
+
+  const passwordRef = useRef(null)
+  const submitRef = useRef(null)
+  const formRef = useRef(null)
+  const deleteCancelRef = useRef(null)
+  const deleteConfirmRef = useRef(null)
+
+  const isModalOpen = showForm || Boolean(userToDelete)
 
   const loadUsers = useCallback(async () => {
     setLoading(true)
@@ -68,7 +80,7 @@ export default function Users() {
   }, [notice])
 
   useEffect(() => {
-    if (!showForm) return undefined
+    if (!isModalOpen) return undefined
 
     const pageContent = document.querySelector('.page-content')
     document.body.classList.add('users-modal-open')
@@ -86,7 +98,25 @@ export default function Users() {
         pageContent.style.overflow = prevPageOverflow || ''
       }
     }
-  }, [showForm])
+  }, [isModalOpen])
+
+  useEffect(() => {
+    if (!userToDelete) return undefined
+
+    const timer = window.setTimeout(() => deleteCancelRef.current?.focus(), 0)
+
+    function handleEscape(e) {
+      if (e.key === 'Escape' && !deletingId) {
+        setUserToDelete(null)
+      }
+    }
+
+    window.addEventListener('keydown', handleEscape)
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('keydown', handleEscape)
+    }
+  }, [userToDelete, deletingId])
 
   const filteredUsers = useMemo(() => {
     const term = searchInput.trim().toLowerCase()
@@ -117,6 +147,7 @@ export default function Users() {
     setShowPassword(false)
     setEditingId(null)
     setShowForm(false)
+    setFieldErrors(EMPTY_FIELD_ERRORS)
   }
 
   function handleAddClick() {
@@ -125,6 +156,7 @@ export default function Users() {
     setPassword('')
     setShowPassword(false)
     setError('')
+    setFieldErrors(EMPTY_FIELD_ERRORS)
     setNotice('')
     setShowForm(true)
   }
@@ -135,34 +167,54 @@ export default function Users() {
     setPassword('')
     setShowPassword(false)
     setError('')
+    setFieldErrors(EMPTY_FIELD_ERRORS)
     setNotice('')
     setShowForm(true)
   }
 
   function validateForm() {
     const trimmedUsername = username.trim()
+    const errors = { ...EMPTY_FIELD_ERRORS }
 
     if (!trimmedUsername) {
-      setError('Username is required.')
-      return false
+      errors.username = 'Please enter a username.'
     }
 
     if (!editingId && !password) {
-      setError('Password is required.')
-      return false
+      errors.password = 'Please enter a password.'
+    } else if (password && password.length < 6) {
+      errors.password = 'Password must be at least 6 characters.'
     }
 
-    if (password && password.length < 6) {
-      setError('Password must be at least 6 characters.')
-      return false
-    }
+    setFieldErrors(errors)
+    return !errors.username && !errors.password
+  }
 
-    return true
+  function clearFieldError(field) {
+    setFieldErrors((current) => (
+      current[field] ? { ...current, [field]: '' } : current
+    ))
+  }
+
+  function handleUsernameKeyDown(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      passwordRef.current?.focus()
+    }
+  }
+
+  function handlePasswordKeyDown(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      submitRef.current?.focus()
+      formRef.current?.requestSubmit()
+    }
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
+    setFieldErrors(EMPTY_FIELD_ERRORS)
     setNotice('')
 
     if (!validateForm()) return
@@ -196,24 +248,51 @@ export default function Users() {
     }
   }
 
-  async function handleDelete(user) {
-    if (!window.confirm(`Delete user "${user.username}"?`)) return
+  function handleDeleteClick(user) {
+    setUserToDelete(user)
+    setError('')
+    setNotice('')
+  }
 
-    setDeletingId(user.id)
+  function handleCloseDeleteConfirm() {
+    if (deletingId) return
+    setUserToDelete(null)
+  }
+
+  function handleDeleteCancelKeyDown(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      deleteConfirmRef.current?.focus()
+    }
+  }
+
+  function handleDeleteConfirmKeyDown(e) {
+    if (e.key === 'Enter' && !deletingId) {
+      e.preventDefault()
+      handleConfirmDelete()
+    }
+  }
+
+  async function handleConfirmDelete() {
+    if (!userToDelete || deletingId) return
+
+    setDeletingId(userToDelete.id)
     setError('')
     setNotice('')
 
     try {
-      await deleteUser(user.id)
+      await deleteUser(userToDelete.id)
 
-      if (editingId === user.id) {
+      if (editingId === userToDelete.id) {
         resetForm()
       }
 
+      setUserToDelete(null)
       setNotice('User deleted successfully.')
       await loadUsers()
     } catch (err) {
       setError(err.message || 'Failed to delete user.')
+      setUserToDelete(null)
     } finally {
       setDeletingId(null)
     }
@@ -223,13 +302,14 @@ export default function Users() {
     if (saving) return
     resetForm()
     setError('')
+    setFieldErrors(EMPTY_FIELD_ERRORS)
     setNotice('')
   }
 
   const isEdit = Boolean(editingId)
 
   return (
-    <div className={`users-page${showForm ? ' users-page--modal-open' : ''}`}>
+    <div className={`users-page${isModalOpen ? ' users-page--modal-open' : ''}`}>
       <section className="users-list-card">
         <div className="users-list__toolbar">
           <div className="users-search">
@@ -266,11 +346,11 @@ export default function Users() {
           </div>
         </div>
 
-        {notice && !showForm && (
+        {notice && !isModalOpen && (
           <p className="users-alert users-alert--success users-list__notice" role="status">{notice}</p>
         )}
 
-        {error && !showForm && (
+        {error && !isModalOpen && (
           <p className="users-alert users-alert--error users-list__notice" role="alert">{error}</p>
         )}
 
@@ -311,15 +391,15 @@ export default function Users() {
                           type="button"
                           className="users-btn users-btn--ghost users-btn--sm"
                           onClick={() => handleEdit(user)}
-                          disabled={saving || deletingId === user.id}
+                          disabled={saving || Boolean(deletingId) || Boolean(userToDelete)}
                         >
                           Edit
                         </button>
                         <button
                           type="button"
                           className="users-btn users-btn--danger users-btn--sm"
-                          onClick={() => handleDelete(user)}
-                          disabled={saving || deletingId === user.id}
+                          onClick={() => handleDeleteClick(user)}
+                          disabled={saving || Boolean(deletingId) || Boolean(userToDelete)}
                         >
                           {deletingId === user.id ? 'Deleting…' : 'Delete'}
                         </button>
@@ -342,7 +422,7 @@ export default function Users() {
               rowCount={paginatedUsers.length}
               onPageChange={setPage}
               onPageSizeChange={setPageSize}
-              disabled={loading || saving || Boolean(deletingId)}
+              disabled={loading || saving || Boolean(deletingId) || Boolean(userToDelete)}
             />
           )}
         </div>
@@ -384,8 +464,8 @@ export default function Users() {
               </button>
             </header>
 
-            <form className="users-modal__form" onSubmit={handleSubmit}>
-              <label className="users-field">
+            <form ref={formRef} className="users-modal__form" onSubmit={handleSubmit} noValidate>
+              <label className={`users-field${fieldErrors.username ? ' users-field--invalid' : ''}`}>
                 <span>
                   Username
                   <span className="users-field__required" aria-hidden="true">*</span>
@@ -393,26 +473,50 @@ export default function Users() {
                 <input
                   type="text"
                   value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  onChange={(e) => {
+                    setUsername(e.target.value)
+                    clearFieldError('username')
+                  }}
+                  onKeyDown={handleUsernameKeyDown}
                   placeholder="Enter username"
                   autoComplete="off"
                   disabled={saving}
+                  aria-invalid={Boolean(fieldErrors.username)}
+                  aria-describedby={fieldErrors.username ? 'users-username-error' : undefined}
                 />
+                {fieldErrors.username && (
+                  <p id="users-username-error" className="users-field__error" role="alert">
+                    {fieldErrors.username}
+                  </p>
+                )}
               </label>
 
-              <label className="users-field">
+              <label className={`users-field${fieldErrors.password ? ' users-field--invalid' : ''}`}>
                 <span>
                   Password
                   {!isEdit && <span className="users-field__required" aria-hidden="true">*</span>}
                 </span>
                 <div className="users-field__password">
                   <input
+                    ref={passwordRef}
                     type={showPassword ? 'text' : 'password'}
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => {
+                      setPassword(e.target.value)
+                      clearFieldError('password')
+                    }}
+                    onKeyDown={handlePasswordKeyDown}
                     placeholder="Enter password"
                     autoComplete="new-password"
                     disabled={saving}
+                    aria-invalid={Boolean(fieldErrors.password)}
+                    aria-describedby={
+                      fieldErrors.password
+                        ? 'users-password-error'
+                        : isEdit
+                          ? 'users-password-hint'
+                          : undefined
+                    }
                   />
                   <button
                     type="button"
@@ -434,8 +538,13 @@ export default function Users() {
                     )}
                   </button>
                 </div>
+                {fieldErrors.password && (
+                  <p id="users-password-error" className="users-field__error" role="alert">
+                    {fieldErrors.password}
+                  </p>
+                )}
                 {isEdit && (
-                  <span className="users-field__hint">
+                  <span id="users-password-hint" className="users-field__hint">
                     Leave blank to keep the current password (min. 6 characters if changing)
                   </span>
                 )}
@@ -455,6 +564,7 @@ export default function Users() {
                   Cancel
                 </button>
                 <button
+                  ref={submitRef}
                   type="submit"
                   className="users-btn users-btn--primary"
                   disabled={saving}
@@ -463,6 +573,77 @@ export default function Users() {
                 </button>
               </footer>
             </form>
+          </div>
+        </div>,
+        document.body,
+      )}
+
+      {userToDelete && createPortal(
+        <div
+          className="users-modal"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="users-delete-title"
+          aria-describedby="users-delete-message"
+        >
+          <button
+            type="button"
+            className="users-modal__backdrop"
+            onClick={handleCloseDeleteConfirm}
+            onWheel={(e) => e.preventDefault()}
+            onTouchMove={(e) => e.preventDefault()}
+            aria-label="Close delete confirmation"
+            disabled={Boolean(deletingId)}
+          />
+
+          <div className="users-modal__panel users-modal__panel--confirm">
+            <header className="users-modal__header">
+              <div className="users-modal__titles">
+                <h2 id="users-delete-title">Delete user</h2>
+                <p>This action cannot be undone</p>
+              </div>
+              <button
+                type="button"
+                className="users-modal__close"
+                onClick={handleCloseDeleteConfirm}
+                aria-label="Close"
+                disabled={Boolean(deletingId)}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </button>
+            </header>
+
+            <div className="users-confirm__body">
+              <p id="users-delete-message" className="users-confirm__message">
+                Are you sure you want to delete user{' '}
+                <span className="users-confirm__username">&quot;{userToDelete.username}&quot;</span>?
+              </p>
+            </div>
+
+            <footer className="users-modal__footer">
+              <button
+                ref={deleteCancelRef}
+                type="button"
+                className="users-btn users-btn--ghost"
+                onClick={handleCloseDeleteConfirm}
+                onKeyDown={handleDeleteCancelKeyDown}
+                disabled={Boolean(deletingId)}
+              >
+                Cancel
+              </button>
+              <button
+                ref={deleteConfirmRef}
+                type="button"
+                className="users-btn users-btn--danger-solid"
+                onClick={handleConfirmDelete}
+                onKeyDown={handleDeleteConfirmKeyDown}
+                disabled={Boolean(deletingId)}
+              >
+                {deletingId ? 'Deleting…' : 'Delete'}
+              </button>
+            </footer>
           </div>
         </div>,
         document.body,

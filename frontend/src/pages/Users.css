@@ -155,6 +155,37 @@ body.users-modal-open {
   padding-inline: 24px;
 }
 
+.users-modal__panel--confirm {
+  width: min(100%, 420px);
+}
+
+.users-confirm__body {
+  padding: 8px 24px 22px;
+}
+
+.users-confirm__message {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--color-text);
+  line-height: 1.55;
+}
+
+.users-confirm__username {
+  font-weight: 700;
+}
+
+.users-btn--danger-solid {
+  background: #dc2626;
+  color: #fff;
+  border-color: #dc2626;
+  min-width: 100px;
+}
+
+.users-btn--danger-solid:hover:not(:disabled) {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
+
 .users-modal__footer {
   display: flex;
   align-items: center;
@@ -179,15 +210,35 @@ body.users-modal-open {
   color: var(--color-text);
 }
 
-.users-field__required {
+.users-field span.users-field__required {
   margin-left: 2px;
-  color: #b8860b;
+  color: var(--color-error);
 }
 
 .users-field__hint {
   font-size: 0.8125rem;
   color: var(--color-text-muted);
   line-height: 1.4;
+}
+
+.users-field__error {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--color-error);
+  line-height: 1.4;
+}
+
+.users-field--invalid input {
+  border-color: var(--color-error);
+}
+
+.users-field--invalid input:hover:not(:disabled) {
+  border-color: var(--color-error);
+}
+
+.users-field--invalid input:focus {
+  border-color: var(--color-error);
+  box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.12);
 }
 
 .users-field input {
@@ -295,6 +346,10 @@ body.users-modal-open {
 .users-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.users-btn:focus {
+  outline: none;
 }
 
 .users-btn--primary {
