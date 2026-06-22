@@ -9,7 +9,7 @@ export const API_MODE = 'live' // 'local' or 'live'
 
 const API_ORIGINS = {
   local: 'http://localhost:5005',
-  live: 'https://devjeweltrack.2cqr.in',
+  live: 'https://devbrandfactory.2cqr.in',
 }
 
 /** Always use this prefix — all backend routes are under /api/v1 */
