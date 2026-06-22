@@ -1104,13 +1104,6 @@ function DashboardSkeleton() {
               <span className="skeleton skeleton-hero__rate-sub" />
             </div>
           </div>
-          <div className="skeleton-hero__rate-card">
-            <span className="skeleton skeleton-hero__rate-icon" />
-            <div className="skeleton-hero__rate-info">
-              <span className="skeleton skeleton-hero__rate-value" />
-              <span className="skeleton skeleton-hero__rate-sub" />
-            </div>
-          </div>
         </div>
       </section>
 
@@ -1284,7 +1277,6 @@ export default function Dashboard() {
 
   const overviewCards = buildOverviewCards(overview ?? {})
   const byDescription = summary?.byDescription ?? summary?.byProduct ?? []
-  const batch = summary?.batch
   const topSoldBarData = useMemo(
     () => topSoldProducts.slice(0, 10).map((row) => ({
       name: truncate(row.itemDescription, 22),
@@ -1312,7 +1304,7 @@ export default function Dashboard() {
 
   const totalBarcodes = Number(totals.totalBarcodes ?? totals.totalTags ?? 0)
 
-  if (!batch || totalBarcodes === 0) {
+  if (totalBarcodes === 0) {
     return (
       <div className="dashboard">
         <div className="dashboard-empty">
@@ -1346,14 +1338,7 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="dashboard-hero__rates">
-          <p className="dashboard-hero__rates-label">Batch Details</p>
-          <div className="dashboard-rate-card">
-            <span className="dashboard-rate-card__icon">ID</span>
-            <div className="dashboard-rate-card__info">
-              <strong>#{batch.id}</strong>
-              <span>batch number</span>
-            </div>
-          </div>
+          <p className="dashboard-hero__rates-label">Stock Summary</p>
           <div className="dashboard-rate-card">
             <span className="dashboard-rate-card__icon">IT</span>
             <div className="dashboard-rate-card__info">
