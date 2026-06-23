@@ -113,7 +113,7 @@ export default function MainLayout() {
   const isTablePage = location.pathname === '/stock' || location.pathname === '/users' || location.pathname === '/branches' || location.pathname === '/roles'
   const isReportsPage = location.pathname === '/reports'
   const isFillPage = location.pathname === '/import' || isTablePage
-  const isWidePage = location.pathname === '/dashboard'
+  const isWidePage = location.pathname === '/dashboard' || location.pathname === '/masters'
   const isMastersArea = MASTER_PATHS.includes(location.pathname)
 
   useEffect(() => {

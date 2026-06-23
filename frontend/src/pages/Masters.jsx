@@ -1,12 +1,7 @@
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { MASTER_GROUPS } from '../config/masters.js'
-import {
-  getUser,
-  getActiveBranch,
-  getUserDisplayName,
-  getUserRoleLabel,
-  hasAnyPermission,
-} from '../services/auth.js'
+import { getUser, hasAnyPermission } from '../services/auth.js'
 import './Masters.css'
 
 function MasterIcon({ name }) {
@@ -59,75 +54,155 @@ function MasterCard({ item }) {
 
   if (item.comingSoon) {
     return (
-      <div className="masters-card masters-card--disabled" aria-disabled="true">
+      <div className={`masters-card masters-card--${item.icon} masters-card--disabled`} aria-disabled="true">
         {content}
       </div>
     )
   }
 
   return (
-    <Link to={item.to} className="masters-card">
+    <Link to={item.to} className={`masters-card masters-card--${item.icon}`}>
       {content}
     </Link>
   )
 }
 
+function filterMasterGroups(groups, searchInput) {
+  const term = searchInput.trim().toLowerCase()
+  if (!term) return groups
+
+  return groups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => (
+        [item.label, item.description, group.title]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(term)
+      )),
+    }))
+    .filter((group) => group.items.length > 0)
+}
+
 export default function Masters() {
+  const [searchInput, setSearchInput] = useState('')
   const user = getUser()
-  const currentBranch = getActiveBranch(user)
-  const displayName = getUserDisplayName(user)
-  const roleLabel = getUserRoleLabel(user)
 
-  const visibleGroups = MASTER_GROUPS.map((group) => ({
-    ...group,
-    items: group.items.filter((item) => hasAnyPermission(item.permissions, user)),
-  })).filter((group) => group.items.length > 0)
+  const visibleGroups = MASTER_GROUPS
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => hasAnyPermission(item.permissions, user)),
+    }))
+    .filter((group) => group.items.length > 0)
 
+  const filteredGroups = useMemo(
+    () => filterMasterGroups(visibleGroups, searchInput),
+    [visibleGroups, searchInput],
+  )
+
+  const moduleCount = visibleGroups.reduce((total, group) => total + group.items.length, 0)
+  const visibleCount = filteredGroups.reduce((total, group) => total + group.items.length, 0)
+  const isSearchActive = searchInput.trim().length > 0
   const hasMasters = visibleGroups.length > 0
 
   return (
     <div className="masters-page">
-      <section className="masters-hero">
-        <div className="masters-hero__content">
-          <p className="masters-hero__eyebrow">Setup & administration</p>
-          <h2 className="masters-hero__title">Masters</h2>
-          <p className="masters-hero__text">
-            Manage organization and access settings for {displayName}.
-          </p>
-        </div>
-
-        <div className="masters-hero__meta">
-          <div className="masters-meta-card">
-            <span className="masters-meta-card__label">Signed in as</span>
-            <strong>{displayName}</strong>
-            <small>{roleLabel}</small>
+      <section className="masters-panel">
+        <header className="masters-panel__head">
+          <div className="masters-panel__intro">
+            <div className="masters-panel__title-row">
+              <span className="masters-panel__accent" aria-hidden="true" />
+              <div>
+                <h2 className="masters-panel__title">Admin modules</h2>
+                <p className="masters-panel__text">
+                  Manage organization structure, staff access, and permission roles.
+                </p>
+              </div>
+            </div>
+            <span className="masters-panel__count">
+              {moduleCount}
+              {' '}
+              module
+              {moduleCount === 1 ? '' : 's'}
+            </span>
           </div>
 
-          {currentBranch?.name && (
-            <div className="masters-meta-card masters-meta-card--branch">
-              <span className="masters-meta-card__label">Current branch</span>
-              <strong>{currentBranch.name}</strong>
+          {hasMasters && (
+            <div className="masters-search">
+              <span className="masters-search__icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8" />
+                  <path d="M20 20l-3.5-3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </span>
+              <input
+                type="search"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Search branches, users, roles…"
+                aria-label="Search admin modules"
+              />
+              {isSearchActive && (
+                <button
+                  type="button"
+                  className="masters-search__clear"
+                  onClick={() => setSearchInput('')}
+                  aria-label="Clear search"
+                >
+                  Clear
+                </button>
+              )}
             </div>
+          )}
+        </header>
+
+        <div className="masters-panel__body">
+          {!hasMasters && (
+            <div className="masters-empty">
+              <p>No master screens are available for your account.</p>
+            </div>
+          )}
+
+          {hasMasters && isSearchActive && filteredGroups.length === 0 && (
+            <div className="masters-empty masters-empty--search">
+              <p>
+                No modules match
+                {' '}
+                <strong>{searchInput.trim()}</strong>
+                .
+              </p>
+            </div>
+          )}
+
+          {hasMasters && filteredGroups.length > 0 && (
+            <>
+              {isSearchActive && (
+                <p className="masters-panel__results">
+                  {visibleCount}
+                  {' '}
+                  module
+                  {visibleCount === 1 ? '' : 's'}
+                  {' '}
+                  found
+                </p>
+              )}
+
+              {filteredGroups.map((group, index) => (
+                <section key={group.id} className="masters-group">
+                  {index > 0 && <div className="masters-group__divider" aria-hidden="true" />}
+                  <h3 className="masters-group__title">{group.title}</h3>
+                  <div className={`masters-group__grid${group.items.length === 1 ? ' masters-group__grid--single' : ''}`}>
+                    {group.items.map((item) => (
+                      <MasterCard key={item.to} item={item} />
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </>
           )}
         </div>
       </section>
-
-      {!hasMasters && (
-        <section className="masters-empty">
-          <p>No master screens are available for your account.</p>
-        </section>
-      )}
-
-      {visibleGroups.map((group) => (
-        <section key={group.id} className="masters-group">
-          <h3 className="masters-group__title">{group.title}</h3>
-          <div className="masters-group__grid">
-            {group.items.map((item) => (
-              <MasterCard key={item.to} item={item} />
-            ))}
-          </div>
-        </section>
-      ))}
     </div>
   )
 }

@@ -435,6 +435,16 @@
   max-width: 1280px;
 }
 
+.page-content:has(.masters-page) {
+  padding-inline: 20px;
+}
+
+@media (min-width: 1024px) {
+  .page-content:has(.masters-page) {
+    padding-inline: 24px;
+  }
+}
+
 .page-content__inner--fill {
   max-width: none;
   height: 100%;
