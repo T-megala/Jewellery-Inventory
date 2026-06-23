@@ -291,14 +291,14 @@ export default function Login() {
             </>
           ) : (
             <>
-              <div className="login-form-header">
-                <p className="form-eyebrow">Select Showrooms</p>
-                <h2>Choose your branches</h2>
+              <div className="login-form-header login-form-header--branch">
+                <p className="form-eyebrow">Branch access</p>
+                <h2>Select your branches</h2>
                 <p>
-                  Welcome,
+                  Signed in as
                   {' '}
                   <strong>{branchUser?.fullName || branchUser?.username}</strong>
-                  . Select one or more branches assigned to you.
+                  . Choose one or more branches for this session.
                 </p>
               </div>
 

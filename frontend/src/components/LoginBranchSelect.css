@@ -1,14 +1,41 @@
 .login-branch-select {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   height: 100%;
   min-height: 0;
 }
 
-.login-branch-select__search {
-  margin: 0;
+.login-branch-select__toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   flex-shrink: 0;
+}
+
+.login-branch-select__search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: #fff;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.login-branch-select__search:focus-within {
+  border-color: rgba(184, 134, 11, 0.45);
+  box-shadow: 0 0 0 3px rgba(184, 134, 11, 0.1);
+}
+
+.login-branch-select__search-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #9a8b78;
 }
 
 .login-branch-select__search input {
@@ -16,15 +43,15 @@
   min-width: 0;
   border: none;
   background: transparent;
-  padding: 14px 0;
-  font-family: inherit;
-  font-size: 0.95rem;
-  color: #1c1410;
+  padding: 10px 0;
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  color: var(--color-text);
   outline: none;
 }
 
 .login-branch-select__search input::placeholder {
-  color: #b0a090;
+  color: #a89888;
 }
 
 .login-branch-select__search input::-webkit-search-cancel-button,
@@ -40,79 +67,80 @@
   flex-shrink: 0;
   width: 28px;
   height: 28px;
-  margin-right: 4px;
   padding: 0;
   border: none;
-  border-radius: 8px;
-  background: #f5f0ea;
-  color: #6b5d4d;
-  font-size: 1.1rem;
-  line-height: 1;
+  border-radius: 6px;
+  background: transparent;
+  color: #8a7968;
   cursor: pointer;
+  transition: background 0.15s, color 0.15s;
 }
 
 .login-branch-select__search-clear:hover:not(:disabled) {
-  background: #ebe3d6;
+  background: #f5f0ea;
+  color: var(--color-primary-dark);
 }
 
-.login-branch-select__meta {
+.login-branch-select__controls {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 24px;
-  flex-shrink: 0;
   flex-wrap: wrap;
 }
 
-.login-branch-select__count {
-  font-size: 0.8rem;
+.login-branch-select__badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 100px;
+  background: #f5f3ef;
+  border: 1px solid #ebe3d6;
+  font-family: var(--font-body);
+  font-size: 0.75rem;
   font-weight: 600;
-  color: #7a6a55;
+  color: #5c4f40;
   white-space: nowrap;
 }
 
-.login-branch-select__actions {
-  display: flex;
+.login-branch-select__btn-group {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
+  gap: 6px;
 }
 
-.login-branch-select__action {
-  padding: 0;
-  border: none;
-  background: transparent;
-  font-family: inherit;
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: #9a7209;
+.login-branch-select__btn {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid #e0d6ca;
+  border-radius: 8px;
+  background: #fff;
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #4a3f32;
   cursor: pointer;
-  transition: color 0.15s;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
 }
 
-.login-branch-select__action:hover:not(:disabled) {
-  color: #a67c00;
-  text-decoration: underline;
+.login-branch-select__btn:hover:not(:disabled) {
+  border-color: rgba(184, 134, 11, 0.35);
+  background: #fffaf2;
+  color: var(--color-primary-dark);
 }
 
-.login-branch-select__action:disabled {
+.login-branch-select__btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
 
-.login-branch-select__action-divider {
-  color: #d4c8b8;
-  font-size: 0.85rem;
-  line-height: 1;
-}
-
 .login-branch-select__panel {
   flex: 1;
-  min-height: 120px;
-  border: 1.5px solid #e8dfd2;
-  border-radius: 14px;
-  background: linear-gradient(180deg, #fffefb 0%, #faf7f2 100%);
+  min-height: 140px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: #fff;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -120,105 +148,98 @@
 
 .login-branch-select__empty {
   margin: 0;
-  padding: 32px 20px;
+  padding: 40px 20px;
   text-align: center;
-  font-size: 0.86rem;
-  color: #7a6a55;
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
   line-height: 1.5;
 }
 
 .login-branch-select__list {
   list-style: none;
   margin: 0;
-  padding: 10px;
+  padding: 0;
   flex: 1;
   min-height: 0;
-  max-height: min(280px, calc(100dvh - 430px));
+  max-height: min(300px, calc(100dvh - 420px));
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(184, 134, 11, 0.45) transparent;
+  -webkit-overflow-scrolling: touch;
 }
 
-.login-branch-select__list::-webkit-scrollbar {
-  width: 6px;
+.login-branch-select__list li + li {
+  border-top: 1px solid #f0ebe3;
 }
 
-.login-branch-select__list::-webkit-scrollbar-track {
-  margin: 6px 0;
-  background: transparent;
-}
-
-.login-branch-select__list::-webkit-scrollbar-thumb {
-  border-radius: 100px;
-  background: rgba(184, 134, 11, 0.35);
-}
-
-.login-branch-select__list::-webkit-scrollbar-thumb:hover {
-  background: rgba(184, 134, 11, 0.55);
-}
-
-.login-branch-select__option {
+.login-branch-select__row {
   display: flex;
   align-items: center;
-  gap: 14px;
-  min-height: 48px;
+  gap: 12px;
+  min-height: 52px;
   padding: 10px 14px;
-  border: 1.5px solid #ebe3d6;
-  border-radius: 12px;
+  cursor: pointer;
   background: #fff;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  transition: background 0.12s ease;
 }
 
-.login-branch-select__option:hover {
-  border-color: rgba(184, 134, 11, 0.32);
-  background: #fffdf8;
+.login-branch-select__row:hover {
+  background: #faf8f5;
 }
 
-.login-branch-select__option--selected {
-  border-color: rgba(184, 134, 11, 0.5);
-  background: linear-gradient(180deg, #fffdf8 0%, #fdf6e8 100%);
-  box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.08);
+.login-branch-select__row--selected {
+  background: #fffbf3;
+  box-shadow: inset 3px 0 0 var(--color-primary);
 }
 
-.login-branch-select__option input {
-  width: 18px;
-  height: 18px;
-  margin: 0;
-  flex-shrink: 0;
-  accent-color: #b8860b;
-  cursor: pointer;
+.login-branch-select__checkbox {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
-.login-branch-select__option-body {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-width: 0;
+.login-branch-select__name {
   flex: 1;
-}
-
-.login-branch-select__option-name {
-  font-size: 0.94rem;
+  min-width: 0;
+  font-family: var(--font-body);
+  font-size: 0.875rem;
   font-weight: 600;
-  color: #1c1410;
-  line-height: 1.3;
+  color: var(--color-text);
+  line-height: 1.35;
   word-break: break-word;
 }
 
+.login-branch-select__indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  color: var(--color-primary-dark);
+}
+
 @media (max-width: 480px) {
-  .login-branch-select__meta {
+  .login-branch-select__controls {
     flex-direction: column;
-    align-items: flex-start;
-    gap: 6px;
+    align-items: stretch;
+  }
+
+  .login-branch-select__btn-group {
+    width: 100%;
+  }
+
+  .login-branch-select__btn {
+    flex: 1;
   }
 
   .login-branch-select__list {
-    max-height: min(220px, calc(100dvh - 400px));
+    max-height: min(240px, calc(100dvh - 400px));
   }
 }
 
@@ -227,8 +248,8 @@
     max-height: min(180px, calc(100dvh - 360px));
   }
 
-  .login-branch-select__option {
-    min-height: 44px;
+  .login-branch-select__row {
+    min-height: 48px;
     padding: 8px 12px;
   }
 }
