@@ -55,6 +55,57 @@ export const getActiveBatchIdsForBranches = async (
   return rows.map((row) => Number(row.id));
 };
 
+export const getPreviousBatchIdMapForBranches = async (
+  branchIds = [],
+  connection = pool,
+) => {
+  if (!Array.isArray(branchIds) || branchIds.length === 0) {
+    return new Map();
+  }
+
+  const placeholders = branchIds.map(() => "?").join(", ");
+  const [rows] = await connection.execute(
+    `SELECT id, branch_id
+     FROM product_upload_batches
+     WHERE branch_id IN (${placeholders})
+     ORDER BY branch_id ASC, id ASC`,
+    branchIds,
+  );
+
+  const previousBatchById = new Map();
+  const latestBatchByBranch = new Map();
+
+  for (const row of rows) {
+    const batchId = Number(row.id);
+    const branchId = Number(row.branch_id);
+    previousBatchById.set(batchId, latestBatchByBranch.get(branchId) ?? null);
+    latestBatchByBranch.set(branchId, batchId);
+  }
+
+  return previousBatchById;
+};
+
+export const getRecentBatchIdsForBranches = async (
+  branchIds = [],
+  periodDays = 30,
+  connection = pool,
+) => {
+  if (!Array.isArray(branchIds) || branchIds.length === 0) {
+    return [];
+  }
+
+  const placeholders = branchIds.map(() => "?").join(", ");
+  const [rows] = await connection.execute(
+    `SELECT id
+     FROM product_upload_batches
+     WHERE branch_id IN (${placeholders})
+       AND batch_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)`,
+    [...branchIds, periodDays],
+  );
+
+  return rows.map((row) => Number(row.id));
+};
+
 /** Every import creates a new active batch for the branch; prior branch batch is deactivated. */
 export const resolveActiveBatch = async (
   connection,

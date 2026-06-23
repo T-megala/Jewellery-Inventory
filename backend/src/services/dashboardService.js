@@ -1,6 +1,11 @@
 import pool from "../config/database.js";
 import ApiError from "../utils/ApiError.js";
-import { getActiveBatchId, getActiveBatchIdsForBranches } from "./productBatchService.js";
+import {
+  getActiveBatchId,
+  getActiveBatchIdsForBranches,
+  getPreviousBatchIdMapForBranches,
+  getRecentBatchIdsForBranches,
+} from "./productBatchService.js";
 import branchService from "./branchService.js";
 import dailySalesSummaryService from "./dailySalesSummaryService.js";
 import { batchProductsFrom, batchAllProductsFrom } from "../utils/productQueryHelper.js";
@@ -1113,6 +1118,21 @@ const parsePositiveInt = (value, fallback) => {
   return parsed;
 };
 
+const buildBatchPreviousJoin = (pairs) => {
+  if (pairs.length === 0) {
+    return { joinSql: "", params: [] };
+  }
+
+  const unionSql = pairs
+    .map(() => "SELECT ? AS batch_id, ? AS prev_batch_id")
+    .join(" UNION ALL ");
+
+  return {
+    joinSql: `INNER JOIN (${unionSql}) bm ON bm.batch_id = curr.batch_id`,
+    params: pairs.flatMap((pair) => [pair.batchId, pair.prevBatchId]),
+  };
+};
+
 const getStockMovement = async ({
   branchId = null,
   branchIds = null,
@@ -1124,7 +1144,6 @@ const getStockMovement = async ({
   const thresholdDays = parsePositiveInt(slowDays, 60);
   const periodDays = parsePositiveInt(fastDays, 30);
   const resultLimit = Math.min(parsePositiveInt(limit, 10), 50);
-  const batchIds = await getActiveBatchIdsForBranches(scope);
 
   const emptyResponse = {
     slowMovers: {
@@ -1137,81 +1156,99 @@ const getStockMovement = async ({
     },
   };
 
-  if (batchIds.length === 0) {
+  if (scope.length === 0) {
     return emptyResponse;
   }
 
-  const batchPlaceholders = batchIds.map(() => "?").join(", ");
-  const productsFrom = `FROM products WHERE batch_id IN (${batchPlaceholders})`;
+  const activeBatchIds = await getActiveBatchIdsForBranches(scope);
 
-  const [[slowRows], [newTagRows], [pieceIncreaseRows]] = await Promise.all([
-    pool.execute(
-      `SELECT
-         product AS productName,
-         COALESCE(SUM(COALESCE(pieces, 0)), 0) AS pieceCount,
-         ROUND(AVG(DATEDIFF(CURDATE(), tran_date))) AS avgDaysSinceMovement
-       ${productsFrom}
-         AND tran_date IS NOT NULL
-         AND product IS NOT NULL
-         AND TRIM(product) != ''
-       GROUP BY product
-       HAVING avgDaysSinceMovement >= ?
-       ORDER BY pieceCount DESC, avgDaysSinceMovement DESC, product ASC
-       LIMIT ${resultLimit}`,
-      [...batchIds, thresholdDays],
-    ),
-    pool.execute(
-      `SELECT
-         curr.product AS productName,
-         COUNT(*) AS restockedTags,
-         COALESCE(SUM(COALESCE(curr.pieces, 0)), 0) AS restockedPieces
-       FROM products curr
-       INNER JOIN product_upload_batches b ON b.id = curr.batch_id
-       LEFT JOIN products prev
-         ON prev.batch_id = (
-           SELECT MAX(pb.id)
-           FROM product_upload_batches pb
-           WHERE pb.id < curr.batch_id
-         )
-        AND prev.tag_packet_no = curr.tag_packet_no
-        AND prev.tag_packet_no IS NOT NULL
-        AND TRIM(prev.tag_packet_no) != ''
-       WHERE b.batch_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
-         AND curr.tag_packet_no IS NOT NULL
-         AND TRIM(curr.tag_packet_no) != ''
-         AND curr.product IS NOT NULL
-         AND TRIM(curr.product) != ''
-         AND prev.id IS NULL
-       GROUP BY curr.product`,
-      [periodDays],
-    ),
-    pool.execute(
-      `SELECT
-         curr.product AS productName,
-         COUNT(*) AS restockedTags,
-         COALESCE(
-           SUM(COALESCE(curr.pieces, 0) - COALESCE(prev.pieces, 0)),
-           0
-         ) AS restockedPieces
-       FROM products curr
-       INNER JOIN product_upload_batches b ON b.id = curr.batch_id
-       INNER JOIN products prev
-         ON prev.batch_id = (
-           SELECT MAX(pb.id)
-           FROM product_upload_batches pb
-           WHERE pb.id < curr.batch_id
-         )
-        AND prev.tag_packet_no = curr.tag_packet_no
-        AND prev.tag_packet_no IS NOT NULL
-        AND TRIM(prev.tag_packet_no) != ''
-       WHERE b.batch_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
-         AND curr.product IS NOT NULL
-         AND TRIM(curr.product) != ''
-         AND COALESCE(curr.pieces, 0) > COALESCE(prev.pieces, 0)
-       GROUP BY curr.product`,
-      [periodDays],
-    ),
-  ]);
+  if (activeBatchIds.length === 0) {
+    return emptyResponse;
+  }
+
+  const batchPlaceholders = activeBatchIds.map(() => "?").join(", ");
+
+  const [slowRows] = await pool.execute(
+    `SELECT
+       product AS productName,
+       COALESCE(SUM(COALESCE(pieces, 0)), 0) AS pieceCount,
+       ROUND(AVG(DATEDIFF(CURDATE(), tran_date))) AS avgDaysSinceMovement
+     FROM products
+     WHERE batch_id IN (${batchPlaceholders})
+       AND tran_date IS NOT NULL
+       AND product IS NOT NULL
+       AND TRIM(product) != ''
+     GROUP BY product
+     HAVING avgDaysSinceMovement >= ?
+     ORDER BY pieceCount DESC, avgDaysSinceMovement DESC, product ASC
+     LIMIT ${resultLimit}`,
+    [...activeBatchIds, thresholdDays],
+  );
+
+  const recentBatchIds = await getRecentBatchIdsForBranches(scope, periodDays);
+  const previousBatchMap = await getPreviousBatchIdMapForBranches(scope);
+  const batchPairs = recentBatchIds
+    .map((batchId) => ({
+      batchId,
+      prevBatchId: previousBatchMap.get(batchId) ?? null,
+    }))
+    .filter((pair) => pair.prevBatchId);
+
+  let newTagRows = [];
+  let pieceIncreaseRows = [];
+
+  if (batchPairs.length > 0) {
+    const { joinSql, params: joinParams } = buildBatchPreviousJoin(batchPairs);
+    const taggedProductFilter = `
+      AND curr.tag_packet_no IS NOT NULL
+      AND TRIM(curr.tag_packet_no) != ''
+      AND curr.product IS NOT NULL
+      AND TRIM(curr.product) != ''
+    `;
+
+    const [newRows, pieceRows] = await Promise.all([
+      pool.execute(
+        `SELECT
+           curr.product AS productName,
+           COUNT(*) AS restockedTags,
+           COALESCE(SUM(COALESCE(curr.pieces, 0)), 0) AS restockedPieces
+         FROM products curr
+         ${joinSql}
+         LEFT JOIN products prev
+           ON prev.batch_id = bm.prev_batch_id
+          AND prev.tag_packet_no = curr.tag_packet_no
+          AND prev.tag_packet_no IS NOT NULL
+          AND TRIM(prev.tag_packet_no) != ''
+         WHERE prev.id IS NULL
+           ${taggedProductFilter}
+         GROUP BY curr.product`,
+        joinParams,
+      ),
+      pool.execute(
+        `SELECT
+           curr.product AS productName,
+           COUNT(*) AS restockedTags,
+           COALESCE(
+             SUM(COALESCE(curr.pieces, 0) - COALESCE(prev.pieces, 0)),
+             0
+           ) AS restockedPieces
+         FROM products curr
+         ${joinSql}
+         INNER JOIN products prev
+           ON prev.batch_id = bm.prev_batch_id
+          AND prev.tag_packet_no = curr.tag_packet_no
+          AND prev.tag_packet_no IS NOT NULL
+          AND TRIM(prev.tag_packet_no) != ''
+         WHERE COALESCE(curr.pieces, 0) > COALESCE(prev.pieces, 0)
+           ${taggedProductFilter}
+         GROUP BY curr.product`,
+        joinParams,
+      ),
+    ]);
+
+    newTagRows = newRows[0];
+    pieceIncreaseRows = pieceRows[0];
+  }
 
   const restockByProduct = new Map();
 
