@@ -2,6 +2,11 @@ import pool from "../config/database.js";
 import { getActiveBatchId } from "./productBatchService.js";
 import inventoryDropdownService from "./inventoryDropdownService.js";
 import { batchAllProductsWhere } from "../utils/productQueryHelper.js";
+import {
+  activeBranchProductsFrom,
+  buildBranchSqlFilter,
+  normalizeBranchIds,
+} from "../utils/branchScope.js";
 
 const formatDateTime = (value) => {
   if (!value) return null;
@@ -61,38 +66,69 @@ const buildSearchClause = (search) => {
   };
 };
 
+const buildProductListQuery = ({ search, batchId = null, branchIds = [] }) => {
+  const { clause: searchClause, params: searchParams } =
+    buildSearchClause(search);
+
+  if (batchId) {
+    return {
+      baseFrom: `
+        FROM products p
+        INNER JOIN product_upload_batches pub ON pub.id = p.batch_id
+        LEFT JOIN branches b ON b.id = pub.branch_id
+        WHERE ${batchAllProductsWhere.replace("batch_id = ?", "p.batch_id = ?")}
+        ${searchClause}
+      `,
+      params: [batchId, ...searchParams],
+      batchId,
+    };
+  }
+
+  const scope = normalizeBranchIds({ branchIds });
+
+  if (scope.length === 0) {
+    return null;
+  }
+
+  const branchFilter = buildBranchSqlFilter("pub.branch_id", scope);
+
+  return {
+    baseFrom: `
+      ${activeBranchProductsFrom("pub")}
+      LEFT JOIN branches b ON b.id = pub.branch_id
+      ${branchFilter.clause}
+      ${searchClause}
+    `,
+    params: [...branchFilter.params, ...searchParams],
+    batchId: scope.length === 1 ? null : null,
+  };
+};
+
 const getProductList = async ({
   search,
   page,
   limit,
   offset,
   batchId = null,
-  branchId = null,
+  branchIds = [],
 }) => {
-  const activeBatchId = batchId ?? (await getActiveBatchId(branchId));
+  const query = buildProductListQuery({ search, batchId, branchIds });
 
-  if (!activeBatchId) {
+  if (!query) {
     return {
       pagination: { page, limit, totalRecords: 0, totalPages: 0 },
       data: [],
       batchId: null,
+      branchIds: [],
     };
   }
 
-  const { clause: searchClause, params: searchParams } =
-    buildSearchClause(search);
-
-  const baseFrom = `
-    FROM products p
-    INNER JOIN product_upload_batches pub ON pub.id = p.batch_id
-    LEFT JOIN branches b ON b.id = pub.branch_id
-    WHERE ${batchAllProductsWhere.replace("batch_id = ?", "p.batch_id = ?")}
-    ${searchClause}
-  `;
+  const { baseFrom, params } = query;
+  const scope = normalizeBranchIds({ branchIds });
 
   const [countRows] = await pool.execute(
     `SELECT COUNT(*) AS totalRecords ${baseFrom}`,
-    [activeBatchId, ...searchParams],
+    params,
   );
 
   const totalRecords = Number(countRows[0].totalRecords);
@@ -107,26 +143,34 @@ const getProductList = async ({
      ${baseFrom}
      ORDER BY p.id DESC
      LIMIT ${limit} OFFSET ${offset}`,
-    [activeBatchId, ...searchParams],
+    params,
   );
 
+  let resolvedBatchId = batchId;
+
+  if (!resolvedBatchId && scope.length === 1) {
+    resolvedBatchId = await getActiveBatchId(scope[0]);
+  }
+
   return {
-    batchId: activeBatchId,
+    batchId: resolvedBatchId,
+    branchIds: scope,
     pagination: { page, limit, totalRecords, totalPages },
     data: rows.map(mapProductRow),
   };
 };
 
-export const getProducts = () => inventoryDropdownService.getProducts();
+export const getProducts = (options = {}) =>
+  inventoryDropdownService.getProducts(options);
 
-export const getProductsForBranch = (branchId) =>
-  inventoryDropdownService.getProducts({ branchId });
+export const getProductsForBranch = (branchIds) =>
+  inventoryDropdownService.getProducts({ branchIds });
 
-export const getSubProducts = (product, branchId = null) =>
-  inventoryDropdownService.getSubProducts(product, { branchId });
+export const getSubProducts = (product, branchIds = []) =>
+  inventoryDropdownService.getSubProducts(product, { branchIds });
 
-export const getCenters = (product, subProduct, branchId = null) =>
-  inventoryDropdownService.getCenters(product, subProduct, { branchId });
+export const getCenters = (product, subProduct, branchIds = []) =>
+  inventoryDropdownService.getCenters(product, subProduct, { branchIds });
 
 export { getProductList };
 

@@ -52,11 +52,11 @@ app.get("/", (req, res) => {
 });
 
 app.use("/api/v1", authRoutes);
-app.use("/api/v1", productRoutes);
 app.use("/api/v1", stockVerificationRoutes);
 app.use("/api/v1", androidReportsRoutes);
 app.use("/api/v1", authenticateApi);
 app.use("/api/v1", resolveBranchScope);
+app.use("/api/v1", productRoutes);
 app.use("/api/v1", branchRoutes);
 app.use("/api/v1", roleRoutes);
 app.use("/api/v1", stockVerificationReportRoutes);

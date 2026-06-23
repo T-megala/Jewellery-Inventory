@@ -1,7 +1,8 @@
 import pool from "../config/database.js";
-import { getActiveBatchId } from "./productBatchService.js";
+import { getActiveBatchId, getActiveBatchIdsForBranches } from "./productBatchService.js";
 import { TAG_EXPR } from "../utils/verificationScope.js";
 import { batchProductsFrom } from "../utils/productQueryHelper.js";
+import { buildBranchSqlFilter, normalizeBranchIds } from "../utils/branchScope.js";
 
 const ALL_PRODUCTS = "All Products";
 const ALL_SUB_PRODUCTS = "All Sub Products";
@@ -57,7 +58,10 @@ const buildCategoryMatchClause = (columnExpr, category) => {
   return `${columnExpr} REGEXP '${pattern}'`;
 };
 
-const getRecentStorewideSessions = async (limit) => {
+const getRecentStorewideSessions = async (limit, branchIds = []) => {
+  const scope = normalizeBranchIds({ branchIds });
+  const branchFilter = buildBranchSqlFilter("branch_id", scope, { keyword: "AND" });
+
   const [rows] = await pool.execute(
     `SELECT
        id,
@@ -71,9 +75,10 @@ const getRecentStorewideSessions = async (limit) => {
      WHERE product_name = ?
        AND sub_product_name = ?
        AND center_name = ?
+       ${branchFilter.clause}
      ORDER BY verification_day DESC, verification_date DESC, id DESC
      LIMIT 100`,
-    [ALL_PRODUCTS, ALL_SUB_PRODUCTS, ALL_CENTERS],
+    [ALL_PRODUCTS, ALL_SUB_PRODUCTS, ALL_CENTERS, ...branchFilter.params],
   );
 
   const sessionsByDay = new Map();
@@ -420,18 +425,22 @@ const buildAccuracyDropAlerts = async (
 
 const getSmartAlerts = async ({
   branchId = null,
+  branchIds = null,
   consecutiveStocktakes = 2,
   accuracyDropThreshold = 2,
   limit = 20,
 } = {}) => {
+  const scope = normalizeBranchIds({ branchId, branchIds });
   const sessionLimit = parsePositiveInt(consecutiveStocktakes, 2);
   const dropThreshold = parseThreshold(accuracyDropThreshold, 2);
   const alertLimit = Math.min(parsePositiveInt(limit, 20), 50);
 
-  const [batchId, sessions] = await Promise.all([
-    getActiveBatchId(branchId),
-    getRecentStorewideSessions(sessionLimit),
+  const [activeBatchIds, sessions] = await Promise.all([
+    getActiveBatchIdsForBranches(scope),
+    getRecentStorewideSessions(sessionLimit, scope),
   ]);
+
+  const batchId = activeBatchIds[0] ?? null;
 
   const alerts = [];
 

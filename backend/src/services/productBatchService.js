@@ -35,6 +35,26 @@ export const getActiveBatchId = async (branchId = null, connection = pool) => {
   return rows[0]?.id ?? null;
 };
 
+export const getActiveBatchIdsForBranches = async (
+  branchIds = [],
+  connection = pool,
+) => {
+  if (!Array.isArray(branchIds) || branchIds.length === 0) {
+    return [];
+  }
+
+  const placeholders = branchIds.map(() => "?").join(", ");
+  const [rows] = await connection.execute(
+    `SELECT id
+     FROM product_upload_batches
+     WHERE branch_id IN (${placeholders})
+       AND is_active = 1`,
+    branchIds,
+  );
+
+  return rows.map((row) => Number(row.id));
+};
+
 /** Every import creates a new active batch for the branch; prior branch batch is deactivated. */
 export const resolveActiveBatch = async (
   connection,
@@ -79,9 +99,22 @@ export const resolveActiveBatch = async (
   };
 };
 
-export const listBatches = async (branchId = null) => {
-  const branchClause = branchId ? "WHERE b.branch_id = ?" : "";
-  const params = branchId ? [branchId] : [];
+export const listBatches = async (branchIds = []) => {
+  const ids = Array.isArray(branchIds)
+    ? branchIds.map((id) => Number(id)).filter((id) => id > 0)
+    : [];
+
+  if (ids.length === 0) {
+    return [];
+  }
+
+  const branchFilter =
+    ids.length === 1
+      ? { clause: "WHERE b.branch_id = ?", params: [ids[0]] }
+      : {
+          clause: `WHERE b.branch_id IN (${ids.map(() => "?").join(", ")})`,
+          params: ids,
+        };
 
   const [rows] = await pool.execute(
     `SELECT
@@ -96,10 +129,10 @@ export const listBatches = async (branchId = null) => {
      FROM product_upload_batches b
      LEFT JOIN branches br ON br.id = b.branch_id
      LEFT JOIN products p ON p.batch_id = b.id
-     ${branchClause}
+     ${branchFilter.clause}
      GROUP BY b.id, b.batch_date, b.uploaded_at, b.uploaded_by, b.is_active, b.branch_id, br.name
      ORDER BY b.id DESC`,
-    params,
+    branchFilter.params,
   );
 
   return rows.map((row) => ({

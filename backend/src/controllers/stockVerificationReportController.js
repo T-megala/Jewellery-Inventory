@@ -1,10 +1,7 @@
 import ApiError from "../utils/ApiError.js";
-import { resolveOperationalBranchId } from "../utils/branchRequest.js";
-import { PERMISSIONS } from "../constants/permissions.js";
-import branchService from "../services/branchService.js";
+import { resolveRequestBranchIds } from "../utils/branchScope.js";
 import stockVerificationReportService from "../services/stockVerificationReportService.js";
 import androidScanReportService from "../services/androidScanReportService.js";
-import { getBranchIdsForUser } from "../services/userBranchService.js";
 import { getRequestParam } from "../utils/requestParams.js";
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -39,65 +36,6 @@ const validateDate = (value, fieldName) => {
 };
 
 const getRequestValue = (req, ...keys) => getRequestParam(req, ...keys);
-
-const parseOptionalBranchId = (value) => {
-  if (value === undefined || value === null || value === "") {
-    return null;
-  }
-
-  const parsed = Number.parseInt(String(value), 10);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
-};
-
-const collectTokenBranchIds = (req) => {
-  const fromMapped = Array.isArray(req.user?.branchIds)
-    ? req.user.branchIds.map((id) => Number(id)).filter((id) => id > 0)
-    : [];
-  const fromSelected = Array.isArray(req.user?.selectedBranchIds)
-    ? req.user.selectedBranchIds.map((id) => Number(id)).filter((id) => id > 0)
-    : [];
-  const fromSession = Array.isArray(req.selectedBranchIds)
-    ? req.selectedBranchIds.map((id) => Number(id)).filter((id) => id > 0)
-    : [];
-
-  return [...new Set([...fromMapped, ...fromSelected, ...fromSession])];
-};
-
-const resolveReportBranchIds = async (req) => {
-  const permissions = Array.isArray(req.user?.permissions)
-    ? req.user.permissions
-    : [];
-  const canViewAll = permissions.includes(PERMISSIONS.BRANCHES_VIEW_ALL);
-
-  const requestedBranchId = parseOptionalBranchId(
-    getRequestValue(req, "branchId"),
-  );
-
-  let mappedBranchIds = [];
-
-  if (req.user?.id) {
-    mappedBranchIds = await getBranchIdsForUser(req.user.id);
-  }
-
-  if (mappedBranchIds.length === 0) {
-    mappedBranchIds = collectTokenBranchIds(req);
-  }
-
-  if (mappedBranchIds.length === 0 && canViewAll) {
-    const allBranches = await branchService.getAllBranches();
-    mappedBranchIds = allBranches.map((branch) => branch.id);
-  }
-
-  if (requestedBranchId) {
-    if (!canViewAll && !mappedBranchIds.includes(requestedBranchId)) {
-      throw new ApiError(403, "Branch is not assigned to this user");
-    }
-
-    return [requestedBranchId];
-  }
-
-  return mappedBranchIds;
-};
 
 const validateFilters = async (req, { isExport = false } = {}) => {
   const page = parsePositiveInt(getRequestParam(req, "page"), "page", 1);
@@ -145,7 +83,7 @@ const validateFilters = async (req, { isExport = false } = {}) => {
     throw new ApiError(400, "export_type must be excel or pdf");
   }
 
-  const branchIds = await resolveReportBranchIds(req);
+  const branchIds = await resolveRequestBranchIds(req);
 
   return {
     filters: {
@@ -225,9 +163,8 @@ const parseScanId = (req) => {
 
 export const getAndroidScanReport = async (req, res) => {
   const scanId = parseScanId(req);
-  const branchId = await resolveOperationalBranchId({
-    branchId: req.branchId ?? req.query?.branchId,
-  });
+  const branchIds = await resolveRequestBranchIds(req);
+  const branchId = branchIds.length === 1 ? branchIds[0] : branchIds[0] ?? null;
   const result = await androidScanReportService.getAndroidScanReport({
     scanId,
     branchId,

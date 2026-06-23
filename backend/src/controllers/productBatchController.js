@@ -1,4 +1,5 @@
 import ApiError from '../utils/ApiError.js';
+import { resolveRequestBranchIds } from '../utils/branchScope.js';
 import productBatchService from '../services/productBatchService.js';
 
 const parsePositiveInt = (value, fieldName, defaultValue) => {
@@ -16,11 +17,14 @@ const parsePositiveInt = (value, fieldName, defaultValue) => {
 };
 
 export const listBatches = async (req, res) => {
-  const data = await productBatchService.listBatches(req.branchId);
+  const branchIds = await resolveRequestBranchIds(req);
+  const data = await productBatchService.listBatches(branchIds);
 
   res.status(200).json({
     success: true,
     message: 'Batch list fetched successfully',
+    branchIds,
+    branchId: branchIds.length === 1 ? branchIds[0] : null,
     data,
   });
 };

@@ -1,6 +1,5 @@
 import ApiError from "../utils/ApiError.js";
 import { PERMISSIONS, BRANCH_SCOPE_EXEMPT_PATHS } from "../constants/permissions.js";
-import branchService from "../services/branchService.js";
 
 const parsePositiveInt = (value) => {
   const parsed = Number.parseInt(String(value), 10);
@@ -67,29 +66,7 @@ export const resolveBranchScope = async (req, res, next) => {
     return next();
   }
 
-  const tokenBranchId = parsePositiveInt(req.user?.branchId);
-
-  if (tokenBranchId && selectedBranchIds.includes(tokenBranchId)) {
-    req.branchId = tokenBranchId;
-    return next();
-  }
-
-  if (selectedBranchIds.length === 1) {
-    req.branchId = selectedBranchIds[0];
-    return next();
-  }
-
-  if (canViewAll) {
-    req.branchId = await branchService.getDefaultBranchId();
-    return next();
-  }
-
-  if (selectedBranchIds.length > 0) {
-    req.branchId = selectedBranchIds[0];
-    return next();
-  }
-
-  return next(new ApiError(403, "Branch is not assigned to this user"));
+  return next();
 };
 
 export const authorize =

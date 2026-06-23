@@ -1,5 +1,5 @@
 import ApiError from "../utils/ApiError.js";
-import { resolveOperationalBranchId } from "../utils/branchRequest.js";
+import { resolveRequestBranchIds } from "../utils/branchScope.js";
 import productService from "../services/productService.js";
 import { getRequestParam } from "../utils/requestParams.js";
 
@@ -54,39 +54,37 @@ export const getProductList = async (req, res) => {
     throw new ApiError(400, "batchId must be a positive integer");
   }
 
+  const branchIds = await resolveRequestBranchIds(req);
+
   const result = await productService.getProductList({
     search,
     page,
     limit,
     offset: (page - 1) * limit,
     batchId,
-    branchId: await resolveOperationalBranchId({
-      branchId: req.branchId ?? req.query?.branchId,
-    }),
+    branchIds,
   });
 
   res.status(200).json({
     success: true,
     message: "Product list fetched successfully",
     batchId: result.batchId,
+    branchIds: result.branchIds,
+    branchId: result.branchIds.length === 1 ? result.branchIds[0] : null,
     pagination: result.pagination,
     data: result.data,
   });
 };
 
 export const getProducts = async (req, res) => {
-  const branchId = await resolveOperationalBranchId({
-    branchId: req.branchId ?? req.query?.branchId,
-  });
-  const data = await productService.getProductsForBranch(branchId);
+  const branchIds = await resolveRequestBranchIds(req);
+  const data = await productService.getProductsForBranch(branchIds);
   sendSuccess(res, data);
 };
 
 export const getSubProducts = async (req, res) => {
   const product = getRequestParam(req, "product", "productName");
-  const branchId = await resolveOperationalBranchId({
-    branchId: req.branchId ?? req.query?.branchId,
-  });
+  const branchIds = await resolveRequestBranchIds(req);
 
   if (!product) {
     throw new ApiError(
@@ -95,7 +93,7 @@ export const getSubProducts = async (req, res) => {
     );
   }
 
-  const data = await productService.getSubProducts(product, branchId);
+  const data = await productService.getSubProducts(product, branchIds);
   sendSuccess(res, data);
 };
 
@@ -106,9 +104,7 @@ export const getCenters = async (req, res) => {
     "subProduct",
     "subProductName",
   );
-  const branchId = await resolveOperationalBranchId({
-    branchId: req.branchId ?? req.query?.branchId,
-  });
+  const branchIds = await resolveRequestBranchIds(req);
 
   if (!product) {
     throw new ApiError(
@@ -124,6 +120,6 @@ export const getCenters = async (req, res) => {
     );
   }
 
-  const data = await productService.getCenters(product, subProduct, branchId);
+  const data = await productService.getCenters(product, subProduct, branchIds);
   sendSuccess(res, data);
 };

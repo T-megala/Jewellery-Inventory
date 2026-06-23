@@ -6,6 +6,11 @@ import {
   isAllProductsByName,
   isAllSubProductsByName,
 } from '../utils/verificationScope.js';
+import {
+  activeBranchProductsFrom,
+  buildBranchSqlFilter,
+  normalizeBranchIds,
+} from '../utils/branchScope.js';
 
 const mapRowsToNamedList = (rows, column) =>
   rows.map((row, index) => ({
@@ -13,27 +18,53 @@ const mapRowsToNamedList = (rows, column) =>
     name: row[column],
   }));
 
-const activeBatchFilter = async (branchId = null) => {
-  const batchId = await getActiveBatchId(branchId);
-  return batchId ? { clause: 'AND batch_id = ?', params: [batchId] } : null;
+const buildInventoryScope = async ({ branchId = null, branchIds = null } = {}) => {
+  const scope = normalizeBranchIds({ branchId, branchIds });
+
+  if (scope.length === 0) {
+    return null;
+  }
+
+  if (scope.length === 1) {
+    const batchId = await getActiveBatchId(scope[0]);
+    return batchId
+      ? {
+          from: 'FROM products p',
+          clause: 'AND p.batch_id = ?',
+          params: [batchId],
+        }
+      : null;
+  }
+
+  const branchFilter = buildBranchSqlFilter('pub.branch_id', scope);
+
+  return {
+    from: activeBranchProductsFrom('pub'),
+    clause: branchFilter.clause,
+    params: branchFilter.params,
+  };
 };
 
-const getProducts = async ({ branchId = null, includeAllProductsOption = true } = {}) => {
-  const batchFilter = await activeBatchFilter(branchId);
+const getProducts = async ({
+  branchId = null,
+  branchIds = null,
+  includeAllProductsOption = true,
+} = {}) => {
+  const scope = await buildInventoryScope({ branchId, branchIds });
 
-  if (!batchFilter) {
+  if (!scope) {
     return includeAllProductsOption
       ? [{ id: ALL_SCOPE_ID, name: SCOPE_NAMES.ALL_PRODUCTS }]
       : [];
   }
 
   const [rows] = await pool.execute(
-    `SELECT DISTINCT product
-     FROM products
-     WHERE product IS NOT NULL AND TRIM(product) != ''
-     ${batchFilter.clause}
-     ORDER BY product ASC`,
-    batchFilter.params
+    `SELECT DISTINCT p.product
+     ${scope.from}
+     WHERE p.product IS NOT NULL AND TRIM(p.product) != ''
+     ${scope.clause}
+     ORDER BY p.product ASC`,
+    scope.params,
   );
 
   const products = mapRowsToNamedList(rows, 'product');
@@ -47,7 +78,7 @@ const getProducts = async ({ branchId = null, includeAllProductsOption = true } 
 
 const getSubProducts = async (
   productName,
-  { branchId = null, includeAllSubProductsOption = true } = {},
+  { branchId = null, branchIds = null, includeAllSubProductsOption = true } = {},
 ) => {
   if (isAllProductsByName(productName)) {
     return includeAllSubProductsOption
@@ -55,23 +86,23 @@ const getSubProducts = async (
       : [];
   }
 
-  const batchFilter = await activeBatchFilter(branchId);
+  const scope = await buildInventoryScope({ branchId, branchIds });
 
-  if (!batchFilter) {
+  if (!scope) {
     return includeAllSubProductsOption
       ? [{ id: ALL_SCOPE_ID, name: SCOPE_NAMES.ALL_SUB_PRODUCTS }]
       : [];
   }
 
   const [rows] = await pool.execute(
-    `SELECT DISTINCT sub_product
-     FROM products
-     WHERE product = ?
-       AND sub_product IS NOT NULL
-       AND TRIM(sub_product) != ''
-       ${batchFilter.clause}
-     ORDER BY sub_product ASC`,
-    [productName, ...batchFilter.params]
+    `SELECT DISTINCT p.sub_product
+     ${scope.from}
+     WHERE p.product = ?
+       AND p.sub_product IS NOT NULL
+       AND TRIM(p.sub_product) != ''
+       ${scope.clause}
+     ORDER BY p.sub_product ASC`,
+    [productName, ...scope.params],
   );
 
   const subProducts = mapRowsToNamedList(rows, 'sub_product');
@@ -89,7 +120,7 @@ const getSubProducts = async (
 const getCenters = async (
   productName,
   subProductName,
-  { branchId = null, includeAllCentersOption = true } = {},
+  { branchId = null, branchIds = null, includeAllCentersOption = true } = {},
 ) => {
   if (isAllProductsByName(productName)) {
     return includeAllCentersOption
@@ -97,16 +128,16 @@ const getCenters = async (
       : [];
   }
 
-  const batchFilter = await activeBatchFilter(branchId);
+  const scope = await buildInventoryScope({ branchId, branchIds });
 
-  if (!batchFilter) {
+  if (!scope) {
     return includeAllCentersOption
       ? [{ id: ALL_SCOPE_ID, name: SCOPE_NAMES.ALL_CENTERS }]
       : [];
   }
 
-  const params = [productName, ...batchFilter.params];
-  let subProductClause = 'AND sub_product = ?';
+  const params = [productName, ...scope.params];
+  let subProductClause = 'AND p.sub_product = ?';
 
   if (isAllSubProductsByName(subProductName)) {
     if (!includeAllCentersOption) {
@@ -119,15 +150,15 @@ const getCenters = async (
   }
 
   const [rows] = await pool.execute(
-    `SELECT DISTINCT counter_name
-     FROM products
-     WHERE product = ?
+    `SELECT DISTINCT p.counter_name
+     ${scope.from}
+     WHERE p.product = ?
        ${subProductClause}
-       AND counter_name IS NOT NULL
-       AND TRIM(counter_name) != ''
-       ${batchFilter.clause}
-     ORDER BY counter_name ASC`,
-    params
+       AND p.counter_name IS NOT NULL
+       AND TRIM(p.counter_name) != ''
+       ${scope.clause}
+     ORDER BY p.counter_name ASC`,
+    params,
   );
 
   const centers = mapRowsToNamedList(rows, 'counter_name');
