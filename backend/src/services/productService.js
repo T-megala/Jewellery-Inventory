@@ -176,4 +176,10 @@ export const getCenters = (product, subProduct, branchIds = []) =>
 
 export { getProductList };
 
-export default { getProducts, getSubProducts, getCenters, getProductList };
+export default {
+  getProducts,
+  getProductsForBranch,
+  getSubProducts,
+  getCenters,
+  getProductList,
+};
