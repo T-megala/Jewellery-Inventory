@@ -37,6 +37,27 @@ const validateDate = (value, fieldName) => {
 
 const getRequestValue = (req, ...keys) => getRequestParam(req, ...keys);
 
+const resolveReportBranchIds = (req) => {
+  const fromToken = Array.isArray(req.user?.branchIds)
+    ? req.user.branchIds.map((id) => Number(id)).filter((id) => id > 0)
+    : [];
+
+  if (fromToken.length > 0) {
+    return fromToken;
+  }
+
+  const single = Number.parseInt(String(req.user?.branchId ?? ""), 10);
+  if (Number.isInteger(single) && single > 0) {
+    return [single];
+  }
+
+  const selected = Array.isArray(req.selectedBranchIds)
+    ? req.selectedBranchIds.map((id) => Number(id)).filter((id) => id > 0)
+    : [];
+
+  return selected;
+};
+
 const validateFilters = (req, { isExport = false } = {}) => {
   const page = parsePositiveInt(getRequestParam(req, "page"), "page", 1);
   const limit = parsePositiveInt(getRequestParam(req, "limit"), "limit", 20);
@@ -45,25 +66,12 @@ const validateFilters = (req, { isExport = false } = {}) => {
     throw new ApiError(400, "limit cannot exceed 100");
   }
 
-  const fromDate = validateDate(
-    getRequestValue(req, "fromDate", "fromdate"),
-    "fromDate",
-  );
-  const toDate = validateDate(
-    getRequestValue(req, "toDate", "todate"),
-    "toDate",
-  );
-
-  if ((fromDate && !toDate) || (!fromDate && toDate)) {
-    throw new ApiError(
-      400,
-      "Both fromDate and toDate are required for date range filtering",
-    );
+  const dateRaw = getRequestValue(req, "date");
+  if (!dateRaw || !String(dateRaw).trim()) {
+    throw new ApiError(400, "Date is required");
   }
 
-  if (fromDate && toDate && fromDate > toDate) {
-    throw new ApiError(400, "fromDate cannot be greater than toDate");
-  }
+  const date = validateDate(dateRaw, "date");
 
   const requestStatus = getRequestValue(req, "status");
   const status = requestStatus
@@ -102,9 +110,8 @@ const validateFilters = (req, { isExport = false } = {}) => {
       subProductName: subProductName ? String(subProductName).trim() : null,
       centerName: centerName ? String(centerName).trim() : null,
       status,
-      fromDate,
-      toDate,
-      branchId: req.branchId ?? null,
+      date,
+      branchIds: resolveReportBranchIds(req),
     },
     pagination: {
       page,
@@ -142,7 +149,8 @@ export const getStockVerificationReport = async (req, res) => {
   res.status(200).json({
     success: true,
     message: "Report fetched successfully",
-    branchId: filters.branchId ?? null,
+    date: filters.date,
+    branchIds: filters.branchIds,
     pagination: result.pagination,
     summary: result.summary,
     data: result.data,
