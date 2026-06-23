@@ -22,6 +22,7 @@ const LATEST_SCAN_SUBQUERY = `
 
 const LATEST_SCAN_JOIN_SQL = `
   INNER JOIN (${LATEST_SCAN_SUBQUERY}) latest ON latest.verification_id = sv.id
+  INNER JOIN latest_stock_verification lsv ON lsv.id = latest.latest_scan_id
 `;
 
 const ACTIVE_BATCH_FOR_BRANCH_SQL = `(
@@ -102,6 +103,13 @@ const buildBranchFilterClause = (filters) => {
 
   if (branchIds.length === 0) {
     return { clause: "AND 1 = 0", params: [] };
+  }
+
+  if (branchIds.length === 1) {
+    return {
+      clause: "AND sv.branch_id = ?",
+      params: [branchIds[0]],
+    };
   }
 
   const placeholders = branchIds.map(() => "?").join(", ");
@@ -215,7 +223,10 @@ const buildHeaderFilterClause = (filters) => {
 };
 
 const buildStoredDetailFilterClause = (filters, { includeStatus = true } = {}) => {
-  const conditions = ["svd.latest_scan_id = latest.latest_scan_id"];
+  const conditions = [
+    "svd.verification_id = sv.id",
+    "AND svd.latest_scan_id = lsv.id",
+  ];
   const params = [];
   const branchFilter = buildBranchFilterClause(filters);
   const dateFilter = buildDateFilterClause(filters);

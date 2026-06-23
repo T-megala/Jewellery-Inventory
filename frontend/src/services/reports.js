@@ -8,8 +8,7 @@ function buildReportParams(filters = {}) {
     subProductName: filters.subProductName,
     centerName: filters.centerName,
     status: filters.status,
-    fromDate: filters.fromDate,
-    toDate: filters.toDate,
+    date: filters.date,
   };
 }
 

@@ -1,8 +1,10 @@
 import ApiError from "../utils/ApiError.js";
 import { resolveOperationalBranchId } from "../utils/branchRequest.js";
 import { PERMISSIONS } from "../constants/permissions.js";
+import branchService from "../services/branchService.js";
 import stockVerificationReportService from "../services/stockVerificationReportService.js";
 import androidScanReportService from "../services/androidScanReportService.js";
+import { getBranchIdsForUser } from "../services/userBranchService.js";
 import { getRequestParam } from "../utils/requestParams.js";
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -47,50 +49,57 @@ const parseOptionalBranchId = (value) => {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 };
 
-const getMappedBranchIds = (req) => {
-  const fromToken = Array.isArray(req.user?.branchIds)
+const collectTokenBranchIds = (req) => {
+  const fromMapped = Array.isArray(req.user?.branchIds)
     ? req.user.branchIds.map((id) => Number(id)).filter((id) => id > 0)
     : [];
-
-  if (fromToken.length > 0) {
-    return fromToken;
-  }
-
-  const single = parseOptionalBranchId(req.user?.branchId);
-  if (single) {
-    return [single];
-  }
-
-  const selected = Array.isArray(req.selectedBranchIds)
+  const fromSelected = Array.isArray(req.user?.selectedBranchIds)
+    ? req.user.selectedBranchIds.map((id) => Number(id)).filter((id) => id > 0)
+    : [];
+  const fromSession = Array.isArray(req.selectedBranchIds)
     ? req.selectedBranchIds.map((id) => Number(id)).filter((id) => id > 0)
     : [];
 
-  return selected;
+  return [...new Set([...fromMapped, ...fromSelected, ...fromSession])];
 };
 
-const resolveReportBranchIds = (req) => {
-  const mappedBranchIds = getMappedBranchIds(req);
-  const requestedBranchId =
-    parseOptionalBranchId(getRequestValue(req, "branchId")) ??
-    parseOptionalBranchId(req.branchId);
-
-  if (!requestedBranchId) {
-    return mappedBranchIds;
-  }
-
+const resolveReportBranchIds = async (req) => {
   const permissions = Array.isArray(req.user?.permissions)
     ? req.user.permissions
     : [];
   const canViewAll = permissions.includes(PERMISSIONS.BRANCHES_VIEW_ALL);
 
-  if (!canViewAll && !mappedBranchIds.includes(requestedBranchId)) {
-    throw new ApiError(403, "Branch is not assigned to this user");
+  const requestedBranchId = parseOptionalBranchId(
+    getRequestValue(req, "branchId"),
+  );
+
+  let mappedBranchIds = [];
+
+  if (req.user?.id) {
+    mappedBranchIds = await getBranchIdsForUser(req.user.id);
   }
 
-  return [requestedBranchId];
+  if (mappedBranchIds.length === 0) {
+    mappedBranchIds = collectTokenBranchIds(req);
+  }
+
+  if (mappedBranchIds.length === 0 && canViewAll) {
+    const allBranches = await branchService.getAllBranches();
+    mappedBranchIds = allBranches.map((branch) => branch.id);
+  }
+
+  if (requestedBranchId) {
+    if (!canViewAll && !mappedBranchIds.includes(requestedBranchId)) {
+      throw new ApiError(403, "Branch is not assigned to this user");
+    }
+
+    return [requestedBranchId];
+  }
+
+  return mappedBranchIds;
 };
 
-const validateFilters = (req, { isExport = false } = {}) => {
+const validateFilters = async (req, { isExport = false } = {}) => {
   const page = parsePositiveInt(getRequestParam(req, "page"), "page", 1);
   const limit = parsePositiveInt(getRequestParam(req, "limit"), "limit", 20);
 
@@ -136,6 +145,8 @@ const validateFilters = (req, { isExport = false } = {}) => {
     throw new ApiError(400, "export_type must be excel or pdf");
   }
 
+  const branchIds = await resolveReportBranchIds(req);
+
   return {
     filters: {
       productName: productName ? String(productName).trim() : null,
@@ -143,7 +154,7 @@ const validateFilters = (req, { isExport = false } = {}) => {
       centerName: centerName ? String(centerName).trim() : null,
       status,
       date,
-      branchIds: resolveReportBranchIds(req),
+      branchIds,
     },
     pagination: {
       page,
@@ -155,7 +166,7 @@ const validateFilters = (req, { isExport = false } = {}) => {
 };
 
 export const getStockVerificationReport = async (req, res) => {
-  const { filters, pagination, exportType } = validateFilters(req, {
+  const { filters, pagination, exportType } = await validateFilters(req, {
     isExport: Boolean(getRequestValue(req, "export_type", "exportType")),
   });
 

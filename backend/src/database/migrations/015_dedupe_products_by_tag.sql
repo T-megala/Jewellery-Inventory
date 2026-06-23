@@ -1,4 +1,4 @@
--- Remove duplicate (batch_id, tag) rows; keep the row with the highest id per trimmed tag.
+-- Remove duplicate (batch_id, tag) rows and keep the row with the highest id per trimmed tag.
 DELETE FROM products
 WHERE id NOT IN (
   SELECT keep_id FROM (

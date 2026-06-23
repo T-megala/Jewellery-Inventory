@@ -218,6 +218,7 @@ const findExistingVerificationId = async (
   connection,
   verificationEpochSeconds,
   scopeLabels,
+  branchId,
 ) => {
   const [rows] = await connection.execute(
     `SELECT id
@@ -226,6 +227,7 @@ const findExistingVerificationId = async (
        AND product_name = ?
        AND sub_product_name = ?
        AND center_name = ?
+       AND branch_id = ?
      LIMIT 1
      FOR UPDATE`,
     [
@@ -233,6 +235,7 @@ const findExistingVerificationId = async (
       scopeLabels.productName,
       scopeLabels.subProductName,
       scopeLabels.centerName,
+      branchId,
     ],
   );
 
@@ -253,6 +256,7 @@ const upsertVerificationHeader = async (
     connection,
     verificationEpochSeconds,
     scopeLabels,
+    branchId,
   );
 
   if (existingId) {
@@ -323,6 +327,7 @@ const insertLatestScan = async (
   connection,
   {
     verificationId,
+    branchId,
     verificationEpochSeconds,
     datetimeMillis,
     scopeLabels,
@@ -335,12 +340,13 @@ const insertLatestScan = async (
 ) => {
   const [result] = await connection.execute(
     `INSERT INTO latest_stock_verification
-      (verification_id, verification_date, verification_day, verification_millis,
+      (verification_id, branch_id, verification_date, verification_day, verification_millis,
        product_name, sub_product_name, center_name, total_expected, total_scanned,
        found_count, missing_count, new_count)
-     VALUES (?, FROM_UNIXTIME(?), DATE(FROM_UNIXTIME(?)), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, FROM_UNIXTIME(?), DATE(FROM_UNIXTIME(?)), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       verificationId,
+      branchId,
       verificationEpochSeconds,
       verificationEpochSeconds,
       datetimeMillis,
@@ -493,6 +499,7 @@ const uploadStockVerification = async ({
 
     const latestScanId = await insertLatestScan(connection, {
       verificationId,
+      branchId: resolvedBranchId,
       verificationEpochSeconds,
       datetimeMillis,
       scopeLabels,

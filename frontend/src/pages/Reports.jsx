@@ -169,7 +169,7 @@ export default function Reports() {
   const [subProduct, setSubProduct] = useState('')
   const [counter, setCounter] = useState('')
   const [status, setStatus] = useState('')
-  const [selectedDate, setSelectedDate] = useState('')
+  const [selectedDate, setSelectedDate] = useState(getTodayDate())
 
   const [products, setProducts] = useState([])
   const [subProducts, setSubProducts] = useState([])
@@ -193,8 +193,7 @@ export default function Reports() {
     subProductName: subProduct || undefined,
     centerName: counter || undefined,
     status: status || undefined,
-    fromDate: selectedDate || undefined,
-    toDate: selectedDate || undefined,
+    date: selectedDate || undefined,
   }), [product, subProduct, counter, status, selectedDate])
 
   useEffect(() => {
@@ -327,7 +326,7 @@ export default function Reports() {
     setSubProduct('')
     setCounter('')
     setStatus('')
-    setSelectedDate('')
+    setSelectedDate(getTodayDate())
     setRows([])
     setSummary(null)
     setPagination(null)

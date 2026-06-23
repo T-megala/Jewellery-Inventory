@@ -77,7 +77,17 @@ const fetchScanRow = async (scanId) => {
   return rows[0] ?? null;
 };
 
-const fetchLatestScanRow = async () => {
+const fetchLatestScanRow = async (branchId = null) => {
+  const conditions = [];
+  const params = [];
+
+  if (branchId) {
+    conditions.push("branch_id = ?");
+    params.push(branchId);
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
   const [rows] = await pool.execute(
     `SELECT
        id,
@@ -95,8 +105,10 @@ const fetchLatestScanRow = async () => {
        new_count,
        created_at
      FROM latest_stock_verification
+     ${whereClause}
      ORDER BY id DESC
      LIMIT 1`,
+    params,
   );
 
   return rows[0] ?? null;
@@ -172,7 +184,7 @@ const mapScanResponse = (scanRow) => ({
 const getAndroidScanReport = async ({ scanId, branchId = null } = {}) => {
   const scanRow = scanId
     ? await fetchScanRow(scanId)
-    : await fetchLatestScanRow();
+    : await fetchLatestScanRow(branchId);
 
   if (!scanRow) {
     throw new ApiError(404, "No stock verification scan found");

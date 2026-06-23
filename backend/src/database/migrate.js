@@ -28,6 +28,7 @@ const files = [
   "024_drop_branch_is_main_is_active.sql",
   "025_split_master_permissions.sql",
   "026_stock_verification_report_indexes.sql",
+  "027_verification_per_branch_latest_scan.sql",
 ];
 
 const SKIPPABLE_ERROR_CODES = new Set([
@@ -44,8 +45,9 @@ async function runSqlFile(file) {
   const sqlPath = path.join(__dirname, "migrations", file);
   const sql = fs.readFileSync(sqlPath, "utf8");
   const statements = sql
+    .replace(/--.*$/gm, "")
     .split(";")
-    .map((s) => s.replace(/--.*$/gm, "").trim())
+    .map((s) => s.trim())
     .filter((s) => s.length > 0);
 
   for (const statement of statements) {
