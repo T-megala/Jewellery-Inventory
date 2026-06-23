@@ -189,38 +189,6 @@ export async function selectBranches(branchIds) {
   return data
 }
 
-export async function switchBranch(branchId) {
-  const token = getToken()
-
-  if (!token) {
-    throw new Error('Authentication token is required')
-  }
-
-  const res = await fetch(apiUrl('/auth/switch-branch'), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ branchId }),
-  })
-
-  let json
-  try {
-    json = await res.json()
-  } catch {
-    throw new Error('Unexpected server response')
-  }
-
-  if (!res.ok) {
-    throw new Error(json?.message || 'Failed to switch branch')
-  }
-
-  const data = parseAuthResponse(json, 'Failed to switch branch')
-  applyAuthSession(data.token, data.user)
-  return data
-}
-
 export async function fetchProfile() {
   const token = getToken()
 

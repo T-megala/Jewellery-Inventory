@@ -506,6 +506,17 @@ export default function Reports() {
             <div className="reports-results__body">
               <div className="reports-table-scroll">
                 <table className="reports-table">
+                  <colgroup>
+                    <col className="reports-col reports-col--sno" />
+                    <col className="reports-col reports-col--date" />
+                    <col className="reports-col reports-col--branch" />
+                    <col className="reports-col reports-col--product" />
+                    <col className="reports-col reports-col--subproduct" />
+                    <col className="reports-col reports-col--counter" />
+                    <col className="reports-col reports-col--tag" />
+                    <col className="reports-col reports-col--pieces" />
+                    <col className="reports-col reports-col--status" />
+                  </colgroup>
                   <thead>
                     <tr>
                       <th>S.No</th>
@@ -532,12 +543,16 @@ export default function Reports() {
                           )}
                         </td>
                         <td>{row.branch?.name || '—'}</td>
-                        <td className="reports-table__product">
+                        <td className="reports-table__product" title={row.product || undefined}>
                           {formatScopeDisplay(row.product, row.status)}
                         </td>
-                        <td>{formatScopeDisplay(row.subProduct, row.status)}</td>
-                        <td>{formatScopeDisplay(row.counter, row.status)}</td>
-                        <td className="reports-table__tag">{row.tagNo}</td>
+                        <td className="reports-table__subproduct" title={row.subProduct || undefined}>
+                          {formatScopeDisplay(row.subProduct, row.status)}
+                        </td>
+                        <td className="reports-table__counter" title={row.counter || undefined}>
+                          {formatScopeDisplay(row.counter, row.status)}
+                        </td>
+                        <td className="reports-table__tag" title={row.tagNo || undefined}>{row.tagNo}</td>
                         <td className="reports-table__pieces">{formatPieces(row.pieces)}</td>
                         <td>
                           <span className={statusBadgeClass(row.status)}>

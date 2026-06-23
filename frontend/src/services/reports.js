@@ -1,4 +1,4 @@
-import { apiFetchRaw, apiFetchReport, buildQueryString } from './api.js';
+import { apiFetchRaw, apiFetchReport, buildQueryString, withBranchParams } from './api.js';
 
 function buildReportParams(filters = {}) {
   return {
@@ -23,12 +23,12 @@ function parseFilename(res, fallback) {
 }
 
 export async function downloadReportExport(filters = {}, exportType) {
-  const query = buildQueryString({
+  const query = buildQueryString(withBranchParams({
     ...buildReportParams(filters),
     page: undefined,
     limit: undefined,
     export_type: exportType,
-  });
+  }));
 
   const res = await apiFetchRaw(`/stock-verification/report?${query}`);
 

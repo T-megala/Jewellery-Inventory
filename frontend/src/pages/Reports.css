@@ -548,11 +548,22 @@
 
 .reports-table {
   width: 100%;
+  min-width: 1080px;
   table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
   font-size: 0.8125rem;
 }
+
+.reports-col--sno { width: 48px; }
+.reports-col--date { width: 104px; }
+.reports-col--branch { width: 92px; }
+.reports-col--product { width: 15%; }
+.reports-col--subproduct { width: 15%; }
+.reports-col--counter { width: 13%; }
+.reports-col--tag { width: 128px; }
+.reports-col--pieces { width: 64px; }
+.reports-col--status { width: 88px; }
 
 .reports-table thead th {
   position: sticky;
@@ -568,16 +579,13 @@
   background: #f9f5ef;
   border-bottom: 2px solid rgba(184, 134, 11, 0.12);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.reports-table thead th:nth-child(1) { width: 40px; }
-.reports-table thead th:nth-child(2) { width: 86px; }
-.reports-table thead th:nth-child(3) { width: 18%; }
-.reports-table thead th:nth-child(4) { width: 18%; }
-.reports-table thead th:nth-child(5) { width: 16%; }
-.reports-table thead th:nth-child(6) { width: 13%; }
-.reports-table thead th:nth-child(7) { width: 6%; }
-.reports-table thead th:nth-child(8) { width: 8%; }
+.reports-table thead th:nth-child(8) {
+  text-align: right;
+}
 
 .reports-table thead th:first-child {
   text-align: center;
@@ -610,7 +618,7 @@
 }
 
 .reports-table__sno {
-  width: 40px;
+  width: 48px;
   padding-inline: 6px;
   text-align: center;
   font-size: 0.75rem;
@@ -620,9 +628,9 @@
 }
 
 .reports-table__date {
-  width: 86px;
-  min-width: 86px;
-  max-width: 86px;
+  width: 104px;
+  min-width: 104px;
+  max-width: 104px;
   padding-inline: 8px;
   white-space: normal;
   vertical-align: middle;
@@ -645,22 +653,23 @@
   font-variant-numeric: tabular-nums;
 }
 
-.reports-table__product {
-  font-weight: 600;
-  color: #1c1410;
+.reports-table__product,
+.reports-table__subproduct,
+.reports-table__counter {
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.reports-table td:nth-child(4),
-.reports-table td:nth-child(5) {
-  overflow: hidden;
-  text-overflow: ellipsis;
+.reports-table__product {
+  font-weight: 600;
+  color: #1c1410;
 }
 
 .reports-table__tag {
   font-weight: 500;
   color: #8b6914;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .reports-table__pieces {

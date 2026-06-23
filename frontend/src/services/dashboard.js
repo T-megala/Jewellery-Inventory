@@ -1,4 +1,4 @@
-import { apiFetch, apiUrl, buildQueryString, getAuthHeaders } from './api.js';
+import { apiFetch, apiUrl, buildQueryString, getAuthHeaders, withBranchParams } from './api.js';
 
 const EMPTY_VERIFICATION = {
   totalFound: 0,
@@ -120,7 +120,7 @@ export async function fetchDashboard() {
 }
 
 export async function fetchTopSoldProducts({ period = 'all' } = {}) {
-  const query = buildQueryString({ period });
+  const query = buildQueryString(withBranchParams({ period }));
   const data = await apiFetch(`/dashboard/top-sold-products?${query}`);
 
   return (data || []).map((row) => ({
@@ -131,7 +131,7 @@ export async function fetchTopSoldProducts({ period = 'all' } = {}) {
 }
 
 export async function fetchDayWiseSales({ period = 'week', counter = 'all' } = {}) {
-  const query = buildQueryString({ period, counter });
+  const query = buildQueryString(withBranchParams({ period, counter }));
   const res = await fetch(apiUrl(`/dashboard/day-wise-sales?${query}`), {
     method: 'GET',
     headers: {
@@ -164,7 +164,7 @@ export async function fetchDayWiseSales({ period = 'week', counter = 'all' } = {
 }
 
 export async function fetchDailyImports({ period = 'week', counter = 'ALL' } = {}) {
-  const query = buildQueryString({ period, counter });
+  const query = buildQueryString(withBranchParams({ period, counter }));
   const res = await fetch(apiUrl(`/dashboard/daily-imports?${query}`), {
     method: 'GET',
     headers: {
@@ -222,7 +222,7 @@ export async function fetchBranchComparison() {
 }
 
 export async function fetchStockMovement({ slowDays = 60, fastDays = 30, limit = 3 } = {}) {
-  const query = buildQueryString({ slowDays, fastDays, limit });
+  const query = buildQueryString(withBranchParams({ slowDays, fastDays, limit }));
   const res = await fetch(apiUrl(`/dashboard/stock-movement?${query}`), {
     method: 'GET',
     headers: {

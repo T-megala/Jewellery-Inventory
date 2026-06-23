@@ -30,13 +30,10 @@ function StepItem({ number, label, state }) {
 
 export default function Import() {
   const fileInputRef = useRef(null)
-  const { activeBranchId, sessionBranches } = useBranchScope()
+  const { sessionBranches } = useBranchScope()
   const showBranchSelect = sessionBranches.length > 1
   const singleBranchId = sessionBranches.length === 1 ? sessionBranches[0].id : null
-  const defaultBranchId = activeBranchId ?? sessionBranches[0]?.id ?? ''
-  const [selectedBranchId, setSelectedBranchId] = useState(
-    defaultBranchId ? String(defaultBranchId) : '',
-  )
+  const [selectedBranchId, setSelectedBranchId] = useState('')
   const importBranchId = singleBranchId ?? (selectedBranchId ? Number(selectedBranchId) : null)
   const [selectedFile, setSelectedFile] = useState(null)
   const [result, setResult] = useState(null)
@@ -51,12 +48,6 @@ export default function Import() {
     const timer = setTimeout(() => setToast(''), 5000)
     return () => clearTimeout(timer)
   }, [toast])
-
-  useEffect(() => {
-    if (showBranchSelect && activeBranchId) {
-      setSelectedBranchId(String(activeBranchId))
-    }
-  }, [activeBranchId, showBranchSelect])
 
   function selectFile(file) {
     if (!file) return

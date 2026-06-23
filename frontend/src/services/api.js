@@ -24,6 +24,17 @@ export function withBranchParams(params = {}, branchId) {
   return { ...params, branchId: resolvedBranchId };
 }
 
+function withBranchPath(path, branchId) {
+  const resolvedBranchId = branchId !== undefined ? branchId : getOperationalBranchId();
+  if (!resolvedBranchId || path.includes('branchId=')) return path;
+
+  const [pathname, search = ''] = path.split('?');
+  const params = new URLSearchParams(search);
+  params.set('branchId', String(resolvedBranchId));
+  const query = params.toString();
+  return query ? `${pathname}?${query}` : pathname;
+}
+
 export function buildQueryString(params) {
   return Object.entries(params)
     .filter(([, value]) => value !== undefined && value !== null && value !== '')
@@ -71,7 +82,7 @@ function buildJsonHeaders(options = {}) {
 }
 
 export async function apiFetch(path, options = {}) {
-  const res = await fetch(apiUrl(path), {
+  const res = await fetch(apiUrl(withBranchPath(path)), {
     ...options,
     headers: buildJsonHeaders(options),
   });
@@ -94,7 +105,7 @@ export async function apiUpload(path, formData) {
 }
 
 export async function apiFetchPaged(path, options = {}) {
-  const res = await fetch(apiUrl(path), {
+  const res = await fetch(apiUrl(withBranchPath(path)), {
     ...options,
     headers: buildJsonHeaders(options),
   });
@@ -133,7 +144,7 @@ export async function apiFetchReport(path, params = {}) {
 
 /** Authenticated fetch for non-JSON responses (e.g. file downloads). */
 export async function apiFetchRaw(path, options = {}) {
-  return fetch(apiUrl(path), {
+  return fetch(apiUrl(withBranchPath(path)), {
     ...options,
     headers: {
       ...getAuthHeaders(),

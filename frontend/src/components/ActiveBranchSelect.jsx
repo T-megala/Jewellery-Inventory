@@ -1,8 +1,6 @@
-import { useState } from 'react'
 import {
   ALL_BRANCHES_VALUE,
   setOperationalBranch,
-  switchBranch,
 } from '../services/auth.js'
 import { useBranchScope } from '../hooks/useBranchScope.js'
 import './ActiveBranchSelect.css'
@@ -14,8 +12,6 @@ export default function ActiveBranchSelect({
   layout = 'default',
 }) {
   const { operationalValue } = useBranchScope()
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
 
   if (!branches?.length) {
     return null
@@ -27,28 +23,18 @@ export default function ActiveBranchSelect({
 
   const selectId = `active-branch-select-${layout}`
 
-  async function handleChange(event) {
+  function handleChange(event) {
     const value = event.target.value
-    if (value === operationalValue || saving) return
+    if (value === operationalValue) return
 
-    setError('')
-    setSaving(true)
+    if (value === ALL_BRANCHES_VALUE) {
+      setOperationalBranch(ALL_BRANCHES_VALUE)
+      return
+    }
 
-    try {
-      if (value === ALL_BRANCHES_VALUE) {
-        setOperationalBranch(ALL_BRANCHES_VALUE)
-        return
-      }
-
-      const nextId = Number(value)
-      if (!nextId) return
-
-      await switchBranch(nextId)
+    const nextId = Number(value)
+    if (nextId) {
       setOperationalBranch(nextId)
-    } catch (err) {
-      setError(err.message || 'Failed to switch branch.')
-    } finally {
-      setSaving(false)
     }
   }
 
@@ -59,7 +45,7 @@ export default function ActiveBranchSelect({
         className="active-branch-select__control"
         value={operationalValue}
         onChange={handleChange}
-        disabled={disabled || saving}
+        disabled={disabled}
         aria-label="Select branch"
       >
         {branches.length > 1 && (
@@ -88,9 +74,6 @@ export default function ActiveBranchSelect({
       <label className="report-field active-branch-select active-branch-select--filter" htmlFor={selectId}>
         <span>Branch</span>
         {selectControl}
-        {error && (
-          <p className="active-branch-select__error" role="alert">{error}</p>
-        )}
       </label>
     )
   }
@@ -101,9 +84,6 @@ export default function ActiveBranchSelect({
         Branch
       </label>
       {selectControl}
-      {error && (
-        <p className="active-branch-select__error" role="alert">{error}</p>
-      )}
     </div>
   )
 }

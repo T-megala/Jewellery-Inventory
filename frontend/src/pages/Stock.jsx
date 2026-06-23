@@ -150,6 +150,7 @@ export default function Stock() {
                     <th>S.No</th>
                     <th>Tran No</th>
                     <th>Tran Date</th>
+                    <th>Branch</th>
                     <th>Product</th>
                     <th>Sub Product</th>
                     <th>Tag / Packet No</th>
@@ -167,6 +168,7 @@ export default function Stock() {
                       <td className="stock-cell--sno">{(page - 1) * pageSize + index + 1}</td>
                       <td>{formatValue(row.tranNo)}</td>
                       <td>{formatValue(row.tranDate)}</td>
+                      <td>{formatValue(row.branchName)}</td>
                       <td>{formatValue(row.product)}</td>
                       <td>{formatValue(row.subProduct)}</td>
                       <td>{formatValue(row.tagPacketNo)}</td>
