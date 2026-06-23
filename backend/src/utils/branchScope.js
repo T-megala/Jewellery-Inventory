@@ -146,11 +146,19 @@ export const resolveRequestBranchIds = async (req) => {
   return sessionBranchIds;
 };
 
-export const activeBranchProductsFrom = (batchAlias = "pub") => `
+export const activeBranchProductsJoin = (batchAlias = "pub") => `
   FROM products p
   INNER JOIN product_upload_batches ${batchAlias}
     ON ${batchAlias}.id = p.batch_id
    AND ${batchAlias}.is_active = 1
-  WHERE p.product IS NOT NULL
-    AND TRIM(p.product) != ''
+`;
+
+export const activeBranchProductsWhere = `
+  p.product IS NOT NULL
+  AND TRIM(p.product) != ''
+`;
+
+export const activeBranchProductsFrom = (batchAlias = "pub") => `
+  ${activeBranchProductsJoin(batchAlias)}
+  WHERE ${activeBranchProductsWhere}
 `;

@@ -6,7 +6,8 @@ import dailySalesSummaryService from "./dailySalesSummaryService.js";
 import { batchProductsFrom, batchAllProductsFrom } from "../utils/productQueryHelper.js";
 import { TAG_EXPR } from "../utils/verificationScope.js";
 import {
-  activeBranchProductsFrom,
+  activeBranchProductsJoin,
+  activeBranchProductsWhere,
   buildBranchSqlFilter,
   normalizeBranchIds,
 } from "../utils/branchScope.js";
@@ -713,7 +714,7 @@ const getInventorySummary = async ({ branchId = null, branchIds = null } = {}) =
     queryParams = [batchId];
   } else {
     const branchFilter = buildBranchSqlFilter("pub.branch_id", scope);
-    baseFrom = `${activeBranchProductsFrom("pub")} ${branchFilter.clause}`;
+    baseFrom = `${activeBranchProductsJoin("pub")} WHERE ${activeBranchProductsWhere} ${branchFilter.clause}`;
     queryParams = [...branchFilter.params];
   }
 

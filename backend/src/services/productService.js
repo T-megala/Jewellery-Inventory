@@ -3,7 +3,8 @@ import { getActiveBatchId } from "./productBatchService.js";
 import inventoryDropdownService from "./inventoryDropdownService.js";
 import { batchAllProductsWhere } from "../utils/productQueryHelper.js";
 import {
-  activeBranchProductsFrom,
+  activeBranchProductsJoin,
+  activeBranchProductsWhere,
   buildBranchSqlFilter,
   normalizeBranchIds,
 } from "../utils/branchScope.js";
@@ -94,13 +95,14 @@ const buildProductListQuery = ({ search, batchId = null, branchIds = [] }) => {
 
   return {
     baseFrom: `
-      ${activeBranchProductsFrom("pub")}
+      ${activeBranchProductsJoin("pub")}
       LEFT JOIN branches b ON b.id = pub.branch_id
+      WHERE ${activeBranchProductsWhere}
       ${branchFilter.clause}
       ${searchClause}
     `,
     params: [...branchFilter.params, ...searchParams],
-    batchId: scope.length === 1 ? null : null,
+    batchId: null,
   };
 };
 

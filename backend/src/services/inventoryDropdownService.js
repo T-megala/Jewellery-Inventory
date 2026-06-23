@@ -7,7 +7,8 @@ import {
   isAllSubProductsByName,
 } from '../utils/verificationScope.js';
 import {
-  activeBranchProductsFrom,
+  activeBranchProductsJoin,
+  activeBranchProductsWhere,
   buildBranchSqlFilter,
   normalizeBranchIds,
 } from '../utils/branchScope.js';
@@ -39,8 +40,8 @@ const buildInventoryScope = async ({ branchId = null, branchIds = null } = {}) =
   const branchFilter = buildBranchSqlFilter('pub.branch_id', scope);
 
   return {
-    from: activeBranchProductsFrom('pub'),
-    clause: branchFilter.clause,
+    from: activeBranchProductsJoin('pub'),
+    clause: `${branchFilter.clause}`,
     params: branchFilter.params,
   };
 };
@@ -61,7 +62,7 @@ const getProducts = async ({
   const [rows] = await pool.execute(
     `SELECT DISTINCT p.product
      ${scope.from}
-     WHERE p.product IS NOT NULL AND TRIM(p.product) != ''
+     WHERE ${activeBranchProductsWhere}
      ${scope.clause}
      ORDER BY p.product ASC`,
     scope.params,
