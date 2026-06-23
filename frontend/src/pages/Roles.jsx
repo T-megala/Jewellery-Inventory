@@ -21,6 +21,49 @@ const EMPTY_FORM = {
   permissionIds: [],
 }
 
+const MODULE_LABELS = {
+  dashboard: 'Dashboard',
+  products: 'Products',
+  batches: 'Batches',
+  stock_verification: 'Stock verification',
+  users: 'Users',
+  branches: 'Branches',
+  roles: 'Roles',
+}
+
+const ACTION_LABELS = {
+  view: 'View',
+  add: 'Create',
+  update: 'Update',
+  delete: 'Delete',
+  import: 'Import',
+  upload: 'Upload',
+  report: 'View reports',
+  export: 'Export',
+  manage: 'Manage',
+  view_all: 'View all branches',
+}
+
+function titleCase(value) {
+  return String(value || '')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
+function formatModuleName(module) {
+  return MODULE_LABELS[module] || titleCase(module) || 'Other'
+}
+
+function getPermissionLabel(permission) {
+  if (permission.description?.trim()) {
+    return permission.description.trim()
+  }
+
+  const action = ACTION_LABELS[permission.action] || titleCase(permission.action)
+  const module = formatModuleName(permission.module)
+  return `${action} ${module}`.trim()
+}
+
 function formatDate(value) {
   if (!value) return '—'
   const date = new Date(value)
@@ -128,7 +171,11 @@ export default function Roles() {
       const haystack = [
         role.name,
         role.description,
-        ...role.permissions.map((permission) => permission.name),
+        ...role.permissions.flatMap((permission) => [
+          permission.name,
+          permission.description,
+          getPermissionLabel(permission),
+        ]),
       ]
         .filter(Boolean)
         .join(' ')
@@ -536,7 +583,7 @@ export default function Roles() {
                         .sort(([a], [b]) => a.localeCompare(b))
                         .map(([moduleName, modulePermissions]) => (
                         <section key={moduleName} className="roles-permissions__group">
-                          <h3 className="roles-permissions__group-title">{moduleName}</h3>
+                          <h3 className="roles-permissions__group-title">{formatModuleName(moduleName)}</h3>
                           <div className="roles-permissions__list">
                             {modulePermissions.map((permission) => (
                               <label key={permission.id} className="roles-permission">
@@ -547,10 +594,7 @@ export default function Roles() {
                                   disabled={saving}
                                 />
                                 <span className="roles-permission__text">
-                                  <strong>{permission.name}</strong>
-                                  {permission.description && (
-                                    <small>{permission.description}</small>
-                                  )}
+                                  <strong>{getPermissionLabel(permission)}</strong>
                                 </span>
                               </label>
                             ))}

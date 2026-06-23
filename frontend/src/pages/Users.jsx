@@ -11,6 +11,7 @@ import {
   fetchUsers,
   updateUser,
 } from '../services/users.js'
+import { useBranchScope } from '../hooks/useBranchScope.js'
 import '../components/BranchMultiSelect.css'
 import '../components/FieldError.css'
 import { mapUserSaveError, scrollToFirstFieldError } from '../utils/formValidation.js'
@@ -106,11 +107,11 @@ function UserBranchTags({ branches }) {
 }
 
 export default function Users() {
+  const { operationalBranchId } = useBranchScope()
   const [users, setUsers] = useState([])
   const [branches, setBranches] = useState([])
   const [roles, setRoles] = useState([])
   const [searchInput, setSearchInput] = useState('')
-  const [branchFilterId, setBranchFilterId] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
 
@@ -200,7 +201,7 @@ export default function Users() {
 
   const filteredUsers = useMemo(() => {
     const term = searchInput.trim().toLowerCase()
-    const branchId = branchFilterId ? Number(branchFilterId) : null
+    const branchId = operationalBranchId
 
     return users.filter((user) => {
       if (branchId && !(user.branches || []).some((branch) => branch.id === branchId)) {
@@ -209,7 +210,7 @@ export default function Users() {
 
       return matchesUserSearch(user, term)
     })
-  }, [users, searchInput, branchFilterId])
+  }, [users, searchInput, operationalBranchId])
 
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize))
 
@@ -220,7 +221,7 @@ export default function Users() {
 
   useEffect(() => {
     setPage(1)
-  }, [searchInput, branchFilterId, pageSize])
+  }, [searchInput, operationalBranchId, pageSize])
 
   useEffect(() => {
     if (page > totalPages) {
@@ -308,6 +309,11 @@ export default function Users() {
 
       return [...normalized, id]
     })
+    clearFieldError('branches')
+  }
+
+  function handleSelectAllBranches(branchIds) {
+    setSelectedBranchIds(normalizeBranchIds(branchIds))
     clearFieldError('branches')
   }
 
@@ -473,20 +479,6 @@ export default function Users() {
                 </button>
               )}
             </div>
-
-            <label className="users-branch-filter">
-              <span className="users-branch-filter__label">Branch</span>
-              <select
-                value={branchFilterId}
-                onChange={(e) => setBranchFilterId(e.target.value)}
-                aria-label="Filter by branch"
-              >
-                <option value="">All branches</option>
-                {branches.map((branch) => (
-                  <option key={branch.id} value={branch.id}>{branch.name}</option>
-                ))}
-              </select>
-            </label>
           </div>
 
           <div className="users-list__actions">
@@ -747,6 +739,7 @@ export default function Users() {
                     branches={formBranches}
                     selectedIds={selectedBranchIds}
                     onToggle={toggleBranch}
+                    onSelectAll={handleSelectAllBranches}
                     onClearAll={() => setSelectedBranchIds([])}
                     disabled={saving}
                     loading={optionsLoading}

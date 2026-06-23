@@ -18,6 +18,7 @@ export default function BranchMultiSelect({
   branches,
   selectedIds,
   onToggle,
+  onSelectAll,
   onClearAll,
   disabled = false,
   loading = false,
@@ -41,6 +42,17 @@ export default function BranchMultiSelect({
     () => activeBranches.filter((branch) => isBranchSelected(selectedIds, branch.id)),
     [activeBranches, selectedIds],
   )
+
+  const allVisibleSelected = filteredBranches.length > 0
+    && filteredBranches.every((branch) => isBranchSelected(selectedIds, branch.id))
+
+  function handleSelectAllVisible() {
+    if (!filteredBranches.length || !onSelectAll) return
+
+    const visibleIds = filteredBranches.map((branch) => branch.id)
+    const merged = [...new Set([...selectedIds.map(Number), ...visibleIds.map(Number)])]
+    onSelectAll(merged)
+  }
 
   return (
     <div className="branch-multi-select">
@@ -78,6 +90,19 @@ export default function BranchMultiSelect({
           {' '}
           selected
         </span>
+
+        {onSelectAll && (
+          <div className="branch-multi-select__actions">
+            <button
+              type="button"
+              className="branch-multi-select__action"
+              onClick={handleSelectAllVisible}
+              disabled={disabled || loading || !filteredBranches.length || allVisibleSelected}
+            >
+              {searchTerm ? 'Select visible' : 'Select all'}
+            </button>
+          </div>
+        )}
       </div>
 
       <div className={`branch-multi-select__summary${selectedIds.length ? ' branch-multi-select__summary--visible' : ''}`}>

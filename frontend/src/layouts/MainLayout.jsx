@@ -7,7 +7,7 @@ import { getUser, getUserDisplayName, getUserRoleLabel, logout } from '../servic
 import '../components/ActiveBranchSelect.css'
 import './MainLayout.css'
 
-const BRANCH_FILTER_PATHS = ['/dashboard', '/import', '/stock', '/reports']
+const BRANCH_FILTER_PATHS = ['/dashboard', '/import', '/stock', '/reports', '/users']
 
 const MAIN_NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: 'dashboard' },

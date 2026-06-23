@@ -113,6 +113,34 @@
   white-space: nowrap;
 }
 
+.branch-multi-select__actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.branch-multi-select__action {
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #9a7209;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.branch-multi-select__action:hover:not(:disabled) {
+  background: #f5f0ea;
+}
+
+.branch-multi-select__action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .branch-multi-select__summary {
   display: flex;
   align-items: flex-start;
