@@ -154,54 +154,12 @@ export const userHasBranchAccess = async (userId, branchId) => {
   return rows.length > 0;
 };
 
-export const switchUserDefaultBranch = async (userId, branchId) => {
-  const parsedBranchId = Number.parseInt(String(branchId), 10);
-
-  if (!Number.isInteger(parsedBranchId) || parsedBranchId < 1) {
-    throw new ApiError(400, "branchId must be a positive integer");
-  }
-
-  const hasAccess = await userHasBranchAccess(userId, parsedBranchId);
-
-  if (!hasAccess) {
-    throw new ApiError(403, "Branch is not assigned to this user");
-  }
-
-  const connection = await pool.getConnection();
-
-  try {
-    await connection.beginTransaction();
-
-    await connection.execute(
-      `UPDATE user_branches SET is_default = 0 WHERE user_id = ?`,
-      [userId],
-    );
-
-    await connection.execute(
-      `UPDATE user_branches
-       SET is_default = 1
-       WHERE user_id = ? AND branch_id = ?`,
-      [userId, parsedBranchId],
-    );
-
-    await connection.commit();
-
-    return getDefaultBranchForUser(userId);
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
-  }
-};
-
 export default {
   getBranchesForUser,
   getDefaultBranchForUser,
   getBranchIdsForUser,
   setUserBranches,
   userHasBranchAccess,
-  switchUserDefaultBranch,
   mapBranchesForResponse,
   resolveDefaultBranchId,
 };

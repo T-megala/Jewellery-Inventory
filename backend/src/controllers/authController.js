@@ -63,30 +63,3 @@ export const selectBranches = async (req, res) => {
     },
   });
 };
-
-export const switchBranch = async (req, res) => {
-  const userId = Number(req.user?.id ?? req.user?.sub);
-  const branchId = req.body?.branchId;
-
-  if (!userId) {
-    throw new ApiError(401, "Authentication token is required");
-  }
-
-  if (branchId === undefined || branchId === null || branchId === "") {
-    throw new ApiError(400, "branchId is required");
-  }
-
-  const result = await authService.switchBranch(userId, branchId, {
-    selectedBranchIds: req.user?.selectedBranchIds ?? [],
-  });
-
-  res.status(200).json({
-    success: true,
-    message: "Branch switched successfully",
-    data: {
-      token: result.token,
-      user: result.user,
-      permissions: result.permissions,
-    },
-  });
-};

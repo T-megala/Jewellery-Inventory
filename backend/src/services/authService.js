@@ -130,10 +130,11 @@ const issueAuthSession = async ({
   internalBranches,
   profile,
   selectedBranchIds,
-  activeBranchId = null,
 }) => {
-  const defaultBranchId =
-    activeBranchId ?? resolveActiveBranchId(internalBranches, selectedBranchIds);
+  const defaultBranchId = resolveActiveBranchId(
+    internalBranches,
+    selectedBranchIds,
+  );
   const user = await enrichProfileWithSelection(profile, selectedBranchIds);
 
   return {
@@ -227,49 +228,6 @@ export const selectBranches = async (userId, branchIds) => {
   });
 };
 
-export const switchBranch = async (
-  userId,
-  branchId,
-  { selectedBranchIds: currentSelection = [] } = {},
-) => {
-  const parsedBranchId = Number.parseInt(String(branchId), 10);
-
-  if (!Number.isInteger(parsedBranchId) || parsedBranchId < 1) {
-    throw new ApiError(400, "branchId must be a positive integer");
-  }
-
-  const internalBranches = await userBranchService.getBranchesForUser(userId);
-  const profile = await loadUserAuthProfile(userId, internalBranches);
-
-  if (!profile) {
-    throw new ApiError(404, "User not found");
-  }
-
-  const mappedBranchIds = profile.branches.map((branch) => branch.id);
-
-  if (!mappedBranchIds.includes(parsedBranchId)) {
-    throw new ApiError(403, "Branch is not assigned to this user");
-  }
-
-  const sessionSelection =
-    currentSelection.length > 0
-      ? currentSelection.filter((id) => mappedBranchIds.includes(id))
-      : mappedBranchIds;
-
-  if (!sessionSelection.includes(parsedBranchId)) {
-    throw new ApiError(403, "Branch is not in the current session selection");
-  }
-
-  await userBranchService.switchUserDefaultBranch(userId, parsedBranchId);
-
-  return issueAuthSession({
-    internalBranches,
-    profile,
-    selectedBranchIds: sessionSelection,
-    activeBranchId: parsedBranchId,
-  });
-};
-
 export const buildProfileResponse = async (userId, selectedBranchIds = []) => {
   const profile = await loadUserAuthProfile(userId);
 
@@ -289,6 +247,5 @@ export default {
   login,
   loadUserAuthProfile,
   selectBranches,
-  switchBranch,
   buildProfileResponse,
 };
