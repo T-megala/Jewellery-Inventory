@@ -3,17 +3,18 @@ import pool from "./src/config/database.js";
 import productRoutes from "./src/routes/productRoutes.js";
 import stockVerificationRoutes from "./src/routes/stockVerificationRoutes.js";
 import stockVerificationReportRoutes from "./src/routes/stockVerificationReportRoutes.js";
-import dropdownRoutes from "./src/routes/dropdownRoutes.js";
 import productBatchRoutes from "./src/routes/productBatchRoutes.js";
 import dashboardRoutes from "./src/routes/dashboardRoutes.js";
 import authRoutes from "./src/routes/authRoutes.js";
 import userRoutes from "./src/routes/userRoutes.js";
 import branchRoutes from "./src/routes/branchRoutes.js";
 import roleRoutes from "./src/routes/roleRoutes.js";
-import { authenticateApi } from "./src/middleware/authMiddleware.js";
+import { authenticateApi, optionalAuthenticateApi } from "./src/middleware/authMiddleware.js";
 import { resolveBranchScope } from "./src/middleware/accessMiddleware.js";
 import { errorHandler } from "./src/middleware/errorHandler.js";
 import androidReportsRoutes from "./src/routes/androidReportsRoutes.js";
+import androidProductRoutes from "./src/routes/androidProductRoutes.js";
+import dropdownRoutes from "./src/routes/dropdownRoutes.js";
 
 const app = express();
 
@@ -54,13 +55,15 @@ app.get("/", (req, res) => {
 app.use("/api/v1", authRoutes);
 app.use("/api/v1", stockVerificationRoutes);
 app.use("/api/v1", androidReportsRoutes);
+app.use("/api/v1", optionalAuthenticateApi);
+app.use("/api/v1", androidProductRoutes);
+app.use("/api/v1", dropdownRoutes);
 app.use("/api/v1", authenticateApi);
 app.use("/api/v1", resolveBranchScope);
 app.use("/api/v1", productRoutes);
 app.use("/api/v1", branchRoutes);
 app.use("/api/v1", roleRoutes);
 app.use("/api/v1", stockVerificationReportRoutes);
-app.use("/api/v1", dropdownRoutes);
 app.use("/api/v1", productBatchRoutes);
 app.use("/api/v1", dashboardRoutes);
 app.use("/api/v1", userRoutes);

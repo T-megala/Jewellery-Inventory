@@ -146,6 +146,35 @@ export const resolveRequestBranchIds = async (req) => {
   return sessionBranchIds;
 };
 
+/** Android/public dropdowns: require explicit branchId (no auth token). */
+export const resolveAndroidBranchIds = async (req) => {
+  const branchId =
+    parsePositiveInt(req.branchId) ??
+    parsePositiveInt(getRequestParam(req, "branchId")) ??
+    parsePositiveInt(req.headers?.["x-branch-id"]);
+
+  if (!branchId) {
+    throw new ApiError(400, "branchId is required");
+  }
+
+  const branch = await branchService.getBranchById(branchId);
+
+  if (!branch) {
+    throw new ApiError(404, "Branch not found");
+  }
+
+  return [branchId];
+};
+
+/** Dropdown APIs: token session scope, or explicit branchId when unauthenticated. */
+export const resolveDropdownBranchIds = async (req) => {
+  if (req.user?.id || req.user?.sub) {
+    return resolveRequestBranchIds(req);
+  }
+
+  return resolveAndroidBranchIds(req);
+};
+
 export const activeBranchProductsJoin = (batchAlias = "pub") => `
   FROM products p
   INNER JOIN product_upload_batches ${batchAlias}
