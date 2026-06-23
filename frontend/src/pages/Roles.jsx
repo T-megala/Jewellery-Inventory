@@ -171,41 +171,234 @@ function isDashboardChild(permission) {
   return permission.module === 'dashboard' && Boolean(permission.parentId)
 }
 
-function buildPermissionGroups(permissions) {
-  const dashboardParents = permissions
+function buildDashboardNestedGroup(permissions) {
+  const directPermissions = permissions
+    .filter((permission) => (
+      permission.module === 'dashboard'
+      && isAssignablePermission(permission)
+      && !permission.parentId
+    ))
+    .sort((a, b) => getActionSortIndex(a.action) - getActionSortIndex(b.action))
+
+  const sections = permissions
     .filter(isDashboardGroupParent)
     .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((parent) => ({
+      key: `dashboard-section-${parent.id}`,
+      title: parent.description || titleCase(parent.name?.split('.').pop()),
+      children: permissions
+        .filter((permission) => (
+          permission.parentId === parent.id
+          && isAssignablePermission(permission)
+        ))
+        .sort((a, b) => a.sortOrder - b.sortOrder),
+    }))
+    .filter((section) => section.children.length > 0)
 
-  const dashboardSections = dashboardParents.map((parent) => ({
-    key: `dashboard-${parent.id}`,
-    title: parent.description || formatModuleName(parent.name),
-    permissions: permissions
-      .filter((permission) => permission.parentId === parent.id)
-      .sort((a, b) => a.sortOrder - b.sortOrder),
-  }))
+  const allPermissions = [
+    ...directPermissions,
+    ...sections.flatMap((section) => section.children),
+  ]
 
-  const otherPermissions = permissions.filter(
-    (permission) => !isDashboardGroupParent(permission) && !isDashboardChild(permission),
-  )
+  if (!allPermissions.length) {
+    return null
+  }
 
-  const groups = getOrderedPermissionGroups(otherPermissions).map(([moduleName, modulePermissions]) => ({
+  return {
+    key: 'module-dashboard',
+    title: formatModuleName('dashboard'),
+    nested: true,
+    directPermissions,
+    sections,
+    permissions: allPermissions,
+  }
+}
+
+function buildPermissionGroups(permissions) {
+  const hasDashboardSections = permissions.some(isDashboardGroupParent)
+
+  const groups = []
+
+  if (hasDashboardSections) {
+    const dashboardGroup = buildDashboardNestedGroup(permissions)
+    if (dashboardGroup) {
+      groups.push(dashboardGroup)
+    }
+  }
+
+  const otherPermissions = permissions.filter((permission) => {
+    if (hasDashboardSections && permission.module === 'dashboard') {
+      return false
+    }
+
+    return !isDashboardGroupParent(permission) && !isDashboardChild(permission)
+  })
+
+  const otherGroups = getOrderedPermissionGroups(
+    otherPermissions.filter(isAssignablePermission),
+  ).map(([moduleName, modulePermissions]) => ({
     key: `module-${moduleName}`,
     title: formatModuleName(moduleName),
+    nested: false,
     permissions: modulePermissions,
   }))
 
-  const dashboardModuleIndex = groups.findIndex((group) => group.key === 'module-dashboard')
-  if (dashboardModuleIndex >= 0) {
-    groups.splice(dashboardModuleIndex + 1, 0, ...dashboardSections)
-  } else {
-    groups.unshift(...dashboardSections)
-  }
-
-  return groups.filter((group) => group.permissions.length > 0)
+  return [...groups, ...otherGroups].filter((group) => group.permissions.length > 0)
 }
 
 function isAssignablePermission(permission) {
   return permission.action !== 'group'
+}
+
+function matchesPermissionSearch(text, term) {
+  return String(text || '').toLowerCase().includes(term)
+}
+
+function permissionMatchesSearch(permission, term) {
+  const haystack = [
+    permission.name,
+    permission.description,
+    permission.module,
+    permission.action,
+    formatModuleName(permission.module),
+    getPermissionLabel(permission),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+
+  return haystack.includes(term)
+}
+
+function filterPermissionGroups(groups, searchInput) {
+  const term = searchInput.trim().toLowerCase()
+  if (!term) return groups
+
+  const filtered = []
+
+  for (const group of groups) {
+    if (matchesPermissionSearch(group.title, term)) {
+      filtered.push(group)
+      continue
+    }
+
+    if (!group.nested) {
+      const visiblePermissions = group.permissions.filter(
+        (permission) => permissionMatchesSearch(permission, term),
+      )
+
+      if (visiblePermissions.length > 0) {
+        filtered.push({
+          ...group,
+          permissions: visiblePermissions,
+        })
+      }
+      continue
+    }
+
+    const directPermissions = (group.directPermissions || []).filter(
+      (permission) => permissionMatchesSearch(permission, term),
+    )
+
+    const sections = []
+
+    for (const section of group.sections || []) {
+      if (matchesPermissionSearch(section.title, term)) {
+        sections.push(section)
+        continue
+      }
+
+      const children = section.children.filter(
+        (permission) => permissionMatchesSearch(permission, term),
+      )
+
+      if (children.length > 0) {
+        sections.push({
+          ...section,
+          children,
+        })
+      }
+    }
+
+    if (directPermissions.length > 0 || sections.length > 0) {
+      const visiblePermissions = [
+        ...directPermissions,
+        ...sections.flatMap((section) => section.children),
+      ]
+
+      filtered.push({
+        ...group,
+        directPermissions,
+        sections,
+        permissions: visiblePermissions,
+      })
+    }
+  }
+
+  return filtered
+}
+
+function countVisiblePermissions(groups) {
+  return groups.reduce((total, group) => total + group.permissions.length, 0)
+}
+
+function PermissionCheckboxRow({
+  permission,
+  checked,
+  disabled,
+  onToggle,
+  className = '',
+}) {
+  return (
+    <label className={`roles-permission${className ? ` ${className}` : ''}`}>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onToggle}
+        disabled={disabled}
+      />
+      <span className="roles-permission__text">
+        {getPermissionLabel(permission)}
+      </span>
+    </label>
+  )
+}
+
+function PermissionGroupCheckboxHeader({
+  title,
+  selection,
+  permissions,
+  disabled,
+  onToggle,
+  className = 'roles-permissions__group-header',
+  countClassName = 'roles-permissions__group-count',
+}) {
+  const shouldSelectAll = !selection.all
+
+  return (
+    <label className={className}>
+      <input
+        type="checkbox"
+        className="roles-permissions__group-checkbox"
+        checked={selection.all}
+        ref={(input) => setGroupCheckboxState(input, selection.all, selection.some)}
+        onChange={() => onToggle(permissions, shouldSelectAll)}
+        disabled={disabled}
+      />
+      <span className="roles-permissions__group-name">{title}</span>
+      <span className={countClassName}>
+        {selection.selectedCount}
+        /
+        {selection.total}
+      </span>
+    </label>
+  )
+}
+
+function setGroupCheckboxState(input, checked, indeterminate) {
+  if (!input) return
+  input.indeterminate = indeterminate
+  input.checked = checked
 }
 
 export default function Roles() {
@@ -227,11 +420,24 @@ export default function Roles() {
   const [fieldErrors, setFieldErrors] = useState({})
   const [formError, setFormError] = useState('')
   const [notice, setNotice] = useState('')
+  const [permissionSearchInput, setPermissionSearchInput] = useState('')
 
   const permissionGroups = useMemo(
     () => buildPermissionGroups(permissions),
     [permissions],
   )
+
+  const filteredPermissionGroups = useMemo(
+    () => filterPermissionGroups(permissionGroups, permissionSearchInput),
+    [permissionGroups, permissionSearchInput],
+  )
+
+  const visiblePermissionCount = useMemo(
+    () => countVisiblePermissions(filteredPermissionGroups),
+    [filteredPermissionGroups],
+  )
+
+  const isPermissionSearchActive = permissionSearchInput.trim().length > 0
 
   const assignablePermissions = useMemo(
     () => permissions.filter(isAssignablePermission),
@@ -349,6 +555,7 @@ export default function Roles() {
     setForm(EMPTY_FORM)
     setEditingId(null)
     setEditingIsSystem(false)
+    setPermissionSearchInput('')
     setShowForm(false)
     resetFormErrors()
   }
@@ -357,6 +564,7 @@ export default function Roles() {
     setEditingId(null)
     setEditingIsSystem(false)
     setForm(EMPTY_FORM)
+    setPermissionSearchInput('')
     setError('')
     resetFormErrors()
     setNotice('')
@@ -366,6 +574,7 @@ export default function Roles() {
   function handleEdit(role) {
     setEditingId(role.id)
     setEditingIsSystem(role.isSystem)
+    setPermissionSearchInput('')
     setForm({
       name: role.name,
       description: role.description || '',
@@ -414,12 +623,6 @@ export default function Roles() {
         ? assignablePermissions.map((permission) => permission.id)
         : [],
     }))
-  }
-
-  function setGroupCheckboxState(input, checked, indeterminate) {
-    if (!input) return
-    input.indeterminate = indeterminate
-    input.checked = checked
   }
 
   function validateForm() {
@@ -751,9 +954,39 @@ export default function Roles() {
                     <p className="roles-field__hint">No permissions available.</p>
                   ) : (
                     <div className="roles-permissions">
+                      <div className="roles-permissions__search">
+                        <span className="roles-search__icon" aria-hidden="true">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                            <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8" />
+                            <path d="M20 20l-3.5-3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                          </svg>
+                        </span>
+                        <input
+                          type="search"
+                          value={permissionSearchInput}
+                          onChange={(e) => setPermissionSearchInput(e.target.value)}
+                          placeholder="Search permissions by module, section, or action…"
+                          aria-label="Search permissions"
+                          disabled={saving}
+                        />
+                        {isPermissionSearchActive && (
+                          <button
+                            type="button"
+                            className="roles-permissions__search-clear"
+                            onClick={() => setPermissionSearchInput('')}
+                            disabled={saving}
+                            aria-label="Clear permission search"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+
                       <div className="roles-permissions__toolbar">
                         <span className="roles-permissions__toolbar-hint">
-                          Select a module or individual actions
+                          {isPermissionSearchActive
+                            ? `${visiblePermissionCount.toLocaleString('en-IN')} permission${visiblePermissionCount === 1 ? '' : 's'} found`
+                            : 'Select a module, section, or individual actions'}
                         </span>
                         <div className="roles-permissions__toolbar-actions">
                           <button
@@ -775,62 +1008,108 @@ export default function Roles() {
                         </div>
                       </div>
 
-                      {permissionGroups.map((group) => {
+                      {filteredPermissionGroups.length === 0 ? (
+                        <p className="roles-permissions__empty-search">
+                          No permissions match
+                          {' '}
+                          <strong>{permissionSearchInput.trim()}</strong>
+                          .
+                        </p>
+                      ) : (
+                      filteredPermissionGroups.map((group) => {
                         const selection = getModuleSelection(
                           group.permissions,
                           form.permissionIds,
                         )
-                        const shouldSelectAll = !selection.all
 
                         return (
                           <section
                             key={group.key}
                             className={`roles-permissions__group${
                               selection.selectedCount > 0 ? ' roles-permissions__group--selected' : ''
-                            }`}
+                            }${group.nested ? ' roles-permissions__group--nested' : ''}`}
                           >
-                            <label className="roles-permissions__group-header">
-                              <input
-                                type="checkbox"
-                                className="roles-permissions__group-checkbox"
-                                checked={selection.all}
-                                ref={(input) => setGroupCheckboxState(
-                                  input,
-                                  selection.all,
-                                  selection.some,
-                                )}
-                                onChange={() => toggleModulePermissions(
-                                  group.permissions,
-                                  shouldSelectAll,
-                                )}
-                                disabled={saving}
-                              />
-                              <span className="roles-permissions__group-name">{group.title}</span>
-                              <span className="roles-permissions__group-count">
-                                {selection.selectedCount}
-                                /
-                                {selection.total}
-                              </span>
-                            </label>
+                            <PermissionGroupCheckboxHeader
+                              title={group.title}
+                              selection={selection}
+                              permissions={group.permissions}
+                              disabled={saving}
+                              onToggle={toggleModulePermissions}
+                            />
 
-                            <div className="roles-permissions__list">
-                              {group.permissions.map((permission) => (
-                                <label key={permission.id} className="roles-permission">
-                                  <input
-                                    type="checkbox"
+                            {group.nested ? (
+                              <div className="roles-permissions__nested">
+                                {group.directPermissions?.length > 0 && (
+                                  <div className="roles-permissions__list roles-permissions__list--child">
+                                    {group.directPermissions.map((permission) => (
+                                      <PermissionCheckboxRow
+                                        key={permission.id}
+                                        permission={permission}
+                                        checked={form.permissionIds.includes(permission.id)}
+                                        disabled={saving}
+                                        onToggle={() => togglePermission(permission.id)}
+                                      />
+                                    ))}
+                                  </div>
+                                )}
+
+                                {group.sections?.map((section) => {
+                                  const sectionSelection = getModuleSelection(
+                                    section.children,
+                                    form.permissionIds,
+                                  )
+
+                                  return (
+                                    <div
+                                      key={section.key}
+                                      className={`roles-permissions__subsection${
+                                        sectionSelection.selectedCount > 0
+                                          ? ' roles-permissions__subsection--selected'
+                                          : ''
+                                      }`}
+                                    >
+                                      <PermissionGroupCheckboxHeader
+                                        title={section.title}
+                                        selection={sectionSelection}
+                                        permissions={section.children}
+                                        disabled={saving}
+                                        onToggle={toggleModulePermissions}
+                                        className="roles-permissions__subsection-header"
+                                        countClassName="roles-permissions__subsection-count"
+                                      />
+
+                                      <div className="roles-permissions__list roles-permissions__list--subchild">
+                                        {section.children.map((permission) => (
+                                          <PermissionCheckboxRow
+                                            key={permission.id}
+                                            permission={permission}
+                                            checked={form.permissionIds.includes(permission.id)}
+                                            disabled={saving}
+                                            onToggle={() => togglePermission(permission.id)}
+                                          />
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            ) : (
+                              <div className="roles-permissions__list">
+                                {group.permissions.map((permission) => (
+                                  <PermissionCheckboxRow
+                                    key={permission.id}
+                                    permission={permission}
                                     checked={form.permissionIds.includes(permission.id)}
-                                    onChange={() => togglePermission(permission.id)}
                                     disabled={saving}
+                                    onToggle={() => togglePermission(permission.id)}
                                   />
-                                  <span className="roles-permission__text">
-                                    {getPermissionLabel(permission)}
-                                  </span>
-                                </label>
-                              ))}
-                            </div>
+                                ))}
+                              </div>
+                            )}
                           </section>
                         )
-                      })}
+                      })
+                      )}
                     </div>
                   )}
                 </div>

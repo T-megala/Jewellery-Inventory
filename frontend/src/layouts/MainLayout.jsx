@@ -252,9 +252,13 @@ export default function MainLayout() {
               </svg>
             </button>
 
+            <span className="topbar-divider" aria-hidden="true" />
+
             <time className="topbar-date" dateTime={new Date().toISOString().slice(0, 10)}>
               {formatToday()}
             </time>
+
+            <span className="topbar-divider" aria-hidden="true" />
 
             <div className="topbar-user">
               <span className="topbar-user__avatar">{getInitials(displayName)}</span>
