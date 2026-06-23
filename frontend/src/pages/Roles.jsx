@@ -27,9 +27,33 @@ const MODULE_LABELS = {
   batches: 'Batches',
   stock_verification: 'Stock verification',
   users: 'Users',
-  branches: 'Branches',
   roles: 'Roles',
+  branches: 'Branches',
 }
+
+/** Matches app menu flow; admin modules (users, roles, branches) last. */
+const PERMISSION_MODULE_ORDER = [
+  'dashboard',
+  'products',
+  'batches',
+  'stock_verification',
+  'users',
+  'roles',
+  'branches',
+]
+
+const PERMISSION_ACTION_ORDER = [
+  'view',
+  'view_all',
+  'import',
+  'upload',
+  'add',
+  'update',
+  'delete',
+  'report',
+  'export',
+  'manage',
+]
 
 const ACTION_LABELS = {
   view: 'View',
@@ -88,6 +112,34 @@ function groupPermissionsByModule(permissions) {
   }, {})
 }
 
+function getModuleSortIndex(module) {
+  const index = PERMISSION_MODULE_ORDER.indexOf(module)
+  return index === -1 ? PERMISSION_MODULE_ORDER.length : index
+}
+
+function getActionSortIndex(action) {
+  const index = PERMISSION_ACTION_ORDER.indexOf(action)
+  return index === -1 ? PERMISSION_ACTION_ORDER.length : index
+}
+
+function getOrderedPermissionGroups(permissions) {
+  const groups = groupPermissionsByModule(permissions)
+
+  return Object.entries(groups)
+    .sort(([moduleA], [moduleB]) => getModuleSortIndex(moduleA) - getModuleSortIndex(moduleB))
+    .map(([moduleName, modulePermissions]) => [
+      moduleName,
+      [...modulePermissions].sort((a, b) => {
+        const actionDiff = getActionSortIndex(a.action) - getActionSortIndex(b.action)
+        if (actionDiff !== 0) {
+          return actionDiff
+        }
+
+        return (a.name || '').localeCompare(b.name || '')
+      }),
+    ])
+}
+
 export default function Roles() {
   const [roles, setRoles] = useState([])
   const [permissions, setPermissions] = useState([])
@@ -108,8 +160,8 @@ export default function Roles() {
   const [formError, setFormError] = useState('')
   const [notice, setNotice] = useState('')
 
-  const permissionGroups = useMemo(
-    () => groupPermissionsByModule(permissions),
+  const orderedPermissionGroups = useMemo(
+    () => getOrderedPermissionGroups(permissions),
     [permissions],
   )
 
@@ -579,9 +631,7 @@ export default function Roles() {
                     <p className="roles-field__hint">No permissions available.</p>
                   ) : (
                     <div className="roles-permissions">
-                      {Object.entries(permissionGroups)
-                        .sort(([a], [b]) => a.localeCompare(b))
-                        .map(([moduleName, modulePermissions]) => (
+                      {orderedPermissionGroups.map(([moduleName, modulePermissions]) => (
                         <section key={moduleName} className="roles-permissions__group">
                           <h3 className="roles-permissions__group-title">{formatModuleName(moduleName)}</h3>
                           <div className="roles-permissions__list">
