@@ -23,9 +23,9 @@ const EMPTY_FORM = {
 
 const MODULE_LABELS = {
   dashboard: 'Dashboard',
-  products: 'Products',
+  products: 'Stock',
   batches: 'Batches',
-  stock_verification: 'Stock verification',
+  stock_verification: 'Reports',
   users: 'Users',
   roles: 'Roles',
   branches: 'Branches',
@@ -62,10 +62,10 @@ const ACTION_LABELS = {
   delete: 'Delete',
   import: 'Import',
   upload: 'Upload',
-  report: 'View reports',
+  report: 'Report',
   export: 'Export',
   manage: 'Manage',
-  view_all: 'View all branches',
+  view_all: 'View all',
 }
 
 function titleCase(value) {
@@ -79,13 +79,17 @@ function formatModuleName(module) {
 }
 
 function getPermissionLabel(permission) {
-  if (permission.description?.trim()) {
-    return permission.description.trim()
+  if (permission.action) {
+    return ACTION_LABELS[permission.action] || titleCase(permission.action)
   }
 
-  const action = ACTION_LABELS[permission.action] || titleCase(permission.action)
-  const module = formatModuleName(permission.module)
-  return `${action} ${module}`.trim()
+  const description = permission.description?.trim()
+  if (description) {
+    if (description.toLowerCase().startsWith('view all')) return 'View all'
+    return description.split(/\s+/)[0]
+  }
+
+  return titleCase(permission.name?.split('.').pop())
 }
 
 function formatDate(value) {
