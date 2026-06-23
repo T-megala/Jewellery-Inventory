@@ -221,6 +221,37 @@ export async function fetchBranchComparison() {
   };
 }
 
+export async function fetchSmartAlerts({ consecutiveStocktakes, accuracyDropThreshold, limit } = {}) {
+  const params = {};
+  if (consecutiveStocktakes != null) params.consecutiveStocktakes = consecutiveStocktakes;
+  if (accuracyDropThreshold != null) params.accuracyDropThreshold = accuracyDropThreshold;
+  if (limit != null) params.limit = limit;
+
+  const query = buildQueryString(withBranchParams(params));
+  const path = query ? `/dashboard/smart-alerts?${query}` : '/dashboard/smart-alerts';
+  const data = await apiFetch(path) ?? {};
+
+  return {
+    generatedAt: data.generatedAt ?? null,
+    sessionCount: Number(data.sessionCount ?? 0),
+    consecutiveStocktakes: Number(data.consecutiveStocktakes ?? 2),
+    accuracyDropThreshold: Number(data.accuracyDropThreshold ?? 2),
+    alerts: (data.alerts || []).map((alert) => ({
+      id: alert.id ?? '',
+      severity: alert.severity ?? 'info',
+      icon: alert.icon ?? alert.severity ?? 'info',
+      title: alert.title ?? '',
+      message: alert.message ?? '',
+      count: Number(alert.count ?? 0),
+      breakdown: (alert.breakdown || []).map((row) => ({
+        category: row.category ?? '',
+        count: Number(row.count ?? 0),
+      })),
+      meta: alert.meta ?? {},
+    })),
+  };
+}
+
 export async function fetchStockMovement({ slowDays = 60, fastDays = 30, limit = 3 } = {}) {
   const query = buildQueryString(withBranchParams({ slowDays, fastDays, limit }));
   const res = await fetch(apiUrl(`/dashboard/stock-movement?${query}`), {

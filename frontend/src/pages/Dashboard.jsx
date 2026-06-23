@@ -24,6 +24,7 @@ import {
   fetchDailyImports,
   fetchDashboard,
   fetchDayWiseSales,
+  fetchSmartAlerts,
   fetchStockMovement,
   fetchTopSoldProducts,
 } from '../services/dashboard.js'
@@ -1743,6 +1744,108 @@ function DashboardNavCard({ to, title, label, icon }) {
   )
 }
 
+function SmartAlertIcon({ type }) {
+  if (type === 'error') {
+    return (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M9 9l6 6M15 9l-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    )
+  }
+
+  if (type === 'warning') {
+    return (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path
+          d="M12 4.5L3.5 19.5h17L12 4.5z"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+        />
+        <path d="M12 10v4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <circle cx="12" cy="17" r="0.9" fill="currentColor" />
+      </svg>
+    )
+  }
+
+  if (type === 'time') {
+    return (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="12" cy="13" r="7" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M12 10v3.5l2.5 1.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <path d="M9 3h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    )
+  }
+
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M12 10v6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="12" cy="7.5" r="0.9" fill="currentColor" />
+    </svg>
+  )
+}
+
+function getSmartAlertTone(alert) {
+  const severity = alert?.severity ?? 'info'
+  if (severity === 'error') return 'error'
+  if (severity === 'warning') return 'warning'
+  if (severity === 'time') return 'notice'
+  return 'info'
+}
+
+function SmartAlertsCard({ data, loading, error }) {
+  const alerts = data?.alerts ?? []
+
+  return (
+    <article className="analytics-tile smart-alerts-card">
+      <header className="analytics-tile__head">
+        <DashboardTitleRow>
+          <h3>Smart alerts</h3>
+        </DashboardTitleRow>
+      </header>
+
+      <div className="analytics-tile__body smart-alerts-card__body">
+        {loading && <p className="analytics-empty">Loading smart alerts…</p>}
+        {!loading && error && <p className="analytics-empty">{error}</p>}
+        {!loading && !error && !alerts.length && (
+          <p className="analytics-empty smart-alerts-card__empty">
+            No active alerts — stock verification looks healthy.
+          </p>
+        )}
+        {!loading && !error && alerts.length > 0 && (
+          <ul className="smart-alerts-list" aria-label="Smart alerts">
+            {alerts.map((alert) => {
+              const tone = getSmartAlertTone(alert)
+              const iconType = alert.icon || (tone === 'notice' ? 'time' : tone)
+              return (
+                <li key={alert.id} className={`smart-alert smart-alert--${tone}`}>
+                  <span className={`smart-alert__icon smart-alert__icon--${tone}`} aria-hidden="true">
+                    <SmartAlertIcon type={iconType} />
+                  </span>
+                  <p className="smart-alert__text">
+                    <strong>{alert.title}</strong>
+                    {alert.message ? (
+                      <>
+                        {' '}
+                        —
+                        {' '}
+                        {alert.message}
+                      </>
+                    ) : null}
+                  </p>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+    </article>
+  )
+}
+
 function AnalyticsTile({ title, subtitle, children, wide = false }) {
   return (
     <article className={`analytics-tile${wide ? ' analytics-tile--wide' : ''}`}>
@@ -1919,6 +2022,9 @@ export default function Dashboard() {
   const [branchComparisonError, setBranchComparisonError] = useState('')
   const [stockMovementLoading, setStockMovementLoading] = useState(true)
   const [stockMovementError, setStockMovementError] = useState('')
+  const [smartAlerts, setSmartAlerts] = useState(null)
+  const [smartAlertsLoading, setSmartAlertsLoading] = useState(true)
+  const [smartAlertsError, setSmartAlertsError] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -2095,6 +2201,32 @@ export default function Dashboard() {
     }
 
     loadStockMovement()
+    return () => { cancelled = true }
+  }, [operationalValue])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadSmartAlerts() {
+      setSmartAlertsLoading(true)
+      setSmartAlertsError('')
+
+      try {
+        const alertsData = await fetchSmartAlerts()
+        if (!cancelled) {
+          setSmartAlerts(alertsData)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setSmartAlerts(null)
+          setSmartAlertsError(err.message || 'Failed to load smart alerts.')
+        }
+      } finally {
+        if (!cancelled) setSmartAlertsLoading(false)
+      }
+    }
+
+    loadSmartAlerts()
     return () => { cancelled = true }
   }, [operationalValue])
 
@@ -2291,8 +2423,16 @@ export default function Dashboard() {
         <div className="insight-section__nav" aria-label="Insight categories">
           <span className="insight-section__nav-item insight-section__nav-item--active">Branch</span>
           <span className="insight-section__nav-item insight-section__nav-item--active">Movement</span>
-          <span className="insight-section__nav-item">Compliance</span>
+          <span className={`insight-section__nav-item${(smartAlerts?.alerts?.length ?? 0) > 0 ? ' insight-section__nav-item--active' : ''}`}>
+            Compliance
+          </span>
         </div>
+
+        <SmartAlertsCard
+          data={smartAlerts}
+          loading={smartAlertsLoading}
+          error={smartAlertsError}
+        />
 
         <div className="insight-grid">
           <MultiBranchComparisonCard
