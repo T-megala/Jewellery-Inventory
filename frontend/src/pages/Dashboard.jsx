@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useBranchScope } from '../hooks/useBranchScope.js'
 import {
   Area,
@@ -1701,49 +1700,6 @@ function ProductBarChart({ data }) {
   )
 }
 
-function NavCardIcon({ type }) {
-  if (type === 'import') {
-    return (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M12 3v12M8 11l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      </svg>
-    )
-  }
-  if (type === 'stock') {
-    return (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M4 7l8-4 8 4-8 4-8-4z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-        <path d="M4 12l8 4 8-4M4 17l8 4 8-4" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-      </svg>
-    )
-  }
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M4 19V5M4 19h16M8 15l3-3 3 2 4-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
-function DashboardNavCard({ to, title, label, icon }) {
-  return (
-    <Link to={to} className="dash-nav-card">
-      <span className="dash-nav-card__icon">
-        <NavCardIcon type={icon} />
-      </span>
-      <span className="dash-nav-card__body">
-        <span className="dash-nav-card__title">{title}</span>
-        <span className="dash-nav-card__label">{label}</span>
-      </span>
-      <span className="dash-nav-card__arrow" aria-hidden="true">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-          <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </span>
-    </Link>
-  )
-}
-
 function SmartAlertIcon({ type }) {
   if (type === 'error') {
     return (
@@ -2446,35 +2402,6 @@ export default function Dashboard() {
             error={stockMovementError}
           />
         </div>
-      </section>
-
-      {/* Quick navigation */}
-      <section className="dash-nav">
-        <div className="module-header">
-          <div className="module-header__main">
-            <h2>Manage Inventory</h2>
-          </div>
-        </div>
-        <div className="dash-nav__grid">
-          <DashboardNavCard
-            to="/import"
-            title="Import Stock"
-            label="Upload tag-wise Excel"
-            icon="import"
-          />
-          <DashboardNavCard
-            to="/stock"
-            title="View Stock"
-            label={`${formatCount(totals.totalTags)} rows · search & browse`}
-            icon="stock"
-          />
-          <DashboardNavCard
-            to="/reports"
-            title="Verification Reports"
-            label="Found, missing & new tags"
-            icon="reports"
-          />
-      </div>
       </section>
     </div>
   )
