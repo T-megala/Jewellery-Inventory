@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import ActiveBranchSelect from '../components/ActiveBranchSelect.jsx'
 import TablePagination from '../components/TablePagination.jsx'
 import { useBranchScope } from '../hooks/useBranchScope.js'
 import { fetchProductList } from '../services/stock.js'
-import '../components/ActiveBranchSelect.css'
 import './Stock.css'
 
 const DEFAULT_PAGE_SIZE = 10
@@ -17,7 +15,7 @@ function formatValue(value) {
 }
 
 export default function Stock() {
-  const { operationalValue, sessionBranches } = useBranchScope()
+  const { operationalValue } = useBranchScope()
   const [rows, setRows] = useState([])
   const [pagination, setPagination] = useState(null)
   const [page, setPage] = useState(1)
@@ -104,11 +102,6 @@ export default function Stock() {
         </div>
 
         <div className="stock-meta__actions">
-          <ActiveBranchSelect
-            branches={sessionBranches}
-            alwaysShow
-            layout="header"
-          />
           {pagination && (
             <span className="stock-meta__badge">
               {pagination.totalRecords.toLocaleString('en-IN')} item{pagination.totalRecords === 1 ? '' : 's'}

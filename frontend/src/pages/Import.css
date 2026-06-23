@@ -347,6 +347,12 @@
   color: #b91c1c;
 }
 
+.import-msg--info {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+}
+
 .import-send {
   display: inline-flex;
   align-items: center;

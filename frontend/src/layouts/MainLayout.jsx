@@ -1,8 +1,13 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { MASTER_PATHS } from '../config/masters.js'
+import ActiveBranchSelect from '../components/ActiveBranchSelect.jsx'
+import { useBranchScope } from '../hooks/useBranchScope.js'
 import { getUser, getUserDisplayName, getUserRoleLabel, logout } from '../services/auth.js'
+import '../components/ActiveBranchSelect.css'
 import './MainLayout.css'
+
+const BRANCH_FILTER_PATHS = ['/dashboard', '/import', '/stock', '/reports']
 
 const MAIN_NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
@@ -99,9 +104,12 @@ export default function MainLayout() {
   const location = useLocation()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const user = getUser()
+  const { sessionBranches } = useBranchScope()
   const displayName = getUserDisplayName(user)
   const roleLabel = getUserRoleLabel(user)
   const page = PAGE_META[location.pathname] || PAGE_META['/dashboard']
+  const showBranchFilter = BRANCH_FILTER_PATHS.includes(location.pathname)
+    && sessionBranches.length > 1
   const isTablePage = location.pathname === '/stock' || location.pathname === '/users' || location.pathname === '/branches' || location.pathname === '/roles'
   const isReportsPage = location.pathname === '/reports'
   const isFillPage = location.pathname === '/import' || isTablePage
@@ -211,6 +219,14 @@ export default function MainLayout() {
           </div>
 
           <div className="topbar-right">
+            {showBranchFilter && (
+              <ActiveBranchSelect
+                branches={sessionBranches}
+                alwaysShow
+                layout="header"
+              />
+            )}
+
             <button
               type="button"
               className={`topbar-settings${isMastersArea ? ' topbar-settings--active' : ''}`}

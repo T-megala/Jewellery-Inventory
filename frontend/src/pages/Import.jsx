@@ -30,11 +30,10 @@ function StepItem({ number, label, state }) {
 
 export default function Import() {
   const fileInputRef = useRef(null)
-  const { sessionBranches } = useBranchScope()
-  const showBranchSelect = sessionBranches.length > 1
-  const singleBranchId = sessionBranches.length === 1 ? sessionBranches[0].id : null
-  const [selectedBranchId, setSelectedBranchId] = useState('')
-  const importBranchId = singleBranchId ?? (selectedBranchId ? Number(selectedBranchId) : null)
+  const { sessionBranches, operationalBranchId, isAllBranches } = useBranchScope()
+  const importBranchId = sessionBranches.length === 1
+    ? sessionBranches[0].id
+    : operationalBranchId
   const [selectedFile, setSelectedFile] = useState(null)
   const [result, setResult] = useState(null)
   const [importStatus, setImportStatus] = useState(null)
@@ -132,23 +131,6 @@ export default function Import() {
 
       <section className="import-workspace">
         <div className="import-workspace__col">
-          {showBranchSelect && (
-            <label className="import-branch-field">
-              <span className="import-branch-field__label">Branch</span>
-              <select
-                value={selectedBranchId}
-                onChange={(e) => setSelectedBranchId(e.target.value)}
-                disabled={isUploading}
-                aria-label="Choose branch"
-              >
-                <option value="">Choose branch</option>
-                {sessionBranches.map((branch) => (
-                  <option key={branch.id} value={branch.id}>{branch.name}</option>
-                ))}
-              </select>
-            </label>
-          )}
-
           <p className="import-workspace__label">Choose Excel file</p>
           <div
             className={`import-drop${isDragging ? ' import-drop--active' : ''}${isUploading ? ' import-drop--locked' : ''}`}
@@ -241,6 +223,12 @@ export default function Import() {
               )}
 
               {error && <p className="import-msg import-msg--error" role="alert">{error}</p>}
+
+              {isAllBranches && sessionBranches.length > 1 && (
+                <p className="import-msg import-msg--info" role="status">
+                  Select a branch in the header before importing.
+                </p>
+              )}
 
               <button
                 type="button"

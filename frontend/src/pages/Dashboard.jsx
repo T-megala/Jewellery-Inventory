@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import ActiveBranchSelect from '../components/ActiveBranchSelect.jsx'
 import { useBranchScope } from '../hooks/useBranchScope.js'
 import {
   Area,
@@ -1895,7 +1894,7 @@ function DashboardSkeleton() {
 }
 
 export default function Dashboard() {
-  const { operationalValue, sessionBranches } = useBranchScope()
+  const { operationalValue } = useBranchScope()
   const [summary, setSummary] = useState(null)
   const [stocktake, setStocktake] = useState(EMPTY_STOCKTAKE)
   const [counterAccuracy, setCounterAccuracy] = useState(EMPTY_COUNTER_ACCURACY)
@@ -2141,21 +2140,7 @@ export default function Dashboard() {
         <div className="dashboard-empty">
           <h2>Could not load dashboard</h2>
           <p>{error}</p>
-          <p className="dashboard-empty__hint">Make sure the backend is running and stock Excel has been imported.</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (!batch || totals.totalTags === 0) {
-    return (
-      <div className="dashboard">
-        <div className="dashboard-empty">
-          <h2>No stock data yet</h2>
-          <p>Import your Tag Wise Stock Excel file from the Import page to see inventory metrics here.</p>
-          <p className="dashboard-empty__hint">
-            Expected columns: TranNo, Product, SubProduct, Tag/PacketNo, Pieces, Counter
-          </p>
+          <p className="dashboard-empty__hint">Make sure the backend is running and try again.</p>
         </div>
       </div>
     )
@@ -2183,13 +2168,6 @@ export default function Dashboard() {
         <div className="dashboard-hero__rates">
           <p className="dashboard-hero__rates-label">Batch Details</p>
           <div className="dashboard-rate-card">
-            <span className="dashboard-rate-card__icon">ID</span>
-            <div className="dashboard-rate-card__info">
-              <strong>#{batch.id}</strong>
-              <span>batch number</span>
-            </div>
-          </div>
-          <div className="dashboard-rate-card">
             <span className="dashboard-rate-card__icon">SP</span>
             <div className="dashboard-rate-card__info">
               <strong>{formatCount(totals.subProducts)}</strong>
@@ -2205,11 +2183,6 @@ export default function Dashboard() {
           <div className="module-header__main">
             <h2>Inventory Overview</h2>
           </div>
-          <ActiveBranchSelect
-            branches={sessionBranches}
-            alwaysShow
-            layout="header"
-          />
         </div>
 
         <div className="dashboard-metrics">

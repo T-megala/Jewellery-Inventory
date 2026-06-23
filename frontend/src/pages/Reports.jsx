@@ -5,9 +5,7 @@ import {
   fetchStockVerificationReport,
 } from '../services/reports.js'
 import TablePagination from '../components/TablePagination.jsx'
-import ActiveBranchSelect from '../components/ActiveBranchSelect.jsx'
 import { useBranchScope } from '../hooks/useBranchScope.js'
-import '../components/ActiveBranchSelect.css'
 import './Reports.css'
 
 const DEFAULT_PAGE_SIZE = 10
@@ -164,7 +162,7 @@ function getTodayDate() {
 }
 
 export default function Reports() {
-  const { operationalValue, sessionBranches } = useBranchScope()
+  const { operationalValue } = useBranchScope()
   const [product, setProduct] = useState('')
   const [subProduct, setSubProduct] = useState('')
   const [counter, setCounter] = useState('')
@@ -389,12 +387,6 @@ export default function Reports() {
                 disabled={loadingFilters}
               />
             </label>
-
-            <ActiveBranchSelect
-              branches={sessionBranches}
-              alwaysShow
-              layout="filter"
-            />
 
             <label className="report-field">
               <span>Product</span>
