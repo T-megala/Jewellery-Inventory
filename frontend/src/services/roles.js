@@ -7,6 +7,8 @@ function normalizePermission(permission) {
     module: permission.module,
     action: permission.action,
     description: permission.description ?? '',
+    parentId: permission.parentId ?? permission.parent_id ?? null,
+    sortOrder: Number(permission.sortOrder ?? permission.sort_order ?? 0),
   };
 }
 

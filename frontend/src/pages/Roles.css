@@ -620,7 +620,7 @@ body.roles-modal-open {
 }
 
 .roles-modal__panel--wide {
-  width: min(100%, 600px);
+  width: min(100%, 640px);
 }
 
 .roles-table__name {

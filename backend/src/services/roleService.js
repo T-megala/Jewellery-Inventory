@@ -17,15 +17,23 @@ const toPermission = (row) => ({
   module: row.module,
   action: row.action,
   description: row.description ?? null,
+  parentId: row.parent_id ? Number(row.parent_id) : null,
+  sortOrder: Number(row.sort_order ?? 0),
 });
 
 export const SUPER_ADMIN_ROLE_NAME = "Super Admin";
 
 export const getAllPermissions = async () => {
   const [rows] = await pool.execute(
-    `SELECT id, name, module, action, description
+    `SELECT id, name, module, action, description, parent_id, sort_order
      FROM permissions
-     ORDER BY module ASC, action ASC, name ASC`,
+     ORDER BY
+       CASE WHEN parent_id IS NULL AND action = 'group' THEN sort_order ELSE 999 END ASC,
+       module ASC,
+       parent_id ASC,
+       sort_order ASC,
+       action ASC,
+       name ASC`,
   );
 
   return rows.map(toPermission);
@@ -33,11 +41,16 @@ export const getAllPermissions = async () => {
 
 export const getRolePermissions = async (roleId) => {
   const [rows] = await pool.execute(
-    `SELECT p.id, p.name, p.module, p.action, p.description
+    `SELECT p.id, p.name, p.module, p.action, p.description, p.parent_id, p.sort_order
      FROM permissions p
      INNER JOIN role_permissions rp ON rp.permission_id = p.id
      WHERE rp.role_id = ?
-     ORDER BY p.module ASC, p.action ASC`,
+     ORDER BY
+       CASE WHEN p.parent_id IS NULL AND p.action = 'group' THEN p.sort_order ELSE 999 END ASC,
+       p.module ASC,
+       p.parent_id ASC,
+       p.sort_order ASC,
+       p.action ASC`,
     [roleId],
   );
 

@@ -79,6 +79,10 @@ function formatModuleName(module) {
 }
 
 function getPermissionLabel(permission) {
+  if (permission.parentId) {
+    return permission.description?.trim() || titleCase(permission.action)
+  }
+
   if (permission.action) {
     return ACTION_LABELS[permission.action] || titleCase(permission.action)
   }
@@ -157,6 +161,53 @@ function getOrderedPermissionGroups(permissions) {
     ])
 }
 
+function isDashboardGroupParent(permission) {
+  return permission.module === 'dashboard'
+    && permission.action === 'group'
+    && !permission.parentId
+}
+
+function isDashboardChild(permission) {
+  return permission.module === 'dashboard' && Boolean(permission.parentId)
+}
+
+function buildPermissionGroups(permissions) {
+  const dashboardParents = permissions
+    .filter(isDashboardGroupParent)
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+
+  const dashboardSections = dashboardParents.map((parent) => ({
+    key: `dashboard-${parent.id}`,
+    title: parent.description || formatModuleName(parent.name),
+    permissions: permissions
+      .filter((permission) => permission.parentId === parent.id)
+      .sort((a, b) => a.sortOrder - b.sortOrder),
+  }))
+
+  const otherPermissions = permissions.filter(
+    (permission) => !isDashboardGroupParent(permission) && !isDashboardChild(permission),
+  )
+
+  const groups = getOrderedPermissionGroups(otherPermissions).map(([moduleName, modulePermissions]) => ({
+    key: `module-${moduleName}`,
+    title: formatModuleName(moduleName),
+    permissions: modulePermissions,
+  }))
+
+  const dashboardModuleIndex = groups.findIndex((group) => group.key === 'module-dashboard')
+  if (dashboardModuleIndex >= 0) {
+    groups.splice(dashboardModuleIndex + 1, 0, ...dashboardSections)
+  } else {
+    groups.unshift(...dashboardSections)
+  }
+
+  return groups.filter((group) => group.permissions.length > 0)
+}
+
+function isAssignablePermission(permission) {
+  return permission.action !== 'group'
+}
+
 export default function Roles() {
   const [roles, setRoles] = useState([])
   const [permissions, setPermissions] = useState([])
@@ -177,13 +228,18 @@ export default function Roles() {
   const [formError, setFormError] = useState('')
   const [notice, setNotice] = useState('')
 
-  const orderedPermissionGroups = useMemo(
-    () => getOrderedPermissionGroups(permissions),
+  const permissionGroups = useMemo(
+    () => buildPermissionGroups(permissions),
+    [permissions],
+  )
+
+  const assignablePermissions = useMemo(
+    () => permissions.filter(isAssignablePermission),
     [permissions],
   )
 
   const totalSelectedPermissions = form.permissionIds.length
-  const totalPermissions = permissions.length
+  const totalPermissions = assignablePermissions.length
   const allPermissionsSelected = totalPermissions > 0
     && totalSelectedPermissions === totalPermissions
 
@@ -313,7 +369,9 @@ export default function Roles() {
     setForm({
       name: role.name,
       description: role.description || '',
-      permissionIds: role.permissions.map((permission) => permission.id),
+      permissionIds: role.permissions
+        .filter(isAssignablePermission)
+        .map((permission) => permission.id),
     })
     setError('')
     resetFormErrors()
@@ -352,8 +410,16 @@ export default function Roles() {
   function toggleAllPermissions(selectAll) {
     setForm((prev) => ({
       ...prev,
-      permissionIds: selectAll ? permissions.map((permission) => permission.id) : [],
+      permissionIds: selectAll
+        ? assignablePermissions.map((permission) => permission.id)
+        : [],
     }))
+  }
+
+  function setGroupCheckboxState(input, checked, indeterminate) {
+    if (!input) return
+    input.indeterminate = indeterminate
+    input.checked = checked
   }
 
   function validateForm() {
@@ -384,10 +450,11 @@ export default function Roles() {
     setSaving(true)
 
     try {
+      const assignableIds = new Set(assignablePermissions.map((permission) => permission.id))
       const payload = {
         name: form.name.trim(),
         description: form.description.trim() || null,
-        permissionIds: form.permissionIds,
+        permissionIds: form.permissionIds.filter((id) => assignableIds.has(id)),
       }
 
       const isEdit = Boolean(editingId)
@@ -708,54 +775,60 @@ export default function Roles() {
                         </div>
                       </div>
 
-                      {orderedPermissionGroups.map(([moduleName, modulePermissions]) => {
-                        const selection = getModuleSelection(modulePermissions, form.permissionIds)
+                      {permissionGroups.map((group) => {
+                        const selection = getModuleSelection(
+                          group.permissions,
+                          form.permissionIds,
+                        )
+                        const shouldSelectAll = !selection.all
 
                         return (
-                        <section
-                          key={moduleName}
-                          className={`roles-permissions__group${selection.all ? ' roles-permissions__group--selected' : ''}`}
-                        >
-                          <label className="roles-permissions__group-header">
-                            <input
-                              type="checkbox"
-                              className="roles-permissions__group-checkbox"
-                              checked={selection.all}
-                              ref={(element) => {
-                                if (element) {
-                                  element.indeterminate = selection.some
-                                }
-                              }}
-                              onChange={() => toggleModulePermissions(modulePermissions, !selection.all)}
-                              disabled={saving}
-                              aria-label={`Select all ${formatModuleName(moduleName)} permissions`}
-                            />
-                            <span className="roles-permissions__group-name">
-                              {formatModuleName(moduleName)}
-                            </span>
-                            <span className="roles-permissions__group-count">
-                              {selection.selectedCount}
-                              /
-                              {selection.total}
-                            </span>
-                          </label>
+                          <section
+                            key={group.key}
+                            className={`roles-permissions__group${
+                              selection.selectedCount > 0 ? ' roles-permissions__group--selected' : ''
+                            }`}
+                          >
+                            <label className="roles-permissions__group-header">
+                              <input
+                                type="checkbox"
+                                className="roles-permissions__group-checkbox"
+                                checked={selection.all}
+                                ref={(input) => setGroupCheckboxState(
+                                  input,
+                                  selection.all,
+                                  selection.some,
+                                )}
+                                onChange={() => toggleModulePermissions(
+                                  group.permissions,
+                                  shouldSelectAll,
+                                )}
+                                disabled={saving}
+                              />
+                              <span className="roles-permissions__group-name">{group.title}</span>
+                              <span className="roles-permissions__group-count">
+                                {selection.selectedCount}
+                                /
+                                {selection.total}
+                              </span>
+                            </label>
 
-                          <div className="roles-permissions__list">
-                            {modulePermissions.map((permission) => (
-                              <label key={permission.id} className="roles-permission">
-                                <input
-                                  type="checkbox"
-                                  checked={form.permissionIds.includes(permission.id)}
-                                  onChange={() => togglePermission(permission.id)}
-                                  disabled={saving}
-                                />
-                                <span className="roles-permission__text">
-                                  {getPermissionLabel(permission)}
-                                </span>
-                              </label>
-                            ))}
-                          </div>
-                        </section>
+                            <div className="roles-permissions__list">
+                              {group.permissions.map((permission) => (
+                                <label key={permission.id} className="roles-permission">
+                                  <input
+                                    type="checkbox"
+                                    checked={form.permissionIds.includes(permission.id)}
+                                    onChange={() => togglePermission(permission.id)}
+                                    disabled={saving}
+                                  />
+                                  <span className="roles-permission__text">
+                                    {getPermissionLabel(permission)}
+                                  </span>
+                                </label>
+                              ))}
+                            </div>
+                          </section>
                         )
                       })}
                     </div>
