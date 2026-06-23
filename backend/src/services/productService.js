@@ -21,6 +21,8 @@ const formatDate = (value) => {
 const mapProductRow = (row) => ({
   id: row.id,
   batchId: row.batch_id,
+  branchId: row.branch_id ? Number(row.branch_id) : null,
+  branchName: row.branch_name ?? null,
   tranNo: row.tran_no,
   tranDate: formatDate(row.tran_date),
   product: row.product,
@@ -82,6 +84,8 @@ const getProductList = async ({
 
   const baseFrom = `
     FROM products p
+    INNER JOIN product_upload_batches pub ON pub.id = p.batch_id
+    LEFT JOIN branches b ON b.id = pub.branch_id
     WHERE ${batchAllProductsWhere.replace("batch_id = ?", "p.batch_id = ?")}
     ${searchClause}
   `;
@@ -96,7 +100,8 @@ const getProductList = async ({
 
   const [rows] = await pool.execute(
     `SELECT
-       p.id, p.batch_id, p.tran_no, p.tran_date, p.product, p.sub_product, p.tag_packet_no,
+       p.id, p.batch_id, pub.branch_id, b.name AS branch_name,
+       p.tran_no, p.tran_date, p.product, p.sub_product, p.tag_packet_no,
        p.pieces, p.gross_wt, p.net_wt, p.counter_name, p.size, p.tag_type,
        p.item_pieces, p.weight_gram, p.weight_carat, p.created_at
      ${baseFrom}
