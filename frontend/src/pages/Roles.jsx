@@ -126,6 +126,19 @@ function getActionSortIndex(action) {
   return index === -1 ? PERMISSION_ACTION_ORDER.length : index
 }
 
+function getModuleSelection(modulePermissions, selectedIds) {
+  const moduleIds = modulePermissions.map((permission) => permission.id)
+  const selectedCount = moduleIds.filter((id) => selectedIds.includes(id)).length
+
+  return {
+    all: moduleIds.length > 0 && selectedCount === moduleIds.length,
+    some: selectedCount > 0 && selectedCount < moduleIds.length,
+    none: selectedCount === 0,
+    selectedCount,
+    total: moduleIds.length,
+  }
+}
+
 function getOrderedPermissionGroups(permissions) {
   const groups = groupPermissionsByModule(permissions)
 
@@ -168,6 +181,11 @@ export default function Roles() {
     () => getOrderedPermissionGroups(permissions),
     [permissions],
   )
+
+  const totalSelectedPermissions = form.permissionIds.length
+  const totalPermissions = permissions.length
+  const allPermissionsSelected = totalPermissions > 0
+    && totalSelectedPermissions === totalPermissions
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -318,6 +336,24 @@ export default function Roles() {
           : [...prev.permissionIds, permissionId],
       }
     })
+  }
+
+  function toggleModulePermissions(modulePermissions, selectAll) {
+    const moduleIds = modulePermissions.map((permission) => permission.id)
+
+    setForm((prev) => ({
+      ...prev,
+      permissionIds: selectAll
+        ? [...new Set([...prev.permissionIds, ...moduleIds])]
+        : prev.permissionIds.filter((id) => !moduleIds.includes(id)),
+    }))
+  }
+
+  function toggleAllPermissions(selectAll) {
+    setForm((prev) => ({
+      ...prev,
+      permissionIds: selectAll ? permissions.map((permission) => permission.id) : [],
+    }))
   }
 
   function validateForm() {
@@ -626,18 +662,84 @@ export default function Roles() {
                 )}
 
                 <div className="roles-field">
-                  <span className="roles-field__label">
-                    Permissions
-                    <span className="roles-field__optional">(optional)</span>
-                  </span>
+                  <div className="roles-field__label-row">
+                    <span className="roles-field__label">
+                      Permissions
+                      <span className="roles-field__optional">(optional)</span>
+                    </span>
+                    {permissions.length > 0 && (
+                      <span className="roles-permissions__summary">
+                        {totalSelectedPermissions}
+                        {' '}
+                        of
+                        {' '}
+                        {totalPermissions}
+                        {' '}
+                        selected
+                      </span>
+                    )}
+                  </div>
 
                   {permissions.length === 0 ? (
                     <p className="roles-field__hint">No permissions available.</p>
                   ) : (
                     <div className="roles-permissions">
-                      {orderedPermissionGroups.map(([moduleName, modulePermissions]) => (
-                        <section key={moduleName} className="roles-permissions__group">
-                          <h3 className="roles-permissions__group-title">{formatModuleName(moduleName)}</h3>
+                      <div className="roles-permissions__toolbar">
+                        <span className="roles-permissions__toolbar-hint">
+                          Select a module or individual actions
+                        </span>
+                        <div className="roles-permissions__toolbar-actions">
+                          <button
+                            type="button"
+                            className="roles-permissions__toolbar-btn"
+                            onClick={() => toggleAllPermissions(true)}
+                            disabled={saving || allPermissionsSelected}
+                          >
+                            Select all
+                          </button>
+                          <button
+                            type="button"
+                            className="roles-permissions__toolbar-btn"
+                            onClick={() => toggleAllPermissions(false)}
+                            disabled={saving || totalSelectedPermissions === 0}
+                          >
+                            Clear all
+                          </button>
+                        </div>
+                      </div>
+
+                      {orderedPermissionGroups.map(([moduleName, modulePermissions]) => {
+                        const selection = getModuleSelection(modulePermissions, form.permissionIds)
+
+                        return (
+                        <section
+                          key={moduleName}
+                          className={`roles-permissions__group${selection.all ? ' roles-permissions__group--selected' : ''}`}
+                        >
+                          <label className="roles-permissions__group-header">
+                            <input
+                              type="checkbox"
+                              className="roles-permissions__group-checkbox"
+                              checked={selection.all}
+                              ref={(element) => {
+                                if (element) {
+                                  element.indeterminate = selection.some
+                                }
+                              }}
+                              onChange={() => toggleModulePermissions(modulePermissions, !selection.all)}
+                              disabled={saving}
+                              aria-label={`Select all ${formatModuleName(moduleName)} permissions`}
+                            />
+                            <span className="roles-permissions__group-name">
+                              {formatModuleName(moduleName)}
+                            </span>
+                            <span className="roles-permissions__group-count">
+                              {selection.selectedCount}
+                              /
+                              {selection.total}
+                            </span>
+                          </label>
+
                           <div className="roles-permissions__list">
                             {modulePermissions.map((permission) => (
                               <label key={permission.id} className="roles-permission">
@@ -648,13 +750,14 @@ export default function Roles() {
                                   disabled={saving}
                                 />
                                 <span className="roles-permission__text">
-                                  <strong>{getPermissionLabel(permission)}</strong>
+                                  {getPermissionLabel(permission)}
                                 </span>
                               </label>
                             ))}
                           </div>
                         </section>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
                 </div>
