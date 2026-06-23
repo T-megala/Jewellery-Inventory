@@ -1,5 +1,6 @@
 import ApiError from "../utils/ApiError.js";
 import { resolveOperationalBranchId } from "../utils/branchRequest.js";
+import { PERMISSIONS } from "../constants/permissions.js";
 import stockVerificationReportService from "../services/stockVerificationReportService.js";
 import androidScanReportService from "../services/androidScanReportService.js";
 import { getRequestParam } from "../utils/requestParams.js";
@@ -37,7 +38,16 @@ const validateDate = (value, fieldName) => {
 
 const getRequestValue = (req, ...keys) => getRequestParam(req, ...keys);
 
-const resolveReportBranchIds = (req) => {
+const parseOptionalBranchId = (value) => {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+
+  const parsed = Number.parseInt(String(value), 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+};
+
+const getMappedBranchIds = (req) => {
   const fromToken = Array.isArray(req.user?.branchIds)
     ? req.user.branchIds.map((id) => Number(id)).filter((id) => id > 0)
     : [];
@@ -46,8 +56,8 @@ const resolveReportBranchIds = (req) => {
     return fromToken;
   }
 
-  const single = Number.parseInt(String(req.user?.branchId ?? ""), 10);
-  if (Number.isInteger(single) && single > 0) {
+  const single = parseOptionalBranchId(req.user?.branchId);
+  if (single) {
     return [single];
   }
 
@@ -56,6 +66,28 @@ const resolveReportBranchIds = (req) => {
     : [];
 
   return selected;
+};
+
+const resolveReportBranchIds = (req) => {
+  const mappedBranchIds = getMappedBranchIds(req);
+  const requestedBranchId =
+    parseOptionalBranchId(getRequestValue(req, "branchId")) ??
+    parseOptionalBranchId(req.branchId);
+
+  if (!requestedBranchId) {
+    return mappedBranchIds;
+  }
+
+  const permissions = Array.isArray(req.user?.permissions)
+    ? req.user.permissions
+    : [];
+  const canViewAll = permissions.includes(PERMISSIONS.BRANCHES_VIEW_ALL);
+
+  if (!canViewAll && !mappedBranchIds.includes(requestedBranchId)) {
+    throw new ApiError(403, "Branch is not assigned to this user");
+  }
+
+  return [requestedBranchId];
 };
 
 const validateFilters = (req, { isExport = false } = {}) => {
@@ -151,6 +183,8 @@ export const getStockVerificationReport = async (req, res) => {
     message: "Report fetched successfully",
     date: filters.date,
     branchIds: filters.branchIds,
+    branchId:
+      filters.branchIds.length === 1 ? filters.branchIds[0] : null,
     pagination: result.pagination,
     summary: result.summary,
     data: result.data,
