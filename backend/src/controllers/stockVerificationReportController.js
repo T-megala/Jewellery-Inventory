@@ -1,5 +1,5 @@
 import ApiError from "../utils/ApiError.js";
-import { resolveRequestBranchIds } from "../utils/branchScope.js";
+import { resolveRequestBranchIds, resolveAndroidBranchIds } from "../utils/branchScope.js";
 import stockVerificationReportService from "../services/stockVerificationReportService.js";
 import androidScanReportService from "../services/androidScanReportService.js";
 import { getRequestParam } from "../utils/requestParams.js";
@@ -163,8 +163,8 @@ const parseScanId = (req) => {
 
 export const getAndroidScanReport = async (req, res) => {
   const scanId = parseScanId(req);
-  const branchIds = await resolveRequestBranchIds(req);
-  const branchId = branchIds.length === 1 ? branchIds[0] : branchIds[0] ?? null;
+  const branchIds = await resolveAndroidBranchIds(req);
+  const branchId = branchIds[0];
   const result = await androidScanReportService.getAndroidScanReport({
     scanId,
     branchId,
@@ -173,6 +173,8 @@ export const getAndroidScanReport = async (req, res) => {
   res.status(200).json({
     success: true,
     message: "Android scan report fetched successfully",
+    branchIds,
+    branchId,
     data: result,
   });
 };

@@ -1,5 +1,6 @@
 import pool from "../config/database.js";
 import ApiError from "../utils/ApiError.js";
+import userBranchService from "./userBranchService.js";
 
 const toBranch = (row) => ({
   id: Number(row.id),
@@ -72,8 +73,12 @@ export const createBranch = async (payload) => {
     throw new ApiError(400, "Branch name is required");
   }
 
+  const connection = await pool.getConnection();
+
   try {
-    const [result] = await pool.execute(
+    await connection.beginTransaction();
+
+    const [result] = await connection.execute(
       `INSERT INTO branches (name, address, city, phone)
        VALUES (?, ?, ?, ?)`,
       [
@@ -84,13 +89,21 @@ export const createBranch = async (payload) => {
       ],
     );
 
-    return getBranchById(result.insertId);
+    const branchId = result.insertId;
+    await userBranchService.assignBranchToSuperAdminUsers(branchId, connection);
+    await connection.commit();
+
+    return getBranchById(branchId);
   } catch (error) {
+    await connection.rollback();
+
     if (error.code === "ER_DUP_ENTRY") {
       throw new ApiError(409, "Branch name already exists");
     }
 
     throw error;
+  } finally {
+    connection.release();
   }
 };
 

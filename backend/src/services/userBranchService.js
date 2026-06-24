@@ -1,5 +1,6 @@
 import pool from "../config/database.js";
 import ApiError from "../utils/ApiError.js";
+import { SUPER_ADMIN_ROLE_NAME } from "./roleService.js";
 
 const mapBranchRow = (row) => ({
   id: Number(row.branch_id),
@@ -142,6 +143,31 @@ export const setUserBranches = async (
   }
 };
 
+export const assignBranchToSuperAdminUsers = async (
+  branchId,
+  connection = pool,
+) => {
+  const parsedBranchId = Number.parseInt(String(branchId), 10);
+
+  if (!Number.isInteger(parsedBranchId) || parsedBranchId < 1) {
+    throw new ApiError(400, "branchId must be a positive integer");
+  }
+
+  await connection.execute(
+    `INSERT INTO user_branches (user_id, branch_id, is_default)
+     SELECT u.id, ?, 0
+     FROM users u
+     INNER JOIN roles r ON r.id = u.role_id AND r.name = ?
+     WHERE u.is_active = 1
+       AND NOT EXISTS (
+         SELECT 1
+         FROM user_branches ub
+         WHERE ub.user_id = u.id AND ub.branch_id = ?
+       )`,
+    [parsedBranchId, SUPER_ADMIN_ROLE_NAME, parsedBranchId],
+  );
+};
+
 export const userHasBranchAccess = async (userId, branchId) => {
   const [rows] = await pool.execute(
     `SELECT 1
@@ -159,6 +185,7 @@ export default {
   getDefaultBranchForUser,
   getBranchIdsForUser,
   setUserBranches,
+  assignBranchToSuperAdminUsers,
   userHasBranchAccess,
   mapBranchesForResponse,
   resolveDefaultBranchId,

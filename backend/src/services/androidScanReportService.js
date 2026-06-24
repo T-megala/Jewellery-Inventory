@@ -52,11 +52,12 @@ const mapProductCounts = (rows) =>
     count: Number(row.count ?? 0),
   }));
 
-const fetchScanRow = async (scanId) => {
+const fetchScanRow = async (scanId, branchId) => {
   const [rows] = await pool.execute(
     `SELECT
        id,
        verification_id,
+       branch_id,
        verification_date,
        verification_day,
        verification_millis,
@@ -70,28 +71,20 @@ const fetchScanRow = async (scanId) => {
        new_count,
        created_at
      FROM latest_stock_verification
-     WHERE id = ?`,
-    [scanId],
+     WHERE id = ?
+       AND branch_id = ?`,
+    [scanId, branchId],
   );
 
   return rows[0] ?? null;
 };
 
-const fetchLatestScanRow = async (branchId = null) => {
-  const conditions = [];
-  const params = [];
-
-  if (branchId) {
-    conditions.push("branch_id = ?");
-    params.push(branchId);
-  }
-
-  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-
+const fetchLatestScanRow = async (branchId) => {
   const [rows] = await pool.execute(
     `SELECT
        id,
        verification_id,
+       branch_id,
        verification_date,
        verification_day,
        verification_millis,
@@ -105,10 +98,10 @@ const fetchLatestScanRow = async (branchId = null) => {
        new_count,
        created_at
      FROM latest_stock_verification
-     ${whereClause}
+     WHERE branch_id = ?
      ORDER BY id DESC
      LIMIT 1`,
-    params,
+    [branchId],
   );
 
   return rows[0] ?? null;
@@ -165,6 +158,7 @@ const fetchMissingCountsByProduct = async (scanRow, activeBatchId) => {
 const mapScanResponse = (scanRow) => ({
   id: Number(scanRow.id),
   verificationId: Number(scanRow.verification_id),
+  branchId: scanRow.branch_id ? Number(scanRow.branch_id) : null,
   verificationDate: formatDateTime(scanRow.verification_date),
   verificationDay:
     toDateKey(scanRow.verification_day) ?? toDateKey(scanRow.verification_date),
@@ -182,15 +176,21 @@ const mapScanResponse = (scanRow) => ({
 });
 
 const getAndroidScanReport = async ({ scanId, branchId = null } = {}) => {
-  const scanRow = scanId
-    ? await fetchScanRow(scanId)
-    : await fetchLatestScanRow(branchId);
+  const resolvedBranchId = Number(branchId);
 
-  if (!scanRow) {
-    throw new ApiError(404, "No stock verification scan found");
+  if (!Number.isInteger(resolvedBranchId) || resolvedBranchId < 1) {
+    throw new ApiError(400, "branchId is required");
   }
 
-  const activeBatchId = await getActiveBatchId(branchId);
+  const scanRow = scanId
+    ? await fetchScanRow(scanId, resolvedBranchId)
+    : await fetchLatestScanRow(resolvedBranchId);
+
+  if (!scanRow) {
+    throw new ApiError(404, "No stock verification scan found for this branch");
+  }
+
+  const activeBatchId = await getActiveBatchId(resolvedBranchId);
   const [found, newItems, missing] = await Promise.all([
     fetchDetailCountsByProduct(scanRow.id, "FOUND"),
     fetchDetailCountsByProduct(scanRow.id, "NEW"),
