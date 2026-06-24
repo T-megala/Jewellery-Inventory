@@ -13,8 +13,25 @@ export const login = async (req, res) => {
     message: "Login successful",
     data: {
       token: result.token,
+      refreshToken: result.refreshToken,
       user: result.user,
       permissions: result.permissions,
+    },
+  });
+};
+
+export const refreshToken = async (req, res) => {
+  const result = await authService.refreshAccessToken({
+    refreshToken: req.body?.refreshToken,
+  });
+
+  res.status(200).json({
+    success: true,
+    message: "Access token refreshed successfully",
+    data: {
+      token: result.token,
+      refreshToken: result.refreshToken,
+      user: result.user,
     },
   });
 };
@@ -58,6 +75,7 @@ export const selectBranches = async (req, res) => {
     message: "Branches selected successfully",
     data: {
       token: result.token,
+      refreshToken: result.refreshToken,
       user: result.user,
       permissions: result.permissions,
     },

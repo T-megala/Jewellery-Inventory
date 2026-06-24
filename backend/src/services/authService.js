@@ -5,6 +5,7 @@ import { verifyPassword } from "../utils/passwordHasher.js";
 import roleService from "./roleService.js";
 import userBranchService from "./userBranchService.js";
 import branchService from "./branchService.js";
+import userLogService from "./userLogService.js";
 
 const mapRole = (row) =>
   row?.role_id
@@ -43,7 +44,10 @@ const validateSelectedBranchIds = (selectedBranchIds, mappedBranchIds) => {
 
   for (const branchId of selectedBranchIds) {
     if (!mappedSet.has(branchId)) {
-      throw new ApiError(403, "One or more branches are not assigned to this user");
+      throw new ApiError(
+        403,
+        "One or more branches are not assigned to this user",
+      );
     }
   }
 };
@@ -100,8 +104,7 @@ export const loadUserAuthProfile = async (userId, preloadedBranches = null) => {
     : [];
 
   const branches =
-    preloadedBranches ??
-    (await userBranchService.getBranchesForUser(userId));
+    preloadedBranches ?? (await userBranchService.getBranchesForUser(userId));
 
   return {
     id: Number(row.id),
@@ -130,6 +133,7 @@ const issueAuthSession = async ({
   internalBranches,
   profile,
   selectedBranchIds,
+  rotateRefreshSessionId = null,
 }) => {
   const defaultBranchId = resolveActiveBranchId(
     internalBranches,
@@ -137,10 +141,20 @@ const issueAuthSession = async ({
   );
   const user = await enrichProfileWithSelection(profile, selectedBranchIds);
 
+  if (rotateRefreshSessionId) {
+    await userLogService.revokeSession(rotateRefreshSessionId);
+  }
+
+  const refreshToken = await userLogService.createRefreshSession(
+    profile.id,
+    selectedBranchIds,
+  );
+
   return {
     token: createAccessToken(
       buildTokenUser(profile, defaultBranchId, selectedBranchIds),
     ),
+    refreshToken,
     user,
     permissions: profile.permissions,
   };
@@ -177,7 +191,9 @@ export const login = async ({ username, password, branchIds }) => {
     throw new ApiError(401, "Invalid username or password");
   }
 
-  const internalBranches = await userBranchService.getBranchesForUser(dbUser.id);
+  const internalBranches = await userBranchService.getBranchesForUser(
+    dbUser.id,
+  );
   const profile = await loadUserAuthProfile(dbUser.id, internalBranches);
 
   if (!profile) {
@@ -228,6 +244,56 @@ export const selectBranches = async (userId, branchIds) => {
   });
 };
 
+export const refreshAccessToken = async ({ refreshToken }) => {
+  const plainRefreshToken = String(refreshToken ?? "").trim();
+
+  if (!plainRefreshToken) {
+    throw new ApiError(400, "refreshToken is required");
+  }
+
+  const session = await userLogService.findValidSession(plainRefreshToken);
+
+  if (!session) {
+    throw new ApiError(401, "Invalid or expired refresh token");
+  }
+
+  const internalBranches = await userBranchService.getBranchesForUser(
+    session.userId,
+  );
+  const profile = await loadUserAuthProfile(session.userId, internalBranches);
+
+  if (!profile || !profile.isActive) {
+    await userLogService.revokeSession(session.id);
+    throw new ApiError(401, "Invalid or expired refresh token");
+  }
+
+  if (!profile.role) {
+    await userLogService.revokeSession(session.id);
+    throw new ApiError(403, "User role is not assigned");
+  }
+
+  if (profile.branches.length === 0) {
+    await userLogService.revokeSession(session.id);
+    throw new ApiError(403, "User branch is not assigned");
+  }
+
+  const mappedBranchIds = profile.branches.map((branch) => branch.id);
+  const selectedBranchIds =
+    session.selectedBranchIds.length > 0
+      ? session.selectedBranchIds
+      : mappedBranchIds;
+
+  validateSelectedBranchIds(selectedBranchIds, mappedBranchIds);
+  await userLogService.touchSession(session.id);
+
+  return issueAuthSession({
+    internalBranches,
+    profile,
+    selectedBranchIds,
+    rotateRefreshSessionId: session.id,
+  });
+};
+
 export const buildProfileResponse = async (userId, selectedBranchIds = []) => {
   const profile = await loadUserAuthProfile(userId);
 
@@ -245,6 +311,7 @@ export const buildProfileResponse = async (userId, selectedBranchIds = []) => {
 
 export default {
   login,
+  refreshAccessToken,
   loadUserAuthProfile,
   selectBranches,
   buildProfileResponse,

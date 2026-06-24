@@ -30,6 +30,7 @@ const files = [
   "026_stock_verification_report_indexes.sql",
   "027_verification_per_branch_latest_scan.sql",
   "029_permissions_parent_child.sql",
+  "030_user_logs_refresh_tokens.sql",
 ];
 
 const SKIPPABLE_ERROR_CODES = new Set([

@@ -27,6 +27,19 @@ const parseExpirySeconds = (value = DEFAULT_EXPIRY) => {
   return amount * multipliers[unit];
 };
 
+export const parseTokenExpirySeconds = (value, fallbackSeconds = null) => {
+  if (value === undefined || value === null || String(value).trim() === '') {
+    return fallbackSeconds ?? parseExpirySeconds(DEFAULT_EXPIRY);
+  }
+
+  const match = String(value).trim().match(/^(\d+)([smhd])?$/i);
+  if (!match) {
+    return fallbackSeconds ?? parseExpirySeconds(DEFAULT_EXPIRY);
+  }
+
+  return parseExpirySeconds(value);
+};
+
 const getSecret = () => {
   const secret = process.env.ACCESS_TOKEN_SECRET;
 
@@ -45,7 +58,7 @@ const sign = (payload) =>
 
 export const createAccessToken = (user) => {
   const now = Math.floor(Date.now() / 1000);
-  const expiresIn = parseExpirySeconds(process.env.ACCESS_TOKEN_EXPIRY);
+  const expiresIn = parseTokenExpirySeconds(process.env.ACCESS_TOKEN_EXPIRY);
   const header = base64UrlEncode({ alg: 'HS256', typ: 'JWT' });
   const payload = base64UrlEncode({
     sub: String(user.id),

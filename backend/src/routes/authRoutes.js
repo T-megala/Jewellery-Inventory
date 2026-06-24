@@ -1,12 +1,21 @@
-import express from 'express';
-import * as authController from '../controllers/authController.js';
-import { asyncHandler } from '../middleware/errorHandler.js';
-import { authenticateApi } from '../middleware/authMiddleware.js';
+import express from "express";
+import * as authController from "../controllers/authController.js";
+import { asyncHandler } from "../middleware/errorHandler.js";
+import { authenticateApi } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-router.post('/auth/login', asyncHandler(authController.login));
-router.get('/auth/profile', authenticateApi, asyncHandler(authController.getProfile));
-router.post('/auth/select-branches', authenticateApi, asyncHandler(authController.selectBranches));
+router.post("/auth/login", asyncHandler(authController.login));
+router.post("/auth/refresh", asyncHandler(authController.refreshToken));
+router.get(
+  "/auth/profile",
+  authenticateApi,
+  asyncHandler(authController.getProfile),
+);
+router.post(
+  "/auth/select-branches",
+  authenticateApi,
+  asyncHandler(authController.selectBranches),
+);
 
 export default router;
