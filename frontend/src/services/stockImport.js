@@ -10,7 +10,7 @@ function storageKey(date = todayKey()) {
 
 function readDay(date) {
   try {
-    const raw = localStorage.getItem(storageKey(date))
+    const raw = sessionStorage.getItem(storageKey(date))
     return raw ? JSON.parse(raw) : { date, items: [], savedAt: null, fileName: null, uploadedAt: null }
   } catch {
     return { date, items: [], savedAt: null, fileName: null, uploadedAt: null }
@@ -19,7 +19,7 @@ function readDay(date) {
 
 function writeDay(data) {
   try {
-    localStorage.setItem(storageKey(data.date), JSON.stringify(data))
+    sessionStorage.setItem(storageKey(data.date), JSON.stringify(data))
   } catch {
     throw new Error('Upload is too large to store in the browser. Backend storage will be needed for full bulk imports.')
   }

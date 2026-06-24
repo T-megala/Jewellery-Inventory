@@ -141,7 +141,7 @@ export default function MainLayout() {
 
   function handleLogout() {
     logout()
-    navigate('/login', { replace: true })
+    window.location.replace('/login')
   }
 
   function closeMobileNav() {

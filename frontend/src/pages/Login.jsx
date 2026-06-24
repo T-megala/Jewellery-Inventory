@@ -3,14 +3,12 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import LoginBranchSelect from '../components/LoginBranchSelect.jsx'
 import FieldError from '../components/FieldError.jsx'
 import {
+  clearAuthSession,
   clearPendingBranchSelection,
   completeBranchSelection,
   getSelectedBranchIds,
   getUser,
-  hasPendingBranchSelection,
-  isAuthenticated,
   login,
-  logout,
   markPendingBranchSelection,
 } from '../services/auth.js'
 import '../components/FieldError.css'
@@ -27,10 +25,20 @@ function getInitialBranchIds(user) {
   return allowedIds
 }
 
+function getRedirectPath(location) {
+  const fromState = location.state?.from?.pathname
+  if (fromState && fromState !== '/login') return fromState
+
+  const next = new URLSearchParams(location.search).get('next')
+  if (next && next.startsWith('/') && !next.startsWith('/login')) return next
+
+  return '/dashboard'
+}
+
 export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
-  const redirectTo = location.state?.from?.pathname || '/dashboard'
+  const redirectTo = getRedirectPath(location)
   const [step, setStep] = useState('credentials')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -43,22 +51,21 @@ export default function Login() {
   const passwordRef = useRef(null)
   const submitRef = useRef(null)
 
+  function enterAuthenticatedApp() {
+    navigate(redirectTo)
+  }
+
   const branchUser = getUser()
   const branches = branchUser?.branches ?? []
 
   useEffect(() => {
-    if (hasPendingBranchSelection() && isAuthenticated()) {
-      const user = getUser()
-      if (user?.branches?.length > 1) {
-        setStep('branch')
-        setSelectedBranchIdsState(getInitialBranchIds(user))
-        return
-      }
-      clearPendingBranchSelection()
-    }
-
-    logout()
-  }, [])
+    setStep('credentials')
+    setUsername('')
+    setPassword('')
+    setSelectedBranchIdsState([])
+    setError('')
+    setFieldErrors({})
+  }, [location.key])
 
   function handleUsernameKeyDown(e) {
     if (e.key === 'Enter') {
@@ -125,7 +132,7 @@ export default function Login() {
 
       if (userBranches.length <= 1) {
         clearPendingBranchSelection()
-        navigate(redirectTo, { replace: true })
+        enterAuthenticatedApp()
         return
       }
 
@@ -155,7 +162,7 @@ export default function Login() {
     setLoading(true)
     try {
       await completeBranchSelection(selectedBranchIds)
-      navigate(redirectTo, { replace: true })
+      enterAuthenticatedApp()
     } catch (err) {
       setError(err.message || 'Failed to save branch selection. Please try again.')
     } finally {
@@ -164,7 +171,7 @@ export default function Login() {
   }
 
   function handleBackToLogin() {
-    logout()
+    clearAuthSession()
     setStep('credentials')
     setUsername('')
     setPassword('')

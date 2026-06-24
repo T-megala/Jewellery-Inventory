@@ -9,34 +9,41 @@ import Branches from './pages/Branches.jsx'
 import Masters from './pages/Masters.jsx'
 import Roles from './pages/Roles.jsx'
 import MainLayout from './layouts/MainLayout.jsx'
-import RequireAuth from './components/RequireAuth.jsx'
+import AuthHistoryGuard from './components/AuthHistoryGuard.jsx'
+import ProtectedRoute from './components/ProtectedRoute.jsx'
+import RequireGuest from './components/RequireGuest.jsx'
 import RootRedirect from './components/RootRedirect.jsx'
-import { isAuthenticated } from './services/auth.js'
+import { isSessionValid } from './services/auth.js'
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<RootRedirect />} />
+    <>
+      <AuthHistoryGuard />
+      <Routes>
+        <Route path="/" element={<RootRedirect />} />
 
-      <Route path="/login" element={<Login />} />
-
-      <Route element={<RequireAuth />}>
-        <Route element={<MainLayout />}>
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/import" element={<Import />} />
-          <Route path="/stock" element={<Stock />} />
-          <Route path="/reports" element={<Reports />} />
-          <Route path="/masters" element={<Masters />} />
-          <Route path="/users" element={<Users />} />
-          <Route path="/branches" element={<Branches />} />
-          <Route path="/roles" element={<Roles />} />
+        <Route element={<RequireGuest />}>
+          <Route path="/login" element={<Login />} />
         </Route>
-      </Route>
 
-      <Route
-        path="*"
-        element={<Navigate to={isAuthenticated() ? '/dashboard' : '/login'} replace />}
-      />
-    </Routes>
+        <Route element={<ProtectedRoute />}>
+          <Route element={<MainLayout />}>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/import" element={<Import />} />
+            <Route path="/stock" element={<Stock />} />
+            <Route path="/reports" element={<Reports />} />
+            <Route path="/masters" element={<Masters />} />
+            <Route path="/users" element={<Users />} />
+            <Route path="/branches" element={<Branches />} />
+            <Route path="/roles" element={<Roles />} />
+          </Route>
+        </Route>
+
+        <Route
+          path="*"
+          element={<Navigate to={isSessionValid() ? '/dashboard' : '/login'} replace />}
+        />
+      </Routes>
+    </>
   )
 }

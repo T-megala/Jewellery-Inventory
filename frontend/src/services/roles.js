@@ -30,9 +30,8 @@ export async function fetchPermissions() {
   return (data || []).map(normalizePermission);
 }
 
-export async function fetchRoles({ includeInactive = true } = {}) {
-  const query = includeInactive ? '?includeInactive=true' : '';
-  const data = await apiFetch(`/roles${query}`);
+export async function fetchRoles() {
+  const data = await apiFetch('/roles');
   return (data || []).map(normalizeRole);
 }
 

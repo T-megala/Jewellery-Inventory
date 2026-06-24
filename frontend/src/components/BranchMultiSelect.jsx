@@ -26,21 +26,16 @@ export default function BranchMultiSelect({
 }) {
   const [searchInput, setSearchInput] = useState('')
 
-  const activeBranches = useMemo(
-    () => branches.filter((branch) => branch.isActive !== false),
-    [branches],
-  )
-
   const searchTerm = searchInput.trim().toLowerCase()
 
   const filteredBranches = useMemo(
-    () => activeBranches.filter((branch) => matchesBranchSearch(branch, searchTerm)),
-    [activeBranches, searchTerm],
+    () => branches.filter((branch) => matchesBranchSearch(branch, searchTerm)),
+    [branches, searchTerm],
   )
 
   const selectedBranches = useMemo(
-    () => activeBranches.filter((branch) => isBranchSelected(selectedIds, branch.id)),
-    [activeBranches, selectedIds],
+    () => branches.filter((branch) => isBranchSelected(selectedIds, branch.id)),
+    [branches, selectedIds],
   )
 
   const allVisibleSelected = filteredBranches.length > 0
@@ -143,11 +138,11 @@ export default function BranchMultiSelect({
           <p className="branch-multi-select__status" role="status">Loading branches…</p>
         )}
 
-        {!loading && activeBranches.length === 0 && (
+        {!loading && branches.length === 0 && (
           <p className="branch-multi-select__status">{emptyMessage}</p>
         )}
 
-        {!loading && activeBranches.length > 0 && filteredBranches.length === 0 && (
+        {!loading && branches.length > 0 && filteredBranches.length === 0 && (
           <p className="branch-multi-select__status">No branches match your search.</p>
         )}
 

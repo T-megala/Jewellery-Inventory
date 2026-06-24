@@ -8,15 +8,13 @@ function normalizeBranch(branch) {
     city: branch.city ?? '',
     phone: branch.phone ?? '',
     isMain: Boolean(branch.isMain),
-    isActive: branch.isActive !== false,
     createdAt: branch.created_at ?? branch.createdAt ?? null,
     updatedAt: branch.updated_at ?? branch.updatedAt ?? null,
   };
 }
 
-export async function fetchBranches({ includeInactive = true } = {}) {
-  const query = includeInactive ? '?includeInactive=true' : '';
-  const data = await apiFetch(`/branches${query}`);
+export async function fetchBranches() {
+  const data = await apiFetch('/branches');
   return (data || []).map(normalizeBranch);
 }
 

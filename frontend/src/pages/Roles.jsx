@@ -455,7 +455,7 @@ export default function Roles() {
 
     try {
       const [rolesData, permissionsData] = await Promise.all([
-        fetchRoles({ includeInactive: true }),
+        fetchRoles(),
         fetchPermissions(),
       ])
       setRoles(rolesData)

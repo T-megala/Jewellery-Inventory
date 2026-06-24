@@ -6,7 +6,30 @@ const USER_KEY = 'auth_user'
 const OPERATIONAL_BRANCH_KEY = 'auth_operational_branch'
 export const PENDING_BRANCH_KEY = 'auth_pending_branch_selection'
 export const BRANCH_CHANGE_EVENT = 'auth:branch-changed'
+export const AUTH_SESSION_EVENT = 'auth:session-changed'
 export const ALL_BRANCHES_VALUE = 'all'
+
+/** Auth lives in sessionStorage — survives refresh, cleared when the tab closes. */
+const authStorage = sessionStorage
+
+function clearLegacyAuthStorage() {
+  const legacyKeys = [
+    TOKEN_KEY,
+    USER_KEY,
+    'auth_tab_id',
+    'auth_login_epoch',
+    'auth_tab_epochs',
+  ]
+  for (const key of legacyKeys) {
+    localStorage.removeItem(key)
+  }
+}
+
+clearLegacyAuthStorage()
+
+function dispatchAuthSessionChange() {
+  window.dispatchEvent(new CustomEvent(AUTH_SESSION_EVENT))
+}
 
 function normalizeBranch(branch) {
   return {
@@ -119,9 +142,11 @@ function parseAuthResponse(json, fallbackError = 'Request failed') {
 }
 
 function applyAuthSession(token, user) {
-  localStorage.setItem(TOKEN_KEY, token)
-  localStorage.setItem(USER_KEY, JSON.stringify(normalizeUser(user, token)))
+  authStorage.setItem(TOKEN_KEY, token)
+  authStorage.setItem(USER_KEY, JSON.stringify(normalizeUser(user, token)))
+  clearLegacyAuthStorage()
   dispatchBranchChange()
+  dispatchAuthSessionChange()
 }
 
 /** Login — optional branchIds for one-step session selection. */
@@ -213,8 +238,10 @@ export async function fetchProfile() {
 
   const data = json.data ?? json
   const user = normalizeUser(data.user, token)
-  localStorage.setItem(USER_KEY, JSON.stringify(user))
+  authStorage.setItem(USER_KEY, JSON.stringify(user))
+  clearLegacyAuthStorage()
   dispatchBranchChange()
+  dispatchAuthSessionChange()
   return user
 }
 
@@ -235,12 +262,12 @@ export function hasPendingBranchSelection() {
 }
 
 export function getToken() {
-  return localStorage.getItem(TOKEN_KEY)
+  return authStorage.getItem(TOKEN_KEY)
 }
 
 export function getUser() {
   try {
-    const raw = localStorage.getItem(USER_KEY)
+    const raw = authStorage.getItem(USER_KEY)
     return raw ? normalizeUser(JSON.parse(raw)) : null
   } catch {
     return null
@@ -345,10 +372,49 @@ export function isAuthenticated() {
   return !!getToken()
 }
 
-export function logout() {
-  localStorage.removeItem(TOKEN_KEY)
-  localStorage.removeItem(USER_KEY)
+export function isSessionValid() {
+  if (!isAuthenticated()) return false
+  if (hasPendingBranchSelection() && needsBranchSelection()) return false
+  return true
+}
+
+export function clearAuthSession() {
+  authStorage.removeItem(TOKEN_KEY)
+  authStorage.removeItem(USER_KEY)
+  clearLegacyAuthStorage()
   clearPendingBranchSelection()
   clearOperationalBranch()
   dispatchBranchChange()
+  dispatchAuthSessionChange()
+}
+
+export function logout() {
+  clearAuthSession()
+}
+
+const LOGIN_PATH = '/login'
+
+export function redirectToLogin() {
+  const next = `${window.location.pathname}${window.location.search}${window.location.hash}`
+  const loginUrl = next && next !== '/' && next !== LOGIN_PATH
+    ? `${LOGIN_PATH}?next=${encodeURIComponent(next)}`
+    : LOGIN_PATH
+  window.location.replace(loginUrl)
+}
+
+/** Reload pages restored from back/forward cache so route loaders re-check auth. */
+export function installAuthNavigationGuards() {
+  if (typeof window === 'undefined') return undefined
+
+  function handlePageShow(event) {
+    if (event.persisted) {
+      window.location.reload()
+    }
+  }
+
+  window.addEventListener('pageshow', handlePageShow)
+
+  return () => {
+    window.removeEventListener('pageshow', handlePageShow)
+  }
 }

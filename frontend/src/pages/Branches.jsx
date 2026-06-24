@@ -57,7 +57,7 @@ export default function Branches() {
     setError('')
 
     try {
-      const data = await fetchBranches({ includeInactive: true })
+      const data = await fetchBranches()
       setBranches(data)
     } catch (err) {
       setError(err.message || 'Failed to load branches.')

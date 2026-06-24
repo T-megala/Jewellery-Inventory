@@ -153,8 +153,8 @@ export default function Users() {
 
     try {
       const [branchesData, rolesData] = await Promise.all([
-        fetchBranches({ includeInactive: true }),
-        fetchRoles({ includeInactive: false }),
+        fetchBranches(),
+        fetchRoles(),
       ])
       setBranches(branchesData)
       setRoles(rolesData)
