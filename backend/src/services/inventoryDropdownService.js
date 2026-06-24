@@ -54,9 +54,7 @@ const getProducts = async ({
   const scope = await buildInventoryScope({ branchId, branchIds });
 
   if (!scope) {
-    return includeAllProductsOption
-      ? [{ id: ALL_SCOPE_ID, name: SCOPE_NAMES.ALL_PRODUCTS }]
-      : [];
+    return [];
   }
 
   const [rows] = await pool.execute(
@@ -70,7 +68,7 @@ const getProducts = async ({
 
   const products = mapRowsToNamedList(rows, 'product');
 
-  if (!includeAllProductsOption) {
+  if (!includeAllProductsOption || products.length === 0) {
     return products;
   }
 
