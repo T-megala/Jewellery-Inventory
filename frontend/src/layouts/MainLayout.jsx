@@ -3,21 +3,31 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { MASTER_PATHS } from '../config/masters.js'
 import ActiveBranchSelect from '../components/ActiveBranchSelect.jsx'
 import { useBranchScope } from '../hooks/useBranchScope.js'
-import { getUser, getUserDisplayName, getUserRoleLabel, logout } from '../services/auth.js'
+import {
+  getUser,
+  getUserDisplayName,
+  getUserRoleLabel,
+  hasPermission,
+  logout,
+} from '../services/auth.js'
 import '../components/ActiveBranchSelect.css'
 import './MainLayout.css'
 
 const BRANCH_FILTER_PATHS = ['/dashboard', '/import', '/stock', '/reports', '/users']
 
 const MAIN_NAV_ITEMS = [
-  { to: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
-  { to: '/import', label: 'Import', icon: 'import' },
-  { to: '/stock', label: 'Stock', icon: 'stock' },
+  { to: '/dashboard', label: 'Dashboard', icon: 'dashboard', permission: 'dashboard.view' },
+  { to: '/import', label: 'Import', icon: 'import', permission: 'products.import' },
+  { to: '/stock', label: 'Stock', icon: 'stock', permission: 'products.view' },
 ]
 
 const REPORTS_NAV_ITEMS = [
-  { to: '/reports', label: 'Reports', icon: 'reports' },
+  { to: '/reports', label: 'Reports', icon: 'reports', permission: 'stock_verification.report' },
 ]
+
+function filterNavItems(items, user) {
+  return items.filter((item) => !item.permission || hasPermission(item.permission, user))
+}
 
 const PAGE_META = {
   '/dashboard': { title: 'Dashboard', subtitle: 'Your showroom at a glance' },
@@ -104,6 +114,8 @@ export default function MainLayout() {
   const location = useLocation()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const user = getUser()
+  const mainNavItems = filterNavItems(MAIN_NAV_ITEMS, user)
+  const reportsNavItems = filterNavItems(REPORTS_NAV_ITEMS, user)
   const { sessionBranches } = useBranchScope()
   const displayName = getUserDisplayName(user)
   const roleLabel = getUserRoleLabel(user)
@@ -178,13 +190,17 @@ export default function MainLayout() {
         <div className="sidebar-nav-wrap">
           <p className="sidebar-menu-label">Main Menu</p>
           <nav className="sidebar-nav">
-            {renderNavLinks(MAIN_NAV_ITEMS, closeMobileNav)}
+            {renderNavLinks(mainNavItems, closeMobileNav)}
           </nav>
 
-          <p className="sidebar-menu-label sidebar-menu-label--reports">Reports</p>
-          <nav className="sidebar-nav sidebar-nav--reports">
-            {renderNavLinks(REPORTS_NAV_ITEMS, closeMobileNav)}
-          </nav>
+          {reportsNavItems.length > 0 && (
+            <>
+              <p className="sidebar-menu-label sidebar-menu-label--reports">Reports</p>
+              <nav className="sidebar-nav sidebar-nav--reports">
+                {renderNavLinks(reportsNavItems, closeMobileNav)}
+              </nav>
+            </>
+          )}
         </div>
 
         <div className="sidebar-footer">

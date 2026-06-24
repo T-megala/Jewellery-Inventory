@@ -6,6 +6,8 @@ import {
 } from '../services/reports.js'
 import TablePagination from '../components/TablePagination.jsx'
 import { useBranchScope } from '../hooks/useBranchScope.js'
+import { getUser, hasPermission } from '../services/auth.js'
+import './Module.css'
 import './Reports.css'
 
 const DEFAULT_PAGE_SIZE = 10
@@ -162,6 +164,9 @@ function getTodayDate() {
 }
 
 export default function Reports() {
+  const user = getUser()
+  const canViewReports = hasPermission('stock_verification.report', user)
+  const canExportReports = hasPermission('stock_verification.export', user)
   const { operationalValue } = useBranchScope()
   const [product, setProduct] = useState('')
   const [subProduct, setSubProduct] = useState('')
@@ -195,6 +200,8 @@ export default function Reports() {
   }), [product, subProduct, counter, status, selectedDate])
 
   useEffect(() => {
+    if (!canViewReports) return undefined
+
     let cancelled = false
 
     async function loadProducts() {
@@ -218,7 +225,7 @@ export default function Reports() {
 
     loadProducts()
     return () => { cancelled = true }
-  }, [operationalValue])
+  }, [canViewReports, operationalValue])
 
   useEffect(() => {
     if (!hasSearched) return undefined
@@ -353,6 +360,17 @@ export default function Reports() {
     await handleExport('excel', 'Excel')
   }
 
+  if (!canViewReports) {
+    return (
+      <div className="reports-page">
+        <div className="module-access-denied">
+          <h2>Reports access denied</h2>
+          <p>You don&apos;t have permission to view stock verification reports.</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="reports-page">
       <div className="reports-stats">
@@ -477,17 +495,19 @@ export default function Reports() {
         <section className="reports-results-card">
           <div className="reports-results__head">
             <h3 className="reports-results__title">Results</h3>
-            <div className="reports-export">
-              <button
-                type="button"
-                className={`report-btn report-btn--export${exporting ? ' report-btn--loading' : ''}`}
-                onClick={handleExportExcel}
-                disabled={exporting || loadingReport}
-              >
-                {exporting && <span className="report-btn__spin report-btn__spin--export" aria-hidden="true" />}
-                Excel
-              </button>
-            </div>
+            {canExportReports && (
+              <div className="reports-export">
+                <button
+                  type="button"
+                  className={`report-btn report-btn--export${exporting ? ' report-btn--loading' : ''}`}
+                  onClick={handleExportExcel}
+                  disabled={exporting || loadingReport}
+                >
+                  {exporting && <span className="report-btn__spin report-btn__spin--export" aria-hidden="true" />}
+                  Excel
+                </button>
+              </div>
+            )}
           </div>
 
           {loadingReport ? (

@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useBranchScope } from '../hooks/useBranchScope.js'
+import { getUser, hasPermission } from '../services/auth.js'
 import { uploadStockExcel } from '../services/import.js'
 import './Import.css'
+import './Module.css'
 
 const ACCEPTED_TYPES = [
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -29,6 +31,8 @@ function StepItem({ number, label, state }) {
 }
 
 export default function Import() {
+  const user = getUser()
+  const canImport = hasPermission('products.import', user)
   const fileInputRef = useRef(null)
   const { sessionBranches, operationalBranchId, isAllBranches } = useBranchScope()
   const importBranchId = sessionBranches.length === 1
@@ -114,6 +118,17 @@ export default function Import() {
   const step3State = result ? 'active' : 'pending'
   const progressValue = importStatus?.progress ?? 0
   const progressLabel = importStatus?.message || 'Processing import…'
+
+  if (!canImport) {
+    return (
+      <div className="import-page">
+        <div className="module-access-denied">
+          <h2>Import access denied</h2>
+          <p>You don&apos;t have permission to import stock.</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="import-page">

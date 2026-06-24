@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import TablePagination from '../components/TablePagination.jsx'
 import { useBranchScope } from '../hooks/useBranchScope.js'
+import { getUser, hasPermission } from '../services/auth.js'
 import { fetchProductList } from '../services/stock.js'
+import './Module.css'
 import './Stock.css'
 
 const DEFAULT_PAGE_SIZE = 10
@@ -15,6 +17,8 @@ function formatValue(value) {
 }
 
 export default function Stock() {
+  const user = getUser()
+  const canViewStock = hasPermission('products.view', user)
   const { operationalValue } = useBranchScope()
   const [rows, setRows] = useState([])
   const [pagination, setPagination] = useState(null)
@@ -56,8 +60,9 @@ export default function Stock() {
   }, [searchInput])
 
   useEffect(() => {
+    if (!canViewStock) return undefined
     loadStock(1, search)
-  }, [loadStock, search, operationalValue])
+  }, [canViewStock, loadStock, search, operationalValue])
 
   function handleClearSearch() {
     setSearchInput('')
@@ -66,6 +71,17 @@ export default function Stock() {
   function handlePageSizeChange(nextSize) {
     setPageSize(nextSize)
     loadStock(1, search, nextSize)
+  }
+
+  if (!canViewStock) {
+    return (
+      <div className="stock-page">
+        <div className="module-access-denied">
+          <h2>Stock access denied</h2>
+          <p>You don&apos;t have permission to view stock.</p>
+        </div>
+      </div>
+    )
   }
 
   return (

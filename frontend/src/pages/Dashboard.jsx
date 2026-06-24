@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useBranchScope } from '../hooks/useBranchScope.js'
+import { getUser, hasPermission } from '../services/auth.js'
 import {
   Area,
   Bar,
@@ -1954,6 +1955,7 @@ function DashboardSkeleton() {
 
 export default function Dashboard() {
   const { operationalValue } = useBranchScope()
+  const user = getUser()
   const [summary, setSummary] = useState(null)
   const [stocktake, setStocktake] = useState(EMPTY_STOCKTAKE)
   const [counterAccuracy, setCounterAccuracy] = useState(EMPTY_COUNTER_ACCURACY)
@@ -2198,6 +2200,38 @@ export default function Dashboard() {
 
   const batch = summary?.batch
   const metricCards = buildMetricCards(totals, stocktake, batch)
+
+  const canViewDashboard = hasPermission('dashboard.view', user)
+
+  const metricPermissionByKey = {
+    categories: 'dashboard.inventory_overview.categories',
+    subproducts: 'dashboard.inventory_overview.sub_products',
+    erp: 'dashboard.inventory_overview.total_items_erp',
+    scanned: 'dashboard.inventory_overview.items_scanned',
+    discrepancies: 'dashboard.inventory_overview.discrepancies',
+    stocktakes: 'dashboard.inventory_overview.stocktakes_per_month',
+  }
+
+  const visibleMetricCards = metricCards.filter((card) => (
+    !metricPermissionByKey[card.key] || hasPermission(metricPermissionByKey[card.key], user)
+  ))
+
+  const canSeeStocktakeFindings = hasPermission('dashboard.stock_verification.last_stocktake_findings', user)
+  const canSeeStocktakeHistory = hasPermission('dashboard.stock_verification.stocktake_history', user)
+
+  const canSeeProductMix = hasPermission('dashboard.stock_analytics.product_mix', user)
+  const canSeeCategoryBreakdown = hasPermission('dashboard.stock_analytics.category_breakdown', user)
+  const canSeeAccuracyTrend = hasPermission('dashboard.stock_analytics.accuracy_trend', user)
+  const canSeeCounterAccuracy = hasPermission('dashboard.stock_analytics.counter_accuracy', user)
+  const canSeeDayWiseSales = hasPermission('dashboard.stock_analytics.day_wise_sales', user)
+  const canSeeCounterSplit = hasPermission('dashboard.stock_analytics.counter_split', user)
+  const canSeeDailyImports = hasPermission('dashboard.stock_analytics.daily_imports', user)
+  const canSeeTopSoldProducts = hasPermission('dashboard.stock_analytics.top_sold_products', user)
+
+  const canSeeSmartAlerts = hasPermission('dashboard.branch.smart_alerts', user)
+  const canSeeBranchComparison = hasPermission('dashboard.branch.branch_comparison', user)
+  const canSeeStockMovement = hasPermission('dashboard.branch.stock_movement', user)
+
   const byProduct = summary?.byProduct ?? []
   const byCounter = summary?.byCounter ?? []
   const topSoldBarData = useMemo(
@@ -2229,6 +2263,17 @@ export default function Dashboard() {
           <h2>Could not load dashboard</h2>
           <p>{error}</p>
           <p className="dashboard-empty__hint">Make sure the backend is running and try again.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!canViewDashboard) {
+    return (
+      <div className="dashboard">
+        <div className="dashboard-empty">
+          <h2>Dashboard access denied</h2>
+          <p>You don&apos;t have permission to view the dashboard.</p>
         </div>
       </div>
     )
@@ -2266,114 +2311,149 @@ export default function Dashboard() {
       </section>
 
       {/* Key Metrics */}
-      <section className="dashboard-inventory-overview">
-        <div className="module-header">
-          <div className="module-header__main">
-            <h2>Inventory Overview</h2>
+      {visibleMetricCards.length > 0 && (
+        <section className="dashboard-inventory-overview">
+          <div className="module-header">
+            <div className="module-header__main">
+              <h2>Inventory Overview</h2>
+            </div>
           </div>
-        </div>
 
-        <div className="dashboard-metrics">
-          {metricCards.map((card) => (
-            <MetricCard key={card.key} {...card} />
-          ))}
-        </div>
-      </section>
+          <div className="dashboard-metrics">
+            {visibleMetricCards.map((card) => (
+              <MetricCard key={card.key} {...card} />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Stocktake */}
-      <section className="dashboard-stocktake">
-        <div className="module-header">
-          <div className="module-header__main">
-            <h2>Stock Verification</h2>
+      {(canSeeStocktakeFindings || canSeeStocktakeHistory) && (
+        <section className="dashboard-stocktake">
+          <div className="module-header">
+            <div className="module-header__main">
+              <h2>Stock Verification</h2>
+            </div>
+            {stocktake.stocktakesThisMonth > 0 && (
+              <span className="module-header__badge">
+                {stocktake.stocktakesThisMonth}
+                {' '}
+                this month
+              </span>
+            )}
           </div>
-          {stocktake.stocktakesThisMonth > 0 && (
-            <span className="module-header__badge">
-              {stocktake.stocktakesThisMonth}
-              {' '}
-              this month
-            </span>
-          )}
-        </div>
 
-        <div className="stocktake-grid">
-          <LastStocktakeFindings stocktake={stocktake} />
-          <StocktakeHistory stocktake={stocktake} />
-        </div>
-      </section>
+          <div className="stocktake-grid">
+            {canSeeStocktakeFindings && <LastStocktakeFindings stocktake={stocktake} />}
+            {canSeeStocktakeHistory && <StocktakeHistory stocktake={stocktake} />}
+          </div>
+        </section>
+      )}
 
       {/* Analytics */}
-      <section className="dashboard-analytics">
-        <div className="module-header">
-          <div className="module-header__main">
-            <h2>Stock Analytics</h2>
-          </div>
-        </div>
-
-        <div className="analytics-grid">
-          <div className="category-mix-row">
-            <AnalyticsTile
-              title="Product mix by category"
-              subtitle="Distribution of inventory across product groups"
-            >
-              <ProductCategoryDonut data={byProduct} totalPieces={totals.totalPieces} />
-            </AnalyticsTile>
-
-            <AnalyticsTile
-              title="Category breakdown"
-              subtitle={`${formatCount(totals.totalPieces)} total items across ${formatCount(byProduct.length)} groups`}
-            >
-              <CategoryBreakdownTable data={byProduct} totalPieces={totals.totalPieces} />
-            </AnalyticsTile>
+      {(canSeeProductMix
+        || canSeeCategoryBreakdown
+        || canSeeAccuracyTrend
+        || canSeeCounterAccuracy
+        || canSeeDayWiseSales
+        || canSeeCounterSplit
+        || canSeeDailyImports
+        || canSeeTopSoldProducts) && (
+        <section className="dashboard-analytics">
+          <div className="module-header">
+            <div className="module-header__main">
+              <h2>Stock Analytics</h2>
+            </div>
           </div>
 
-          <div className="accuracy-split-row">
-            <AnalyticsTile title="Accuracy trend" subtitle="Last 6 stocktakes">
-              <AccuracyTrendChart stocktake={stocktake} />
-            </AnalyticsTile>
+          <div className="analytics-grid">
+            {(canSeeProductMix || canSeeCategoryBreakdown) && (
+              <div className="category-mix-row">
+                {canSeeProductMix && (
+                  <AnalyticsTile
+                    title="Product mix by category"
+                    subtitle="Distribution of inventory across product groups"
+                  >
+                    <ProductCategoryDonut data={byProduct} totalPieces={totals.totalPieces} />
+                  </AnalyticsTile>
+                )}
 
-            <AnalyticsTile title="Counter / display accuracy" subtitle="By physical location in store">
-              <CounterDisplayAccuracyPanel counterAccuracy={counterAccuracy} loading={loading} />
-            </AnalyticsTile>
-          </div>
-
-          <div className="sales-accuracy-row">
-            <DayWiseSalesCard
-              period={salesPeriod}
-              counter={salesCounter}
-              onPeriodChange={setSalesPeriod}
-              onCounterChange={setSalesCounter}
-              loading={dayWiseLoading}
-              error={dayWiseError}
-              data={dayWiseSales.data}
-              totalSoldPieces={dayWiseSales.totalSoldPieces}
-            />
-
-            <AnalyticsTile title="Counter split" subtitle="Tag count in showroom vs safe storage">
-              <CounterSplitChart data={counterSplitData} />
-            </AnalyticsTile>
-          </div>
-
-          <DailyImportsCard
-            period={importPeriod}
-            counter={importCounter}
-            onPeriodChange={setImportPeriod}
-            onCounterChange={setImportCounter}
-            loading={dailyImportsLoading}
-            error={dailyImportsError}
-            data={dailyImports.data}
-          />
-
-          <AnalyticsTile title="Top Sold Products" subtitle="Overall sold pieces across all stock import batches" wide>
-            {topSoldLoading && <p className="analytics-empty">Loading sold products…</p>}
-            {!topSoldLoading && topSoldNotice && !topSoldBarData.length && (
-              <p className="analytics-empty">{topSoldNotice}</p>
+                {canSeeCategoryBreakdown && (
+                  <AnalyticsTile
+                    title="Category breakdown"
+                    subtitle={`${formatCount(totals.totalPieces)} total items across ${formatCount(byProduct.length)} groups`}
+                  >
+                    <CategoryBreakdownTable data={byProduct} totalPieces={totals.totalPieces} />
+                  </AnalyticsTile>
+                )}
+              </div>
             )}
-            {!topSoldLoading && topSoldBarData.length > 0 && (
-              <ProductBarChart data={topSoldBarData} />
+
+            {(canSeeAccuracyTrend || canSeeCounterAccuracy) && (
+              <div className="accuracy-split-row">
+                {canSeeAccuracyTrend && (
+                  <AnalyticsTile title="Accuracy trend" subtitle="Last 6 stocktakes">
+                    <AccuracyTrendChart stocktake={stocktake} />
+                  </AnalyticsTile>
+                )}
+
+                {canSeeCounterAccuracy && (
+                  <AnalyticsTile title="Counter / display accuracy" subtitle="By physical location in store">
+                    <CounterDisplayAccuracyPanel counterAccuracy={counterAccuracy} loading={loading} />
+                  </AnalyticsTile>
+                )}
+              </div>
             )}
-          </AnalyticsTile>
-        </div>
-      </section>
+
+            {(canSeeDayWiseSales || canSeeCounterSplit) && (
+              <div className="sales-accuracy-row">
+                {canSeeDayWiseSales && (
+                  <DayWiseSalesCard
+                    period={salesPeriod}
+                    counter={salesCounter}
+                    onPeriodChange={setSalesPeriod}
+                    onCounterChange={setSalesCounter}
+                    loading={dayWiseLoading}
+                    error={dayWiseError}
+                    data={dayWiseSales.data}
+                    totalSoldPieces={dayWiseSales.totalSoldPieces}
+                  />
+                )}
+
+                {canSeeCounterSplit && (
+                  <AnalyticsTile title="Counter split" subtitle="Tag count in showroom vs safe storage">
+                    <CounterSplitChart data={counterSplitData} />
+                  </AnalyticsTile>
+                )}
+              </div>
+            )}
+
+            {canSeeDailyImports && (
+              <DailyImportsCard
+                period={importPeriod}
+                counter={importCounter}
+                onPeriodChange={setImportPeriod}
+                onCounterChange={setImportCounter}
+                loading={dailyImportsLoading}
+                error={dailyImportsError}
+                data={dailyImports.data}
+              />
+            )}
+
+            {canSeeTopSoldProducts && (
+              <AnalyticsTile title="Top Sold Products" subtitle="Overall sold pieces across all stock import batches" wide>
+                {topSoldLoading && <p className="analytics-empty">Loading sold products…</p>}
+                {!topSoldLoading && topSoldNotice && !topSoldBarData.length && (
+                  <p className="analytics-empty">{topSoldNotice}</p>
+                )}
+                {!topSoldLoading && topSoldBarData.length > 0 && (
+                  <ProductBarChart data={topSoldBarData} />
+                )}
+              </AnalyticsTile>
+            )}
+          </div>
+        </section>
+      )}
 
       <section className="dashboard-insights">
         <div className="insight-section__nav" aria-label="Insight categories">
@@ -2384,23 +2464,29 @@ export default function Dashboard() {
           </span>
         </div>
 
-        <SmartAlertsCard
-          data={smartAlerts}
-          loading={smartAlertsLoading}
-          error={smartAlertsError}
-        />
+        {canSeeSmartAlerts && (
+          <SmartAlertsCard
+            data={smartAlerts}
+            loading={smartAlertsLoading}
+            error={smartAlertsError}
+          />
+        )}
 
         <div className="insight-grid">
-          <MultiBranchComparisonCard
-            data={branchComparison}
-            loading={branchComparisonLoading}
-            error={branchComparisonError}
-          />
-          <StockMovementCard
-            data={stockMovement}
-            loading={stockMovementLoading}
-            error={stockMovementError}
-          />
+          {canSeeBranchComparison && (
+            <MultiBranchComparisonCard
+              data={branchComparison}
+              loading={branchComparisonLoading}
+              error={branchComparisonError}
+            />
+          )}
+          {canSeeStockMovement && (
+            <StockMovementCard
+              data={stockMovement}
+              loading={stockMovementLoading}
+              error={stockMovementError}
+            />
+          )}
         </div>
       </section>
     </div>
