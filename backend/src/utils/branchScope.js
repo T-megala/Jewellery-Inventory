@@ -13,11 +13,16 @@ const parsePositiveInt = (value) => {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 };
 
-export const normalizeBranchIds = ({ branchId = null, branchIds = null } = {}) => {
+export const normalizeBranchIds = ({
+  branchId = null,
+  branchIds = null,
+} = {}) => {
   if (Array.isArray(branchIds) && branchIds.length > 0) {
     return [
       ...new Set(
-        branchIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0),
+        branchIds
+          .map((id) => Number(id))
+          .filter((id) => Number.isInteger(id) && id > 0),
       ),
     ];
   }

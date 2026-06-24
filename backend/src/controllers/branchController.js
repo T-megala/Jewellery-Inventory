@@ -1,7 +1,7 @@
 import ApiError from "../utils/ApiError.js";
+import { PERMISSIONS } from "../constants/permissions.js";
 import branchService from "../services/branchService.js";
 import userBranchService from "../services/userBranchService.js";
-import { SUPER_ADMIN_ROLE_NAME } from "../services/roleService.js";
 
 const parseId = (raw) => {
   const id = Number.parseInt(String(raw), 10);
@@ -13,37 +13,29 @@ const parseId = (raw) => {
   return id;
 };
 
+/** List branches from user_branches mapping (not JWT token). */
 const resolveListedBranches = async (req) => {
-  if (req.user?.roleName === SUPER_ADMIN_ROLE_NAME) {
-    const selectedBranchIds = Array.isArray(req.user?.selectedBranchIds)
-      ? req.user.selectedBranchIds.filter((id) => id > 0)
-      : [];
+  const userId = Number(req.user?.id ?? req.user?.sub);
 
-    if (selectedBranchIds.length > 0) {
-      return branchService.getBranchesByIds(selectedBranchIds);
-    }
+  if (!userId) {
+    return [];
+  }
 
+  const permissions = Array.isArray(req.user?.permissions)
+    ? req.user.permissions
+    : [];
+  const canViewAll = permissions.includes(PERMISSIONS.BRANCHES_VIEW_ALL);
+  const assignedIds = await userBranchService.getBranchIdsForUser(userId);
+
+  if (assignedIds.length > 0) {
+    return branchService.getBranchesByIds(assignedIds);
+  }
+
+  if (canViewAll) {
     return branchService.getAllBranches();
   }
 
-  if (req.user?.id) {
-    const selectedBranchIds = Array.isArray(req.user?.selectedBranchIds)
-      ? req.user.selectedBranchIds.filter((id) => id > 0)
-      : [];
-
-    if (selectedBranchIds.length > 0) {
-      return branchService.getBranchesByIds(selectedBranchIds);
-    }
-
-    const branchIds =
-      Array.isArray(req.user.branchIds) && req.user.branchIds.length > 0
-        ? req.user.branchIds
-        : await userBranchService.getBranchIdsForUser(req.user.id);
-
-    return branchService.getBranchesByIds(branchIds);
-  }
-
-  return branchService.getAllBranches();
+  return [];
 };
 
 export const listBranches = async (req, res) => {
@@ -86,5 +78,7 @@ export const updateBranch = async (req, res) => {
 
 export const deleteBranch = async (req, res) => {
   await branchService.deleteBranch(parseId(req.params.id));
-  res.status(200).json({ success: true, message: "Branch deleted successfully" });
+  res
+    .status(200)
+    .json({ success: true, message: "Branch deleted successfully" });
 };

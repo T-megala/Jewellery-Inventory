@@ -1,5 +1,8 @@
 import ApiError from "../utils/ApiError.js";
-import { PERMISSIONS, BRANCH_SCOPE_EXEMPT_PATHS } from "../constants/permissions.js";
+import {
+  PERMISSIONS,
+  BRANCH_SCOPE_EXEMPT_PATHS,
+} from "../constants/permissions.js";
 
 const parsePositiveInt = (value) => {
   const parsed = Number.parseInt(String(value), 10);
@@ -85,7 +88,9 @@ export const authorize =
     );
 
     if (!allowed) {
-      return next(new ApiError(403, "You do not have permission for this action"));
+      return next(
+        new ApiError(403, "You do not have permission for this action"),
+      );
     }
 
     return next();
