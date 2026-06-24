@@ -154,20 +154,6 @@ export const updateBranch = async (id, payload) => {
 };
 
 export const deleteBranch = async (id) => {
-  const [users] = await pool.execute(
-    `SELECT COUNT(*) AS total
-     FROM user_branches
-     WHERE branch_id = ?`,
-    [id],
-  );
-
-  if (Number(users[0]?.total ?? 0) > 0) {
-    throw new ApiError(
-      400,
-      "Cannot delete branch while users are assigned to it",
-    );
-  }
-
   const [result] = await pool.execute(`DELETE FROM branches WHERE id = ?`, [id]);
 
   if (result.affectedRows === 0) {
