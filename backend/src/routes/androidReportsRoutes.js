@@ -25,6 +25,6 @@ router.post(
   asyncHandler(stockVerificationReportController.getAndroidScanReport),
 );
 
-router.get("/branches-android", asyncHandler(branchController.listBranches));
+router.get("/branches-android", asyncHandler(branchController.listBranchesAndroid));
 
 export default router;

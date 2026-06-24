@@ -44,6 +44,16 @@ export const listBranches = async (req, res) => {
   res.status(200).json({ success: true, data: branches });
 };
 
+export const listBranchesAndroid = async (_req, res) => {
+  const branches = await branchService.getAllBranches();
+
+  res.status(200).json({
+    success: true,
+    message: "Data fetched successfully",
+    data: branches.map(({ id, name }) => ({ id, name })),
+  });
+};
+
 export const getBranch = async (req, res) => {
   const branch = await branchService.getBranchById(parseId(req.params.id));
 
