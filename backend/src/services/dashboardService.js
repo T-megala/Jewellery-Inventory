@@ -869,12 +869,19 @@ const getDashboard = async ({ branchId = null, branchIds = null } = {}) => {
   };
 };
 
-const getLatestTwoBatchIds = async () => {
+const getLatestTwoBatchIds = async ({ branchIds = null } = {}) => {
+  const scope = normalizeBranchIds({ branchIds });
+  const branchFilter = buildBranchSqlFilter("branch_id", scope, {
+    keyword: "WHERE",
+  });
+
   const [rows] = await pool.execute(
     `SELECT id, batch_date, uploaded_at
      FROM product_upload_batches
+     ${branchFilter.clause}
      ORDER BY id DESC
      LIMIT 2`,
+    branchFilter.params,
   );
 
   return rows;
@@ -885,7 +892,12 @@ const TOP_SOLD_PERIOD_LIMITS = {
   month: 30,
 };
 
-const getTopSoldProducts = async ({ period = "all" } = {}) => {
+const getTopSoldProducts = async ({
+  period = "all",
+  branchId = null,
+  branchIds = null,
+} = {}) => {
+  const scope = normalizeBranchIds({ branchId, branchIds });
   const normalizedPeriod = String(period ?? "all").trim().toLowerCase();
   const intervalDays = TOP_SOLD_PERIOD_LIMITS[normalizedPeriod];
 
@@ -893,6 +905,18 @@ const getTopSoldProducts = async ({ period = "all" } = {}) => {
     throw new ApiError(400, 'period must be "all", "week", or "month"');
   }
 
+  const emptyResponse = {
+    period: normalizedPeriod,
+    latestBatch: null,
+    previousBatch: null,
+    products: [],
+  };
+
+  if (scope.length === 0) {
+    return emptyResponse;
+  }
+
+  const branchFilter = buildBranchSqlFilter("b.branch_id", scope);
   const conditions = [
     "isa.product IS NOT NULL",
     "TRIM(isa.product) != ''",
@@ -911,15 +935,15 @@ const getTopSoldProducts = async ({ period = "all" } = {}) => {
        COALESCE(SUM(isa.sold_pieces), 0) AS soldCount
      FROM inventory_sales_audit isa
      INNER JOIN product_upload_batches b ON b.id = isa.batch_id
-     WHERE ${conditions.join(" AND ")}
+     WHERE ${conditions.join(" AND ")} ${branchFilter.clause}
      GROUP BY isa.product
      HAVING soldCount > 0 OR soldTags > 0
      ORDER BY soldCount DESC, soldTags DESC, isa.product ASC
      LIMIT 10`,
-    params,
+    [...params, ...branchFilter.params],
   );
 
-  const batches = await getLatestTwoBatchIds();
+  const batches = await getLatestTwoBatchIds({ branchIds: scope });
   const latestBatchId = batches[0]?.id ?? null;
   const previousBatchId = batches[1]?.id ?? null;
 
@@ -952,7 +976,13 @@ const formatDayLabel = (batchDate) => {
   return DAY_LABELS[date.getDay()];
 };
 
-const getDayWiseSales = async ({ period = "week", counter = "all" } = {}) => {
+const getDayWiseSales = async ({
+  period = "week",
+  counter = "all",
+  branchId = null,
+  branchIds = null,
+} = {}) => {
+  const scope = normalizeBranchIds({ branchId, branchIds });
   const validatedPeriod = dailySalesSummaryService.validatePeriod(period);
 
   if (!validatedPeriod) {
@@ -961,18 +991,33 @@ const getDayWiseSales = async ({ period = "week", counter = "all" } = {}) => {
 
   const counterName = dailySalesSummaryService.resolveCounterFilter(counter);
   const intervalDays = validatedPeriod === "month" ? 30 : 7;
+  const resolvedCounter =
+    counterName === dailySalesSummaryService.ALL_COUNTER ? "all" : counterName;
+
+  if (scope.length === 0) {
+    return {
+      period: validatedPeriod,
+      counter: resolvedCounter,
+      totalSoldPieces: 0,
+      data: [],
+    };
+  }
+
+  const branchFilter = buildBranchSqlFilter("pub.branch_id", scope);
 
   const [rows] = await pool.execute(
     `SELECT
-       batch_date,
-       SUM(sold_pieces) AS sold_pieces,
-       SUM(sold_tags) AS sold_tags
-     FROM daily_sales_summary
-     WHERE counter_name = ?
-       AND batch_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
-     GROUP BY batch_date
-     ORDER BY batch_date ASC`,
-    [counterName, intervalDays],
+       dss.batch_date,
+       SUM(dss.sold_pieces) AS sold_pieces,
+       SUM(dss.sold_tags) AS sold_tags
+     FROM daily_sales_summary dss
+     INNER JOIN product_upload_batches pub ON pub.id = dss.batch_id
+     WHERE dss.counter_name = ?
+       AND dss.batch_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+       ${branchFilter.clause}
+     GROUP BY dss.batch_date
+     ORDER BY dss.batch_date ASC`,
+    [counterName, intervalDays, ...branchFilter.params],
   );
 
   const data = rows.map((row) => ({
@@ -986,10 +1031,7 @@ const getDayWiseSales = async ({ period = "week", counter = "all" } = {}) => {
 
   return {
     period: validatedPeriod,
-    counter:
-      counterName === dailySalesSummaryService.ALL_COUNTER
-        ? "all"
-        : counterName,
+    counter: resolvedCounter,
     totalSoldPieces,
     data,
   };
@@ -1007,42 +1049,50 @@ const buildDailyImportQuery = ({
   toDate,
   batchFrom,
   batchTo,
+  branchIds = [],
 }) => {
-  const conditions = ["counter_name = ?"];
+  const conditions = ["dss.counter_name = ?"];
   const params = [counterName];
+  const branchFilter = buildBranchSqlFilter("pub.branch_id", branchIds);
+
+  if (branchFilter.clause) {
+    conditions.push(branchFilter.clause.replace(/^AND\s+/, ""));
+    params.push(...branchFilter.params);
+  }
 
   if (fromDate) {
-    conditions.push("batch_date >= ?");
+    conditions.push("dss.batch_date >= ?");
     params.push(fromDate);
   }
 
   if (toDate) {
-    conditions.push("batch_date <= ?");
+    conditions.push("dss.batch_date <= ?");
     params.push(toDate);
   }
 
   if (batchFrom) {
-    conditions.push("batch_id >= ?");
+    conditions.push("dss.batch_id >= ?");
     params.push(batchFrom);
   }
 
   if (batchTo) {
-    conditions.push("batch_id <= ?");
+    conditions.push("dss.batch_id <= ?");
     params.push(batchTo);
   }
 
   return {
     sql: `SELECT
-            batch_id,
-            batch_date,
-            total_stock,
-            total_stock_pieces,
-            sold_tags,
-            sold_pieces,
-            estimated_sold
-          FROM daily_sales_summary
+            dss.batch_id,
+            dss.batch_date,
+            dss.total_stock,
+            dss.total_stock_pieces,
+            dss.sold_tags,
+            dss.sold_pieces,
+            dss.estimated_sold
+          FROM daily_sales_summary dss
+          INNER JOIN product_upload_batches pub ON pub.id = dss.batch_id
           WHERE ${conditions.join(" AND ")}
-          ORDER BY batch_id DESC
+          ORDER BY dss.batch_id DESC
           LIMIT ${limit}`,
     params,
   };
@@ -1055,7 +1105,10 @@ const getDailyImports = async ({
   toDate,
   batchFrom,
   batchTo,
+  branchId = null,
+  branchIds = null,
 } = {}) => {
+  const scope = normalizeBranchIds({ branchId, branchIds });
   const validatedPeriod = dailySalesSummaryService.validatePeriod(period);
 
   if (!validatedPeriod) {
@@ -1075,6 +1128,14 @@ const getDailyImports = async ({
     );
   }
 
+  if (scope.length === 0) {
+    return {
+      period: validatedPeriod,
+      counter: counterName,
+      data: [],
+    };
+  }
+
   const limit = DAILY_IMPORT_PERIOD_LIMITS[validatedPeriod];
   const { sql, params } = buildDailyImportQuery({
     counterName,
@@ -1083,6 +1144,7 @@ const getDailyImports = async ({
     toDate,
     batchFrom,
     batchTo,
+    branchIds: scope,
   });
 
   const [rows] = await pool.execute(sql, params);

@@ -52,22 +52,30 @@ export const getDashboard = async (req, res) => {
 };
 
 export const getTopSoldProducts = async (req, res) => {
+  const branchIds = await resolveRequestBranchIds(req);
   const period = getRequestParam(req, 'period') ?? 'all';
-  const result = await dashboardService.getTopSoldProducts({ period });
+  const result = await dashboardService.getTopSoldProducts({ period, branchIds });
 
   res.status(200).json({
     success: true,
     message: 'Top sold products fetched successfully',
     period: result.period,
+    branchIds,
+    branchId: branchIds.length === 1 ? branchIds[0] : null,
     data: result.products,
   });
 };
 
 export const getDayWiseSales = async (req, res) => {
+  const branchIds = await resolveRequestBranchIds(req);
   const period = getRequestParam(req, 'period') ?? 'week';
   const counter = getRequestParam(req, 'counter') ?? 'all';
 
-  const result = await dashboardService.getDayWiseSales({ period, counter });
+  const result = await dashboardService.getDayWiseSales({
+    period,
+    counter,
+    branchIds,
+  });
 
   res.status(200).json({
     success: true,
@@ -75,21 +83,30 @@ export const getDayWiseSales = async (req, res) => {
     period: result.period,
     counter: result.counter,
     totalSoldPieces: result.totalSoldPieces,
+    branchIds,
+    branchId: branchIds.length === 1 ? branchIds[0] : null,
     data: result.data,
   });
 };
 
 export const getDailyImports = async (req, res) => {
+  const branchIds = await resolveRequestBranchIds(req);
   const period = getRequestParam(req, 'period') ?? 'week';
   const counter = getRequestParam(req, 'counter') ?? 'ALL';
 
-  const result = await dashboardService.getDailyImports({ period, counter });
+  const result = await dashboardService.getDailyImports({
+    period,
+    counter,
+    branchIds,
+  });
 
   res.status(200).json({
     success: true,
     message: 'Daily import trend fetched successfully',
     period: result.period,
     counter: result.counter,
+    branchIds,
+    branchId: branchIds.length === 1 ? branchIds[0] : null,
     data: result.data,
   });
 };
