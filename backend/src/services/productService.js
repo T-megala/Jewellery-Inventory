@@ -174,7 +174,85 @@ export const getSubProducts = (product, branchIds = []) =>
 export const getCenters = (product, subProduct, branchIds = []) =>
   inventoryDropdownService.getCenters(product, subProduct, { branchIds });
 
-export { getProductList };
+const mapPrintDetailRow = (row) => ({
+  productName: row.product,
+  subProductName: row.sub_product ?? null,
+  tagNo: row.tag_packet_no,
+  grossWt: row.gross_wt != null ? Number(row.gross_wt) : null,
+  netWt: row.net_wt != null ? Number(row.net_wt) : null,
+  weightGram: row.weight_gram != null ? Number(row.weight_gram) : null,
+  weightCarat: row.weight_carat != null ? Number(row.weight_carat) : null,
+  pieces: row.pieces != null ? Number(row.pieces) : null,
+  counterName: row.counter_name ?? null,
+});
+
+const TAGGED_PRODUCT_FILTER = `
+  p.tag_packet_no IS NOT NULL
+  AND TRIM(p.tag_packet_no) != ''
+`;
+
+const getPrintDetails = async ({ tagNo = null, branchIds = [] } = {}) => {
+  const scope = normalizeBranchIds({ branchIds });
+
+  if (scope.length === 0) {
+    return { items: [] };
+  }
+
+  const branchFilter = buildBranchSqlFilter("pub.branch_id", scope);
+  const normalizedTag = String(tagNo ?? "").trim();
+
+  if (normalizedTag) {
+    const [rows] = await pool.execute(
+      `SELECT
+         p.product,
+         p.sub_product,
+         p.tag_packet_no,
+         p.gross_wt,
+         p.net_wt,
+         p.weight_gram,
+         p.weight_carat,
+         p.pieces,
+         p.counter_name
+       ${activeBranchProductsJoin("pub")}
+       WHERE ${activeBranchProductsWhere}
+         AND ${TAGGED_PRODUCT_FILTER}
+         AND UPPER(TRIM(p.tag_packet_no)) = ?
+         ${branchFilter.clause}
+       ORDER BY p.id DESC
+       LIMIT 1`,
+      [normalizedTag.toUpperCase(), ...branchFilter.params],
+    );
+
+    return {
+      items: rows.length ? [mapPrintDetailRow(rows[0])] : [],
+    };
+  }
+
+  const [rows] = await pool.execute(
+    `SELECT
+       p.product,
+       p.sub_product,
+       p.tag_packet_no,
+       p.gross_wt,
+       p.net_wt,
+       p.weight_gram,
+       p.weight_carat,
+       p.pieces,
+       p.counter_name
+     ${activeBranchProductsJoin("pub")}
+     WHERE ${activeBranchProductsWhere}
+       AND ${TAGGED_PRODUCT_FILTER}
+       ${branchFilter.clause}
+     ORDER BY p.product ASC, p.tag_packet_no ASC`,
+    branchFilter.params,
+  );
+
+  return {
+    items: rows.map(mapPrintDetailRow),
+  };
+};
+
+export { getProductList, getPrintDetails };
 
 export default {
   getProducts,
@@ -182,4 +260,5 @@ export default {
   getSubProducts,
   getCenters,
   getProductList,
+  getPrintDetails,
 };

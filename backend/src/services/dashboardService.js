@@ -8,7 +8,10 @@ import {
 } from "./productBatchService.js";
 import branchService from "./branchService.js";
 import dailySalesSummaryService from "./dailySalesSummaryService.js";
-import { batchProductsFrom, batchAllProductsFrom } from "../utils/productQueryHelper.js";
+import {
+  batchProductsFrom,
+  batchAllProductsFrom,
+} from "../utils/productQueryHelper.js";
 import { TAG_EXPR } from "../utils/verificationScope.js";
 import {
   activeBranchProductsJoin,
@@ -86,7 +89,11 @@ const formatRelativeStocktakeTime = (value) => {
   }
 
   const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  );
   const startOfThatDay = new Date(
     date.getFullYear(),
     date.getMonth(),
@@ -129,7 +136,8 @@ const MONTHS_SHORT = [
 
 const STOCKTAKE_HISTORY_LIMIT = Math.max(
   1,
-  Number.parseInt(process.env.DASHBOARD_STOCKTAKE_HISTORY_LIMIT ?? "6", 10) || 6,
+  Number.parseInt(process.env.DASHBOARD_STOCKTAKE_HISTORY_LIMIT ?? "6", 10) ||
+    6,
 );
 
 const formatShortStocktakeDay = (value) => {
@@ -147,7 +155,7 @@ const calculateAccuracyPercent = (foundCount, totalExpected) => {
     return 0;
   }
 
-  return Number(((foundCount / totalExpected) * 100).toFixed(1));
+  return Number(((foundCount / totalExpected) * 100).toFixed(2));
 };
 
 const LOCATION_NAME_EXPR = `CASE
@@ -187,7 +195,10 @@ const emptyCounterAccuracy = () => ({
   locations: [],
 });
 
-const getCounterAccuracy = async ({ branchId = null, branchIds = null } = {}) => {
+const getCounterAccuracy = async ({
+  branchId = null,
+  branchIds = null,
+} = {}) => {
   const scope = normalizeBranchIds({ branchId, branchIds });
   const branchFilter = buildBranchSqlFilter("branch_id", scope, {
     keyword: scope.length > 0 ? "WHERE" : "AND",
@@ -265,7 +276,8 @@ const getCounterAccuracy = async ({ branchId = null, branchIds = null } = {}) =>
     const expected = Number(row.expected ?? 0);
     const found = foundByLocation.get(name) ?? 0;
     const missing = Math.max(expected - found, 0);
-    const dominantProduct = dominantProductByLocation.get(name)?.product ?? null;
+    const dominantProduct =
+      dominantProductByLocation.get(name)?.product ?? null;
 
     return {
       name,
@@ -384,7 +396,10 @@ const fetchDurationMinutesByVerificationIds = async (verificationIds) => {
   return map;
 };
 
-const getStocktakeHistory = async ({ branchId = null, branchIds = null } = {}) => {
+const getStocktakeHistory = async ({
+  branchId = null,
+  branchIds = null,
+} = {}) => {
   const scope = normalizeBranchIds({ branchId, branchIds });
   const branchFilter = buildBranchSqlFilter("branch_id", scope, {
     keyword: "WHERE",
@@ -437,7 +452,8 @@ const getStocktakeHistory = async ({ branchId = null, branchIds = null } = {}) =
     .filter(Boolean);
 
   const verificationIds = sessions.map((row) => Number(row.id));
-  const durationMap = await fetchDurationMinutesByVerificationIds(verificationIds);
+  const durationMap =
+    await fetchDurationMinutesByVerificationIds(verificationIds);
 
   const historySessions = sessions
     .map((row) => {
@@ -543,10 +559,17 @@ const emptyStocktakeSummary = () => ({
   history: emptyStocktakeHistory(),
 });
 
-const getLatestStocktakeRow = async ({ branchId = null, branchIds = null } = {}) => {
+const getLatestStocktakeRow = async ({
+  branchId = null,
+  branchIds = null,
+} = {}) => {
   const scope = normalizeBranchIds({ branchId, branchIds });
-  const branchFilter = buildBranchSqlFilter("branch_id", scope, { keyword: "AND" });
-  const dayBranchFilter = buildBranchSqlFilter("branch_id", scope, { keyword: "AND" });
+  const branchFilter = buildBranchSqlFilter("branch_id", scope, {
+    keyword: "AND",
+  });
+  const dayBranchFilter = buildBranchSqlFilter("branch_id", scope, {
+    keyword: "AND",
+  });
 
   const [rows] = await pool.execute(
     `SELECT
@@ -591,9 +614,14 @@ const getLatestStocktakeRow = async ({ branchId = null, branchIds = null } = {})
   return rows[0] ?? null;
 };
 
-const getStocktakeSummary = async ({ branchId = null, branchIds = null } = {}) => {
+const getStocktakeSummary = async ({
+  branchId = null,
+  branchIds = null,
+} = {}) => {
   const scope = normalizeBranchIds({ branchId, branchIds });
-  const branchFilter = buildBranchSqlFilter("branch_id", scope, { keyword: "AND" });
+  const branchFilter = buildBranchSqlFilter("branch_id", scope, {
+    keyword: "AND",
+  });
 
   const [monthResult, latestRow, history] = await Promise.all([
     pool.execute(
@@ -608,7 +636,9 @@ const getStocktakeSummary = async ({ branchId = null, branchIds = null } = {}) =
     getStocktakeHistory({ branchIds: scope }),
   ]);
 
-  const stocktakesThisMonth = Number(monthResult[0][0]?.stocktakesThisMonth ?? 0);
+  const stocktakesThisMonth = Number(
+    monthResult[0][0]?.stocktakesThisMonth ?? 0,
+  );
 
   if (!latestRow) {
     return {
@@ -636,7 +666,9 @@ const getStocktakeSummary = async ({ branchId = null, branchIds = null } = {}) =
     discrepancies,
     stocktakesThisMonth,
     lastStocktakeAt,
-    lastStocktakeLabel: formatRelativeStocktakeTime(latestRow.verification_date),
+    lastStocktakeLabel: formatRelativeStocktakeTime(
+      latestRow.verification_date,
+    ),
     totalExpected,
     foundCount,
     missingCount,
@@ -673,7 +705,10 @@ const getBatchInfo = async (batchId) => {
   };
 };
 
-const getInventorySummary = async ({ branchId = null, branchIds = null } = {}) => {
+const getInventorySummary = async ({
+  branchId = null,
+  branchIds = null,
+} = {}) => {
   const scope = normalizeBranchIds({ branchId, branchIds });
 
   if (scope.length === 0) {
@@ -824,7 +859,10 @@ const getInventorySummary = async ({ branchId = null, branchIds = null } = {}) =
   };
 };
 
-const getVerificationSummary = async ({ branchId = null, branchIds = null } = {}) => {
+const getVerificationSummary = async ({
+  branchId = null,
+  branchIds = null,
+} = {}) => {
   const scope = normalizeBranchIds({ branchId, branchIds });
   const branchFilter = buildBranchSqlFilter("branch_id", scope, {
     keyword: "WHERE",
@@ -898,7 +936,9 @@ const getTopSoldProducts = async ({
   branchIds = null,
 } = {}) => {
   const scope = normalizeBranchIds({ branchId, branchIds });
-  const normalizedPeriod = String(period ?? "all").trim().toLowerCase();
+  const normalizedPeriod = String(period ?? "all")
+    .trim()
+    .toLowerCase();
   const intervalDays = TOP_SOLD_PERIOD_LIMITS[normalizedPeriod];
 
   if (normalizedPeriod !== "all" && !intervalDays) {
@@ -917,10 +957,7 @@ const getTopSoldProducts = async ({
   }
 
   const branchFilter = buildBranchSqlFilter("b.branch_id", scope);
-  const conditions = [
-    "isa.product IS NOT NULL",
-    "TRIM(isa.product) != ''",
-  ];
+  const conditions = ["isa.product IS NOT NULL", "TRIM(isa.product) != ''"];
   const params = [];
 
   if (intervalDays) {
@@ -1328,9 +1365,7 @@ const getStockMovement = async ({
   }
 
   const fastMoverItems = [...restockByProduct.values()]
-    .filter(
-      (item) => item.restockedPieces > 0 || item.restockedTags > 0,
-    )
+    .filter((item) => item.restockedPieces > 0 || item.restockedTags > 0)
     .sort(
       (left, right) =>
         right.restockedPieces - left.restockedPieces ||
@@ -1423,7 +1458,9 @@ const buildBranchStocktakeEntry = async (branch) => {
     name: branch.name,
     verificationDay: toDateKey(latestRow.verification_day),
     lastStocktakeAt: formatDateTime(latestRow.verification_date),
-    lastStocktakeLabel: formatRelativeStocktakeTime(latestRow.verification_date),
+    lastStocktakeLabel: formatRelativeStocktakeTime(
+      latestRow.verification_date,
+    ),
     itemsScanned,
     totalExpected,
     foundCount,
@@ -1435,7 +1472,10 @@ const buildBranchStocktakeEntry = async (branch) => {
   };
 };
 
-const getBranchComparison = async ({ branchId = null, branchIds = null } = {}) => {
+const getBranchComparison = async ({
+  branchId = null,
+  branchIds = null,
+} = {}) => {
   const scope = normalizeBranchIds({ branchId, branchIds });
 
   if (scope.length === 0) {

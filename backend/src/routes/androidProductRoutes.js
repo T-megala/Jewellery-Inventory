@@ -35,5 +35,13 @@ router.post(
   "/centers-android",
   asyncHandler(androidProductController.getCenters),
 );
+router.get(
+  "/print-details-android",
+  asyncHandler(androidProductController.getPrintDetails),
+);
+router.post(
+  "/print-details-android",
+  asyncHandler(androidProductController.getPrintDetails),
+);
 
 export default router;
