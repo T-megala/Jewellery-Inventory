@@ -1193,9 +1193,6 @@ function DailyImportsCard({
   error,
   data,
 }) {
-  const totalStock = data.reduce((sum, row) => sum + (row.totalStock ?? 0), 0)
-  const importCount = data.length
-
   return (
     <article className="analytics-tile analytics-tile--wide day-sales-card">
       <header className="day-sales-card__head">
@@ -1231,15 +1228,6 @@ function DailyImportsCard({
                 </button>
               ))}
             </div>
-            <span className="day-sales-total">
-              {formatCount(importCount)}
-              {' '}
-              imports ·
-              {' '}
-              <strong>{formatCount(totalStock)}</strong>
-              {' '}
-              stock
-            </span>
           </div>
         </div>
       </header>
