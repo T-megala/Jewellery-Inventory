@@ -520,7 +520,7 @@ export default function Users() {
             <table className="users-table">
               <thead>
                 <tr>
-                  <th>#</th>
+                  <th>Si.No</th>
                   <th>Username</th>
                   <th>Role</th>
                   <th>Branches</th>

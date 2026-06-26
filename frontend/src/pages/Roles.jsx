@@ -776,7 +776,7 @@ export default function Roles() {
             <table className="roles-table">
               <thead>
                 <tr>
-                  <th>#</th>
+                  <th>Si.No</th>
                   <th>Name</th>
                   <th>Description</th>
                   <th>Permissions</th>

@@ -326,7 +326,7 @@ export default function Branches() {
             <table className="branches-table">
               <thead>
                 <tr>
-                  <th>#</th>
+                  <th>Si.No</th>
                   <th>Name</th>
                   <th>City</th>
                   <th>Phone</th>
