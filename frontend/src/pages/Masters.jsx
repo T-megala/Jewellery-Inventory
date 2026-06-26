@@ -1,4 +1,3 @@
-import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { MASTER_GROUPS } from '../config/masters.js'
 import { getUser, hasAnyPermission } from '../services/auth.js'
@@ -67,26 +66,7 @@ function MasterCard({ item }) {
   )
 }
 
-function filterMasterGroups(groups, searchInput) {
-  const term = searchInput.trim().toLowerCase()
-  if (!term) return groups
-
-  return groups
-    .map((group) => ({
-      ...group,
-      items: group.items.filter((item) => (
-        [item.label, item.description, group.title]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase()
-          .includes(term)
-      )),
-    }))
-    .filter((group) => group.items.length > 0)
-}
-
 export default function Masters() {
-  const [searchInput, setSearchInput] = useState('')
   const user = getUser()
 
   const visibleGroups = MASTER_GROUPS
@@ -96,14 +76,7 @@ export default function Masters() {
     }))
     .filter((group) => group.items.length > 0)
 
-  const filteredGroups = useMemo(
-    () => filterMasterGroups(visibleGroups, searchInput),
-    [visibleGroups, searchInput],
-  )
-
   const moduleCount = visibleGroups.reduce((total, group) => total + group.items.length, 0)
-  const visibleCount = filteredGroups.reduce((total, group) => total + group.items.length, 0)
-  const isSearchActive = searchInput.trim().length > 0
   const hasMasters = visibleGroups.length > 0
 
   return (
@@ -127,34 +100,6 @@ export default function Masters() {
               {moduleCount === 1 ? '' : 's'}
             </span>
           </div>
-
-          {hasMasters && (
-            <div className="masters-search">
-              <span className="masters-search__icon" aria-hidden="true">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8" />
-                  <path d="M20 20l-3.5-3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                </svg>
-              </span>
-              <input
-                type="search"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Search branches, users, roles…"
-                aria-label="Search admin modules"
-              />
-              {isSearchActive && (
-                <button
-                  type="button"
-                  className="masters-search__clear"
-                  onClick={() => setSearchInput('')}
-                  aria-label="Clear search"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-          )}
         </header>
 
         <div className="masters-panel__body">
@@ -164,31 +109,9 @@ export default function Masters() {
             </div>
           )}
 
-          {hasMasters && isSearchActive && filteredGroups.length === 0 && (
-            <div className="masters-empty masters-empty--search">
-              <p>
-                No modules match
-                {' '}
-                <strong>{searchInput.trim()}</strong>
-                .
-              </p>
-            </div>
-          )}
-
-          {hasMasters && filteredGroups.length > 0 && (
+          {hasMasters && (
             <>
-              {isSearchActive && (
-                <p className="masters-panel__results">
-                  {visibleCount}
-                  {' '}
-                  module
-                  {visibleCount === 1 ? '' : 's'}
-                  {' '}
-                  found
-                </p>
-              )}
-
-              {filteredGroups.map((group, index) => (
+              {visibleGroups.map((group, index) => (
                 <section key={group.id} className="masters-group">
                   {index > 0 && <div className="masters-group__divider" aria-hidden="true" />}
                   <h3 className="masters-group__title">{group.title}</h3>

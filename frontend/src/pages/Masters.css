@@ -75,83 +75,12 @@
   white-space: nowrap;
 }
 
-.masters-search {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-}
-
-.masters-search__icon {
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  color: var(--color-primary);
-  pointer-events: none;
-}
-
-.masters-search input {
-  width: 100%;
-  padding: 11px 14px 11px 42px;
-  border: 1px solid rgba(184, 134, 11, 0.16);
-  border-radius: 12px;
-  font-family: var(--font-body);
-  font-size: 0.875rem;
-  color: var(--color-text);
-  background: rgba(255, 253, 248, 0.55);
-  box-shadow: inset 0 1px 2px rgba(40, 28, 8, 0.03);
-  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
-}
-
-.masters-search input::placeholder {
-  color: #a89888;
-}
-
-.masters-search input:focus {
-  outline: none;
-  border-color: rgba(184, 134, 11, 0.4);
-  background: rgba(255, 253, 248, 0.85);
-  box-shadow: 0 0 0 3px rgba(184, 134, 11, 0.1);
-}
-
-.masters-search__clear {
-  flex-shrink: 0;
-  min-height: 34px;
-  padding: 0 10px;
-  border: 1px solid rgba(184, 134, 11, 0.18);
-  border-radius: 8px;
-  background: rgba(253, 248, 238, 0.6);
-  font-family: var(--font-body);
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #7a6a55;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s, color 0.15s;
-}
-
-.masters-search__clear:hover {
-  border-color: rgba(184, 134, 11, 0.35);
-  background: rgba(255, 250, 242, 0.9);
-  color: var(--color-primary-dark);
-}
-
 .masters-panel__body {
   display: flex;
   flex-direction: column;
   gap: 0;
   width: 100%;
   padding: 0;
-}
-
-.masters-panel__results {
-  margin: 0 0 14px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #7a6a55;
-  width: 100%;
 }
 
 .masters-group {
@@ -369,10 +298,6 @@
   background: rgba(253, 248, 238, 0.35);
 }
 
-.masters-empty--search {
-  margin-top: 4px;
-}
-
 .masters-empty p {
   margin: 0;
   font-size: 0.875rem;
@@ -422,22 +347,6 @@
 
   .masters-panel__count {
     align-self: center;
-  }
-
-  .masters-search {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-  }
-
-  .masters-search__clear {
-    align-self: center;
-    min-width: 88px;
-  }
-
-  .masters-panel__results {
-    text-align: center;
-    width: 100%;
   }
 
   .masters-group__title {
