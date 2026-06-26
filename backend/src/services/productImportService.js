@@ -161,18 +161,28 @@ const runChunked = async (rows, handler, onProgress, progressStart, progressEnd)
   return inserted;
 };
 
-const schedulePostProcessing = (batchId, defer = DEFER_POST_PROCESSING) => {
+const schedulePostProcessing = (
+  batchId,
+  previousBatchId = null,
+  defer = DEFER_POST_PROCESSING,
+) => {
   const run = () =>
-    refreshDailySalesSummary(batchId).catch((error) => {
-      console.error('[product-import] daily sales summary refresh failed', {
-        batchId,
-        error: error.message,
-      });
-    });
+    refreshDailySalesSummary(batchId, pool, { previousBatchId }).catch(
+      (error) => {
+        console.error('[product-import] daily sales summary refresh failed', {
+          batchId,
+          previousBatchId,
+          error: error.message,
+        });
+      },
+    );
 
   if (defer) {
     setImmediate(run);
-    logImport('post-processing scheduled in background', { batchId });
+    logImport('post-processing scheduled in background', {
+      batchId,
+      previousBatchId,
+    });
     return { deferred: true };
   }
 
@@ -320,7 +330,7 @@ const importProductsFromExcel = async (
       untaggedRows,
     });
 
-    schedulePostProcessing(batchId, deferPostProcessing);
+    schedulePostProcessing(batchId, previousBatchId, deferPostProcessing);
 
     return {
       batchId,

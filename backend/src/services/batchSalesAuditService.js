@@ -17,6 +17,10 @@ const PREV_TAG_FILTER = `
   AND TRIM(prev.tag_packet_no) != ''
 `;
 
+const TAG_MATCH_ON_CURR = `
+  UPPER(TRIM(curr.tag_packet_no)) = UPPER(TRIM(prev.tag_packet_no))
+`;
+
 const TAG_FILTER = `
   tag_packet_no IS NOT NULL
   AND TRIM(tag_packet_no) != ''
@@ -45,7 +49,7 @@ const countRemovedTags = async (connection, previousBatchId, currentBatchId) => 
      FROM products prev
      LEFT JOIN products curr
        ON curr.batch_id = ?
-      AND curr.tag_packet_no = prev.tag_packet_no
+      AND ${TAG_MATCH_ON_CURR}
      WHERE prev.batch_id = ?
        AND ${PREV_TAG_FILTER}
        AND curr.id IS NULL`,
@@ -61,7 +65,7 @@ const countPieceReductions = async (connection, previousBatchId, currentBatchId)
      FROM products prev
      INNER JOIN products curr
        ON curr.batch_id = ?
-      AND curr.tag_packet_no = prev.tag_packet_no
+      AND ${TAG_MATCH_ON_CURR}
      WHERE prev.batch_id = ?
        AND ${PREV_TAG_FILTER}
        AND COALESCE(prev.pieces, 0) > COALESCE(curr.pieces, 0)`,
@@ -96,7 +100,7 @@ const insertRemovedTagAudits = async (
      FROM products prev
      LEFT JOIN products curr
        ON curr.batch_id = ?
-      AND curr.tag_packet_no = prev.tag_packet_no
+      AND ${TAG_MATCH_ON_CURR}
      WHERE prev.batch_id = ?
        AND ${PREV_TAG_FILTER}
        AND curr.id IS NULL`,
@@ -131,7 +135,7 @@ const insertPieceReductionAudits = async (
      FROM products prev
      INNER JOIN products curr
        ON curr.batch_id = ?
-      AND curr.tag_packet_no = prev.tag_packet_no
+      AND ${TAG_MATCH_ON_CURR}
      WHERE prev.batch_id = ?
        AND ${PREV_TAG_FILTER}
        AND COALESCE(prev.pieces, 0) > COALESCE(curr.pieces, 0)`,

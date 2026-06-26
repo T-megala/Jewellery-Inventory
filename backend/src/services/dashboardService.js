@@ -171,25 +171,6 @@ const buildLocationLabel = (locationName, categoryName) => {
   return `${locationName} — ${categoryName}`;
 };
 
-const pickDominantProductByLocation = (rows) => {
-  const map = new Map();
-
-  for (const row of rows) {
-    const location = row.location;
-    const tagCount = Number(row.tagCount ?? 0);
-    const existing = map.get(location);
-
-    if (!existing || tagCount > existing.tagCount) {
-      map.set(location, {
-        product: row.product,
-        tagCount,
-      });
-    }
-  }
-
-  return map;
-};
-
 const emptyCounterAccuracy = () => ({
   verificationDay: null,
   locations: [],
@@ -200,95 +181,141 @@ const getCounterAccuracy = async ({
   branchIds = null,
 } = {}) => {
   const scope = normalizeBranchIds({ branchId, branchIds });
-  const branchFilter = buildBranchSqlFilter("branch_id", scope, {
-    keyword: scope.length > 0 ? "WHERE" : "AND",
-  });
-  const verificationBranchFilter = buildBranchSqlFilter("sv.branch_id", scope);
+  const latestRows = await getPreferredStocktakeRowsPerBranch(scope);
+  const activeBatchByBranch = await getActiveBatchIdByBranch(scope);
 
-  const [batchIds, latestDayRows] = await Promise.all([
-    getActiveBatchIdsForBranches(scope),
-    pool.execute(
-      `SELECT MAX(verification_day) AS verificationDay
-       FROM stock_verification
-       ${branchFilter.clause}`,
-      branchFilter.params,
-    ),
-  ]);
-
-  const verificationDay = latestDayRows[0][0]?.verificationDay ?? null;
-
-  if (batchIds.length === 0 || !verificationDay) {
+  if (latestRows.length === 0 || activeBatchByBranch.size === 0) {
     return emptyCounterAccuracy();
   }
 
-  const verificationDayKey = toDateKey(verificationDay);
-  const batchPlaceholders = batchIds.map(() => "?").join(", ");
-
-  const [[expectedRows], [foundRows], [productRows]] = await Promise.all([
-    pool.execute(
-      `SELECT
-         ${LOCATION_NAME_EXPR} AS location,
-         COUNT(DISTINCT ${TAG_EXPR}) AS expected
-       FROM products
-       WHERE batch_id IN (${batchPlaceholders})
-         AND ${PRODUCT_TAG_FILTER.replace(/\n\s*/g, " ")}
-       GROUP BY ${LOCATION_NAME_EXPR}
-       ORDER BY expected DESC, location ASC`,
-      batchIds,
-    ),
-    pool.execute(
-      `SELECT
-         CASE
-           WHEN svd.center_name IS NULL OR TRIM(svd.center_name) = '' THEN 'Unassigned'
-           ELSE TRIM(svd.center_name)
-         END AS location,
-         COUNT(DISTINCT svd.tag_no) AS found
-       FROM stock_verification_details svd
-       INNER JOIN stock_verification sv ON sv.id = svd.verification_id
-       WHERE sv.verification_day = ?
-         AND svd.status = 'FOUND'
-         ${verificationBranchFilter.clause}
-       GROUP BY location
-       ORDER BY found DESC, location ASC`,
-      [verificationDay, ...verificationBranchFilter.params],
-    ),
-    pool.execute(
-      `SELECT
-         ${LOCATION_NAME_EXPR} AS location,
-         product,
-         COUNT(*) AS tagCount
-       FROM products
-       WHERE batch_id IN (${batchPlaceholders})
-         AND ${PRODUCT_TAG_FILTER.replace(/\n\s*/g, " ")}
-       GROUP BY ${LOCATION_NAME_EXPR}, product
-       ORDER BY location ASC, tagCount DESC`,
-      batchIds,
-    ),
-  ]);
-
-  const foundByLocation = new Map(
-    foundRows.map((row) => [row.location, Number(row.found ?? 0)]),
+  const scopeMultiple = scope.length > 1;
+  const branches = scopeMultiple
+    ? await branchService.getBranchesByIds(scope)
+    : [];
+  const branchNameById = new Map(
+    branches.map((branch) => [branch.id, branch.name]),
   );
-  const dominantProductByLocation = pickDominantProductByLocation(productRows);
 
-  const locations = expectedRows.map((row) => {
-    const name = row.location;
-    const expected = Number(row.expected ?? 0);
-    const found = foundByLocation.get(name) ?? 0;
-    const missing = Math.max(expected - found, 0);
-    const dominantProduct =
-      dominantProductByLocation.get(name)?.product ?? null;
+  const verificationDayKey = [...latestRows]
+    .map((row) => toDateKey(row.verification_day))
+    .sort()
+    .reverse()[0];
 
-    return {
-      name,
-      label: buildLocationLabel(name, dominantProduct),
-      category: dominantProduct,
-      expected,
-      found,
-      missing,
-      accuracyPercent: calculateAccuracyPercent(found, expected),
-    };
-  });
+  const expectedByLocation = new Map();
+  const foundByLocation = new Map();
+  const dominantProductByLocation = new Map();
+
+  for (const stocktakeRow of latestRows) {
+    const branchKey = Number(stocktakeRow.branch_id);
+    const batchId = activeBatchByBranch.get(branchKey);
+
+    if (!batchId) {
+      continue;
+    }
+
+    const branchName = branchNameById.get(branchKey) ?? `Branch ${branchKey}`;
+
+    const [[expectedRows], [foundRows], [productRows]] = await Promise.all([
+      pool.execute(
+        `SELECT
+           ${LOCATION_NAME_EXPR} AS location,
+           COUNT(DISTINCT ${TAG_EXPR}) AS expected
+         FROM products
+         WHERE batch_id = ?
+           AND ${PRODUCT_TAG_FILTER.replace(/\n\s*/g, " ")}
+         GROUP BY ${LOCATION_NAME_EXPR}`,
+        [batchId],
+      ),
+      pool.execute(
+        `SELECT
+           CASE
+             WHEN svd.center_name IS NULL OR TRIM(svd.center_name) = '' THEN 'Unassigned'
+             ELSE TRIM(svd.center_name)
+           END AS location,
+           COUNT(DISTINCT svd.tag_no) AS found
+         FROM stock_verification_details svd
+         INNER JOIN stock_verification sv ON sv.id = svd.verification_id
+         WHERE sv.verification_day = ?
+           AND sv.branch_id = ?
+           AND svd.status = 'FOUND'
+         GROUP BY location`,
+        [stocktakeRow.verification_day, branchKey],
+      ),
+      pool.execute(
+        `SELECT
+           ${LOCATION_NAME_EXPR} AS location,
+           product,
+           COUNT(*) AS tagCount
+         FROM products
+         WHERE batch_id = ?
+           AND ${PRODUCT_TAG_FILTER.replace(/\n\s*/g, " ")}
+         GROUP BY ${LOCATION_NAME_EXPR}, product`,
+        [batchId],
+      ),
+    ]);
+
+    for (const row of expectedRows) {
+      const scopedLocation = buildScopedLocationName(
+        row.location,
+        branchName,
+        scopeMultiple,
+      );
+      expectedByLocation.set(
+        scopedLocation,
+        (expectedByLocation.get(scopedLocation) ?? 0) + Number(row.expected ?? 0),
+      );
+    }
+
+    for (const row of foundRows) {
+      const scopedLocation = buildScopedLocationName(
+        row.location,
+        branchName,
+        scopeMultiple,
+      );
+      foundByLocation.set(
+        scopedLocation,
+        (foundByLocation.get(scopedLocation) ?? 0) + Number(row.found ?? 0),
+      );
+    }
+
+    for (const row of productRows) {
+      const scopedLocation = buildScopedLocationName(
+        row.location,
+        branchName,
+        scopeMultiple,
+      );
+      const tagCount = Number(row.tagCount ?? 0);
+      const existing = dominantProductByLocation.get(scopedLocation);
+
+      if (!existing || tagCount > existing.tagCount) {
+        dominantProductByLocation.set(scopedLocation, {
+          product: row.product,
+          tagCount,
+        });
+      }
+    }
+  }
+
+  const locations = [...expectedByLocation.entries()]
+    .map(([name, expected]) => {
+      const found = foundByLocation.get(name) ?? 0;
+      const missing = Math.max(expected - found, 0);
+      const dominantProduct = dominantProductByLocation.get(name)?.product ?? null;
+
+      return {
+        name,
+        label: buildLocationLabel(name, dominantProduct),
+        category: dominantProduct,
+        expected,
+        found,
+        missing,
+        accuracyPercent: calculateAccuracyPercent(found, expected),
+      };
+    })
+    .sort(
+      (left, right) =>
+        right.expected - left.expected || left.name.localeCompare(right.name),
+    );
 
   return {
     verificationDay: verificationDayKey,
@@ -319,6 +346,141 @@ const pickPreferredStocktakeRow = (rows) => {
 
   return sorted[0];
 };
+
+const getPreferredStocktakeRowsPerBranch = async (branchIds = []) => {
+  const scope = normalizeBranchIds({ branchIds });
+
+  if (scope.length === 0) {
+    return [];
+  }
+
+  const branchFilter = buildBranchSqlFilter("branch_id", scope, {
+    keyword: "WHERE",
+  });
+
+  const [rows] = await pool.execute(
+    `SELECT
+       sv.id,
+       sv.verification_date,
+       sv.verification_day,
+       sv.total_expected,
+       sv.total_scanned,
+       sv.found_count,
+       sv.missing_count,
+       sv.new_count,
+       sv.product_name,
+       sv.sub_product_name,
+       sv.center_name,
+       sv.branch_id
+     FROM stock_verification sv
+     INNER JOIN (
+       SELECT branch_id, MAX(verification_day) AS verification_day
+       FROM stock_verification
+       ${branchFilter.clause}
+       GROUP BY branch_id
+     ) latest
+       ON latest.branch_id = sv.branch_id
+      AND latest.verification_day = sv.verification_day
+     ORDER BY sv.branch_id ASC,
+       CASE
+         WHEN sv.product_name = ?
+          AND sv.sub_product_name = ?
+          AND sv.center_name = ?
+         THEN 0
+         ELSE 1
+       END,
+       sv.verification_date DESC,
+       sv.id DESC`,
+    [
+      ...branchFilter.params,
+      ALL_PRODUCTS,
+      ALL_SUB_PRODUCTS,
+      ALL_CENTERS,
+    ],
+  );
+
+  const byBranch = new Map();
+
+  for (const row of rows) {
+    const branchId = Number(row.branch_id);
+
+    if (!byBranch.has(branchId)) {
+      byBranch.set(branchId, row);
+    }
+  }
+
+  return scope
+    .map((branchId) => byBranch.get(branchId))
+    .filter((row) => row !== undefined);
+};
+
+const aggregateStocktakeRowsToRow = (rows) => {
+  if (!rows.length) {
+    return null;
+  }
+
+  if (rows.length === 1) {
+    return rows[0];
+  }
+
+  const sortedByDate = [...rows].sort(
+    (left, right) =>
+      new Date(right.verification_date) - new Date(left.verification_date),
+  );
+  const latest = sortedByDate[0];
+
+  return {
+    id: latest.id,
+    verification_date: latest.verification_date,
+    verification_day: latest.verification_day,
+    total_expected: rows.reduce(
+      (sum, row) => sum + Number(row.total_expected ?? 0),
+      0,
+    ),
+    total_scanned: rows.reduce(
+      (sum, row) => sum + Number(row.total_scanned ?? 0),
+      0,
+    ),
+    found_count: rows.reduce(
+      (sum, row) => sum + Number(row.found_count ?? 0),
+      0,
+    ),
+    missing_count: rows.reduce(
+      (sum, row) => sum + Number(row.missing_count ?? 0),
+      0,
+    ),
+    new_count: rows.reduce(
+      (sum, row) => sum + Number(row.new_count ?? 0),
+      0,
+    ),
+    product_name: ALL_PRODUCTS,
+    sub_product_name: ALL_SUB_PRODUCTS,
+    center_name: ALL_CENTERS,
+    branch_id: null,
+  };
+};
+
+const getActiveBatchIdByBranch = async (branchIds = []) => {
+  const scope = normalizeBranchIds({ branchIds });
+
+  if (scope.length === 0) {
+    return new Map();
+  }
+
+  const placeholders = scope.map(() => "?").join(", ");
+  const [rows] = await pool.execute(
+    `SELECT id, branch_id
+     FROM product_upload_batches
+     WHERE branch_id IN (${placeholders})
+       AND is_active = 1`,
+    scope,
+  );
+
+  return new Map(rows.map((row) => [Number(row.branch_id), Number(row.id)]));
+};
+
+const buildScopedLocationName = (location, branchName, scopeMultiple) =>
+  scopeMultiple ? `${branchName} — ${location}` : location;
 
 const formatStocktakeFrequency = (averageDays) => {
   if (averageDays === null || !Number.isFinite(averageDays)) {
@@ -418,12 +580,13 @@ const getStocktakeHistory = async ({
        product_name,
        sub_product_name,
        center_name,
+       branch_id,
        created_at,
        updated_at
      FROM stock_verification
      ${branchFilter.clause}
      ORDER BY verification_day DESC, verification_date DESC
-     LIMIT 100`,
+     LIMIT 500`,
     branchFilter.params,
   );
 
@@ -437,10 +600,17 @@ const getStocktakeHistory = async ({
     const dayKey = formatDate(row.verification_day);
 
     if (!rowsByDay.has(dayKey)) {
-      rowsByDay.set(dayKey, []);
+      rowsByDay.set(dayKey, new Map());
     }
 
-    rowsByDay.get(dayKey).push(row);
+    const branchId = Number(row.branch_id);
+    const dayBranches = rowsByDay.get(dayKey);
+
+    if (!dayBranches.has(branchId)) {
+      dayBranches.set(branchId, []);
+    }
+
+    dayBranches.get(branchId).push(row);
   }
 
   const dayKeys = [...rowsByDay.keys()].sort((left, right) =>
@@ -448,7 +618,20 @@ const getStocktakeHistory = async ({
   );
   const selectedDays = dayKeys.slice(0, STOCKTAKE_HISTORY_LIMIT);
   const sessions = selectedDays
-    .map((dayKey) => pickPreferredStocktakeRow(rowsByDay.get(dayKey)))
+    .map((dayKey) => {
+      const branchMaps = rowsByDay.get(dayKey);
+      const pickedRows = [];
+
+      for (const branchRows of branchMaps.values()) {
+        const picked = pickPreferredStocktakeRow(branchRows);
+
+        if (picked) {
+          pickedRows.push(picked);
+        }
+      }
+
+      return aggregateStocktakeRowsToRow(pickedRows);
+    })
     .filter(Boolean);
 
   const verificationIds = sessions.map((row) => Number(row.id));
@@ -564,54 +747,9 @@ const getLatestStocktakeRow = async ({
   branchIds = null,
 } = {}) => {
   const scope = normalizeBranchIds({ branchId, branchIds });
-  const branchFilter = buildBranchSqlFilter("branch_id", scope, {
-    keyword: "AND",
-  });
-  const dayBranchFilter = buildBranchSqlFilter("branch_id", scope, {
-    keyword: "AND",
-  });
+  const rows = await getPreferredStocktakeRowsPerBranch(scope);
 
-  const [rows] = await pool.execute(
-    `SELECT
-       id,
-       verification_date,
-       verification_day,
-       total_expected,
-       total_scanned,
-       found_count,
-       missing_count,
-       new_count,
-       product_name,
-       sub_product_name,
-       center_name,
-       branch_id
-     FROM stock_verification
-     WHERE verification_day = (
-       SELECT MAX(verification_day) FROM stock_verification
-       WHERE 1 = 1 ${dayBranchFilter.clause}
-     )
-       ${branchFilter.clause}
-     ORDER BY
-       CASE
-         WHEN product_name = ?
-          AND sub_product_name = ?
-          AND center_name = ?
-         THEN 0
-         ELSE 1
-       END,
-       verification_date DESC,
-       id DESC
-     LIMIT 1`,
-    [
-      ...dayBranchFilter.params,
-      ...branchFilter.params,
-      ALL_PRODUCTS,
-      ALL_SUB_PRODUCTS,
-      ALL_CENTERS,
-    ],
-  );
-
-  return rows[0] ?? null;
+  return aggregateStocktakeRowsToRow(rows);
 };
 
 const getStocktakeSummary = async ({
@@ -625,11 +763,15 @@ const getStocktakeSummary = async ({
 
   const [monthResult, latestRow, history] = await Promise.all([
     pool.execute(
-      `SELECT COUNT(DISTINCT verification_day) AS stocktakesThisMonth
-       FROM stock_verification
-       WHERE YEAR(verification_day) = YEAR(CURDATE())
-         AND MONTH(verification_day) = MONTH(CURDATE())
-         ${branchFilter.clause}`,
+      `SELECT COUNT(*) AS stocktakesThisMonth
+       FROM (
+         SELECT branch_id, verification_day
+         FROM stock_verification
+         WHERE YEAR(verification_day) = YEAR(CURDATE())
+           AND MONTH(verification_day) = MONTH(CURDATE())
+           ${branchFilter.clause}
+         GROUP BY branch_id, verification_day
+       ) scoped_stocktakes`,
       branchFilter.params,
     ),
     getLatestStocktakeRow({ branchIds: scope }),
@@ -864,32 +1006,21 @@ const getVerificationSummary = async ({
   branchIds = null,
 } = {}) => {
   const scope = normalizeBranchIds({ branchId, branchIds });
-  const branchFilter = buildBranchSqlFilter("branch_id", scope, {
-    keyword: "WHERE",
-  });
 
-  const [sumResult, stocktake, counterAccuracy] = await Promise.all([
-    pool.execute(
-      `SELECT
-         COALESCE(SUM(found_count), 0) AS foundCount,
-         COALESCE(SUM(missing_count), 0) AS missingCount,
-         COALESCE(SUM(new_count), 0) AS newCount,
-         COALESCE(SUM(found_count + missing_count + new_count), 0) AS totalRecords
-       FROM stock_verification
-       ${branchFilter.clause}`,
-      branchFilter.params,
-    ),
+  const [stocktake, counterAccuracy] = await Promise.all([
     getStocktakeSummary({ branchIds: scope }),
     getCounterAccuracy({ branchIds: scope }),
   ]);
 
-  const row = sumResult[0][0] ?? {};
+  const foundCount = Number(stocktake.foundCount ?? 0);
+  const missingCount = Number(stocktake.missingCount ?? 0);
+  const newCount = Number(stocktake.newCount ?? 0);
 
   return {
-    totalFound: Number(row.foundCount ?? 0),
-    totalMissing: Number(row.missingCount ?? 0),
-    totalNew: Number(row.newCount ?? 0),
-    totalTags: Number(row.totalRecords ?? 0),
+    totalFound: foundCount,
+    totalMissing: missingCount,
+    totalNew: newCount,
+    totalTags: foundCount + missingCount + newCount,
     stocktake,
     counterAccuracy,
   };
@@ -980,7 +1111,8 @@ const getTopSoldProducts = async ({
     [...params, ...branchFilter.params],
   );
 
-  const batches = await getLatestTwoBatchIds({ branchIds: scope });
+  const batches =
+    scope.length === 1 ? await getLatestTwoBatchIds({ branchIds: scope }) : [];
   const latestBatchId = batches[0]?.id ?? null;
   const previousBatchId = batches[1]?.id ?? null;
 

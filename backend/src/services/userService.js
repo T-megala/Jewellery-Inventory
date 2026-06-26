@@ -168,10 +168,15 @@ const toSafeUser = async (row) => {
   };
 };
 
-export const getAllUsers = async () => {
+export const getAllUsers = async ({ excludeSuperAdmin = false } = {}) => {
+  const superAdminFilter = excludeSuperAdmin ? "WHERE r.name != ?" : "";
+  const params = excludeSuperAdmin ? [SUPER_ADMIN_ROLE_NAME] : [];
+
   const [rows] = await pool.execute(
     `${USER_SELECT_SQL}
+     ${superAdminFilter}
      ORDER BY u.id ASC`,
+    params,
   );
 
   return Promise.all(rows.map((row) => toSafeUser(row)));

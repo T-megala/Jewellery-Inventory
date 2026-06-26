@@ -62,14 +62,25 @@ export const getPermissionNamesForRole = async (roleId) => {
   return permissions.map((permission) => permission.name);
 };
 
-export const getAllRoles = async ({ includeInactive = false } = {}) => {
-  const whereClause = includeInactive ? "1 = 1" : "is_active = 1";
+export const getAllRoles = async ({
+  includeInactive = false,
+  excludeSuperAdmin = false,
+} = {}) => {
+  const conditions = [includeInactive ? "1 = 1" : "is_active = 1"];
+
+  if (excludeSuperAdmin) {
+    conditions.push("name != ?");
+  }
+
+  const whereClause = conditions.join(" AND ");
+  const params = excludeSuperAdmin ? [SUPER_ADMIN_ROLE_NAME] : [];
 
   const [rows] = await pool.execute(
     `SELECT id, name, description, is_system, is_active, created_at, updated_at
      FROM roles
      WHERE ${whereClause}
      ORDER BY name ASC`,
+    params,
   );
 
   const roles = [];

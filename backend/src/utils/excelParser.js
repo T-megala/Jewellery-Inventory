@@ -382,9 +382,51 @@ const toNumber = (value) => {
   return Number.isFinite(num) ? num : null;
 };
 
+const EXCEL_SERIAL_MAX = 1_000_000;
+const EXCEL_UNIX_EPOCH_SERIAL = 25_569;
+
+const excelSerialToDateString = (serial) => {
+  const utcMs = Math.round((Math.floor(serial) - EXCEL_UNIX_EPOCH_SERIAL) * 86_400_000);
+  const date = new Date(utcMs);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return toLocalDateString(date);
+};
+
+const parseExcelSerialDate = (value) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (value >= 1 && value < EXCEL_SERIAL_MAX) {
+      return excelSerialToDateString(value);
+    }
+
+    return null;
+  }
+
+  const str = String(value ?? "").trim();
+
+  if (/^\d+(\.\d+)?$/.test(str)) {
+    const serial = Number(str);
+
+    if (serial >= 1 && serial < EXCEL_SERIAL_MAX) {
+      return excelSerialToDateString(serial);
+    }
+  }
+
+  return null;
+};
+
 const formatDate = (value) => {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
     return toLocalDateString(value);
+  }
+
+  const fromExcelSerial = parseExcelSerialDate(value);
+
+  if (fromExcelSerial) {
+    return fromExcelSerial;
   }
 
   const str = String(value ?? "").trim();

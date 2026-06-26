@@ -244,6 +244,52 @@ export const selectBranches = async (userId, branchIds) => {
   });
 };
 
+export const appendBranchToSession = async (
+  userId,
+  branchId,
+  currentSelectedBranchIds = [],
+) => {
+  const parsedBranchId = Number.parseInt(String(branchId ?? ""), 10);
+
+  if (!Number.isInteger(parsedBranchId) || parsedBranchId < 1) {
+    throw new ApiError(400, "branchId must be a positive integer");
+  }
+
+  const hasAccess = await userBranchService.userHasBranchAccess(
+    userId,
+    parsedBranchId,
+  );
+
+  if (!hasAccess) {
+    throw new ApiError(403, "Branch is not assigned to this user");
+  }
+
+  const internalBranches = await userBranchService.getBranchesForUser(userId);
+  const profile = await loadUserAuthProfile(userId, internalBranches);
+
+  if (!profile) {
+    throw new ApiError(404, "User not found");
+  }
+
+  const mappedBranchIds = profile.branches.map((branch) => branch.id);
+  const existingSelection = Array.isArray(currentSelectedBranchIds)
+    ? currentSelectedBranchIds
+        .map((id) => Number(id))
+        .filter((id) => Number.isInteger(id) && id > 0)
+    : [];
+  const selectedBranchIds = [
+    ...new Set([...existingSelection, parsedBranchId]),
+  ];
+
+  validateSelectedBranchIds(selectedBranchIds, mappedBranchIds);
+
+  return issueAuthSession({
+    internalBranches,
+    profile,
+    selectedBranchIds,
+  });
+};
+
 export const refreshAccessToken = async ({ refreshToken }) => {
   const plainRefreshToken = String(refreshToken ?? "").trim();
 

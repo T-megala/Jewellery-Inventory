@@ -1,6 +1,11 @@
 import ApiError from "../utils/ApiError.js";
 import * as userService from "../services/userService.js";
 import { isSuperAdminRole } from "../services/roleService.js";
+import {
+  denySuperAdminAccessUnlessRequester,
+  isSuperAdminRequester,
+  isSuperAdminRoleName,
+} from "../utils/superAdminScope.js";
 
 const MAX_USERNAME_LENGTH = 100;
 const MAX_PASSWORD_BYTES = 72;
@@ -35,8 +40,10 @@ const parseOptionalIdField = (value, fieldName) => {
   return parsed;
 };
 
-export const listUsers = async (_req, res) => {
-  const users = await userService.getAllUsers();
+export const listUsers = async (req, res) => {
+  const users = await userService.getAllUsers({
+    excludeSuperAdmin: !isSuperAdminRequester(req),
+  });
   res.status(200).json({ success: true, data: users });
 };
 
@@ -45,6 +52,10 @@ export const getUser = async (req, res) => {
 
   if (!user) {
     throw new ApiError(404, "User not found");
+  }
+
+  if (isSuperAdminRoleName(user.role?.name)) {
+    denySuperAdminAccessUnlessRequester(req, { message: "User not found" });
   }
 
   res.status(200).json({ success: true, data: user });
@@ -125,6 +136,13 @@ export const createUser = async (req, res) => {
   const roleId = parseRequiredIdField(req.body?.roleId, "roleId");
   const isSuperAdmin = await isSuperAdminRole(roleId);
 
+  if (isSuperAdmin) {
+    denySuperAdminAccessUnlessRequester(req, {
+      message: "You do not have permission to manage Super Admin users",
+      statusCode: 403,
+    });
+  }
+
   const branchInput = isSuperAdmin
     ? {
         branchId: parseOptionalIdField(req.body?.branchId, "branchId"),
@@ -154,6 +172,16 @@ export const createUser = async (req, res) => {
 
 export const updateUser = async (req, res) => {
   const id = parseId(req.params.id);
+  const existingUser = await userService.getUserById(id);
+
+  if (!existingUser) {
+    throw new ApiError(404, "User not found");
+  }
+
+  if (isSuperAdminRoleName(existingUser.role?.name)) {
+    denySuperAdminAccessUnlessRequester(req, { message: "User not found" });
+  }
+
   const fields = {};
 
   if (req.body?.username !== undefined) {
@@ -192,7 +220,16 @@ export const updateUser = async (req, res) => {
   }
 
   if (req.body?.roleId !== undefined) {
-    fields.roleId = parseRequiredIdField(req.body.roleId, "roleId");
+    const nextRoleId = parseRequiredIdField(req.body.roleId, "roleId");
+
+    if (await isSuperAdminRole(nextRoleId)) {
+      denySuperAdminAccessUnlessRequester(req, {
+        message: "You do not have permission to assign the Super Admin role",
+        statusCode: 403,
+      });
+    }
+
+    fields.roleId = nextRoleId;
   }
 
   if (
@@ -227,6 +264,16 @@ export const deleteUser = async (req, res) => {
 
   if (req.user && Number(req.user.id) === id) {
     throw new ApiError(403, "You cannot delete your own account");
+  }
+
+  const existingUser = await userService.getUserById(id);
+
+  if (!existingUser) {
+    throw new ApiError(404, "User not found");
+  }
+
+  if (isSuperAdminRoleName(existingUser.role?.name)) {
+    denySuperAdminAccessUnlessRequester(req, { message: "User not found" });
   }
 
   await userService.deleteUser(id);

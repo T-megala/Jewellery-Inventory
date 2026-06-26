@@ -3,11 +3,12 @@ import "dotenv/config";
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
+  port: Number(process.env.DB_PORT), // ✅ Add this
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
   waitForConnections: true,
-  connectionLimit: Number.parseInt(process.env.DB_POOL_SIZE ?? '20', 10) || 20,
+  connectionLimit: Number.parseInt(process.env.DB_POOL_SIZE ?? "20", 10) || 20,
   queueLimit: 0,
   enableKeepAlive: true,
   keepAliveInitialDelay: 10000,

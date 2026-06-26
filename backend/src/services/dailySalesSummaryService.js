@@ -40,7 +40,7 @@ const logSummary = (message, meta = undefined) => {
 
 const getBatchMeta = async (connection, batchId) => {
   const [rows] = await connection.execute(
-    `SELECT id, batch_date
+    `SELECT id, batch_date, branch_id
      FROM product_upload_batches
      WHERE id = ?`,
     [batchId],
@@ -49,14 +49,26 @@ const getBatchMeta = async (connection, batchId) => {
   return rows[0] ?? null;
 };
 
-const getPreviousBatchId = async (connection, batchId) => {
+const getPreviousBatchIdForBranch = async (connection, batchId, branchId) => {
+  const parsedBatchId = Number(batchId);
+  const parsedBranchId = Number(branchId);
+
+  if (!Number.isInteger(parsedBatchId) || parsedBatchId < 1) {
+    return null;
+  }
+
+  if (!Number.isInteger(parsedBranchId) || parsedBranchId < 1) {
+    return null;
+  }
+
   const [rows] = await connection.execute(
     `SELECT id
      FROM product_upload_batches
-     WHERE id < ?
+     WHERE branch_id = ?
+       AND id < ?
      ORDER BY id DESC
      LIMIT 1`,
-    [batchId],
+    [parsedBranchId, parsedBatchId],
   );
 
   return rows[0]?.id ?? null;
@@ -129,14 +141,24 @@ const insertSummaryRow = async (
   );
 };
 
-export const refreshDailySalesSummary = async (batchId, connection = pool) => {
+export const refreshDailySalesSummary = async (
+  batchId,
+  connection = pool,
+  { previousBatchId: explicitPreviousBatchId = null } = {},
+) => {
   const batch = await getBatchMeta(connection, batchId);
 
   if (!batch) {
     throw new Error(`Batch ${batchId} not found`);
   }
 
-  const previousBatchId = await getPreviousBatchId(connection, batchId);
+  const previousBatchId =
+    explicitPreviousBatchId ??
+    (await getPreviousBatchIdForBranch(
+      connection,
+      batchId,
+      batch.branch_id,
+    ));
   const batchDate = formatLocalDateKey(batch.batch_date);
 
   const auditSummary = await rebuildBatchSalesAudit(
@@ -217,13 +239,15 @@ export const refreshDailySalesSummary = async (batchId, connection = pool) => {
   });
 };
 
-export const backfillAllDailySalesSummaries = async () => {
-  const [batches] = await pool.execute(
-    `SELECT id FROM product_upload_batches ORDER BY id ASC`,
+export const backfillAllDailySalesSummaries = async (connection = pool) => {
+  const [batches] = await connection.execute(
+    `SELECT id
+     FROM product_upload_batches
+     ORDER BY branch_id ASC, id ASC`,
   );
 
   for (const batch of batches) {
-    await refreshDailySalesSummary(batch.id);
+    await refreshDailySalesSummary(batch.id, connection);
   }
 
   logSummary("backfill completed", { batchCount: batches.length });
