@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import BackToMastersLink from '../components/BackToMastersLink.jsx'
 import { createPortal } from 'react-dom'
 import TablePagination from '../components/TablePagination.jsx'
 import FieldError from '../components/FieldError.jsx'
@@ -269,6 +270,7 @@ export default function Branches() {
 
   return (
     <div className={`branches-page${showForm ? ' branches-page--modal-open' : ''}`}>
+      <BackToMastersLink />
       <section className="branches-list-card">
         <div className="branches-list__toolbar">
           <div className="branches-search">

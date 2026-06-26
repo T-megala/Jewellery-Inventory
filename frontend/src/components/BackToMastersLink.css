@@ -1,0 +1,41 @@
+.masters-back-nav {
+  flex-shrink: 0;
+  margin-bottom: 10px;
+}
+
+.masters-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+  border: none;
+  background: none;
+  color: #9a8b7a;
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.2;
+  text-decoration: none;
+  transition: color 0.15s ease, gap 0.15s ease;
+}
+
+.masters-back-link svg {
+  flex-shrink: 0;
+  opacity: 0.75;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.masters-back-link:hover {
+  color: var(--color-primary-dark);
+}
+
+.masters-back-link:hover svg {
+  opacity: 1;
+  transform: translateX(-2px);
+}
+
+.masters-back-link:focus-visible {
+  outline: 2px solid rgba(184, 134, 11, 0.45);
+  outline-offset: 3px;
+  border-radius: 4px;
+}

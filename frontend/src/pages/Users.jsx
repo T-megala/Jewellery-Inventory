@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
+import BackToMastersLink from '../components/BackToMastersLink.jsx'
 import BranchMultiSelect from '../components/BranchMultiSelect.jsx'
 import FieldError from '../components/FieldError.jsx'
 import TablePagination from '../components/TablePagination.jsx'
@@ -451,6 +452,7 @@ export default function Users() {
 
   return (
     <div className={`users-page${showForm ? ' users-page--modal-open' : ''}`}>
+      <BackToMastersLink />
       <section className="users-list-card">
         <div className="users-list__toolbar">
           <div className="users-list__filters">

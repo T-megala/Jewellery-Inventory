@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import BackToMastersLink from '../components/BackToMastersLink.jsx'
 import { createPortal } from 'react-dom'
 import TablePagination from '../components/TablePagination.jsx'
 import FieldError from '../components/FieldError.jsx'
@@ -719,6 +720,7 @@ export default function Roles() {
 
   return (
     <div className={`roles-page${showForm ? ' roles-page--modal-open' : ''}`}>
+      <BackToMastersLink />
       <section className="roles-list-card">
         <div className="roles-list__toolbar">
           <div className="roles-search">
