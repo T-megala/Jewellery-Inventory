@@ -12,6 +12,7 @@ import {
   fetchUsers,
   updateUser,
 } from '../services/users.js'
+import { hasPermission } from '../services/auth.js'
 import { useBranchScope } from '../hooks/useBranchScope.js'
 import '../components/BranchMultiSelect.css'
 import '../components/FieldError.css'
@@ -108,6 +109,7 @@ function UserBranchTags({ branches }) {
 }
 
 export default function Users() {
+  const canDelete = hasPermission('users.delete')
   const { operationalBranchId } = useBranchScope()
   const [users, setUsers] = useState([])
   const [branches, setBranches] = useState([])
@@ -419,6 +421,7 @@ export default function Users() {
   }
 
   async function handleDelete(user) {
+    if (!canDelete) return
     if (!window.confirm(`Delete user "${user.username}"?`)) return
 
     setDeletingId(user.id)
@@ -556,14 +559,16 @@ export default function Users() {
                         >
                           Edit
                         </button>
-                        <button
-                          type="button"
-                          className="users-btn users-btn--danger users-btn--sm"
-                          onClick={() => handleDelete(user)}
-                          disabled={saving || deletingId === user.id}
-                        >
-                          {deletingId === user.id ? 'Deleting…' : 'Delete'}
-                        </button>
+                        {canDelete && (
+                          <button
+                            type="button"
+                            className="users-btn users-btn--danger users-btn--sm"
+                            onClick={() => handleDelete(user)}
+                            disabled={saving || deletingId === user.id}
+                          >
+                            {deletingId === user.id ? 'Deleting…' : 'Delete'}
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

@@ -10,6 +10,7 @@ import {
   fetchRoles,
   updateRole,
 } from '../services/roles.js'
+import { hasPermission } from '../services/auth.js'
 import '../components/FieldError.css'
 import { mapRoleSaveError, scrollToFirstFieldError } from '../utils/formValidation.js'
 import './Roles.css'
@@ -403,6 +404,7 @@ function setGroupCheckboxState(input, checked, indeterminate) {
 }
 
 export default function Roles() {
+  const canDelete = hasPermission('roles.delete')
   const [roles, setRoles] = useState([])
   const [permissions, setPermissions] = useState([])
   const [searchInput, setSearchInput] = useState('')
@@ -686,6 +688,7 @@ export default function Roles() {
   }
 
   async function handleDelete(role) {
+    if (!canDelete) return
     if (role.isSystem) return
     if (!window.confirm(`Delete role "${role.name}"?`)) return
 
@@ -815,15 +818,17 @@ export default function Roles() {
                         >
                           Edit
                         </button>
-                        <button
-                          type="button"
-                          className="roles-btn roles-btn--danger roles-btn--sm"
-                          onClick={() => handleDelete(role)}
-                          disabled={saving || deletingId === role.id || role.isSystem}
-                          title={role.isSystem ? 'System roles cannot be deleted' : undefined}
-                        >
-                          {deletingId === role.id ? 'Deleting…' : 'Delete'}
-                        </button>
+                        {canDelete && (
+                          <button
+                            type="button"
+                            className="roles-btn roles-btn--danger roles-btn--sm"
+                            onClick={() => handleDelete(role)}
+                            disabled={saving || deletingId === role.id || role.isSystem}
+                            title={role.isSystem ? 'System roles cannot be deleted' : undefined}
+                          >
+                            {deletingId === role.id ? 'Deleting…' : 'Delete'}
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

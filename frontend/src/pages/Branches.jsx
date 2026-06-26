@@ -9,6 +9,7 @@ import {
   fetchBranches,
   updateBranch,
 } from '../services/branches.js'
+import { hasPermission } from '../services/auth.js'
 import '../components/FieldError.css'
 import { mapBranchSaveError, scrollToFirstFieldError } from '../utils/formValidation.js'
 import './Branches.css'
@@ -36,6 +37,7 @@ function formatDate(value) {
 }
 
 export default function Branches() {
+  const canDelete = hasPermission('branches.delete')
   const [branches, setBranches] = useState([])
   const [searchInput, setSearchInput] = useState('')
   const [page, setPage] = useState(1)
@@ -237,6 +239,7 @@ export default function Branches() {
   }
 
   async function handleDelete(branch) {
+    if (!canDelete) return
     if (!window.confirm(`Delete branch "${branch.name}"?`)) return
 
     setDeletingId(branch.id)
@@ -360,14 +363,16 @@ export default function Branches() {
                         >
                           Edit
                         </button>
-                        <button
-                          type="button"
-                          className="branches-btn branches-btn--danger branches-btn--sm"
-                          onClick={() => handleDelete(branch)}
-                          disabled={saving || deletingId === branch.id}
-                        >
-                          {deletingId === branch.id ? 'Deleting…' : 'Delete'}
-                        </button>
+                        {canDelete && (
+                          <button
+                            type="button"
+                            className="branches-btn branches-btn--danger branches-btn--sm"
+                            onClick={() => handleDelete(branch)}
+                            disabled={saving || deletingId === branch.id}
+                          >
+                            {deletingId === branch.id ? 'Deleting…' : 'Delete'}
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
