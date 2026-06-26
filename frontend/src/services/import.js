@@ -1,4 +1,4 @@
-import { apiUrl, buildQueryString, getAuthHeaders } from './api.js';
+import { apiUrl, authFetch, buildQueryString, getAuthHeaders } from './api.js';
 
 /** Bulk stock import — POST multipart/form-data with field name "file" */
 export const BULK_STOCK_IMPORT_URL = apiUrl('/products/import');
@@ -61,7 +61,7 @@ export async function startAsyncImport(file, { branchId } = {}) {
     branchId,
   });
 
-  const res = await fetch(apiUrl(`/products/import?${query}`), {
+  const res = await authFetch(apiUrl(`/products/import?${query}`), {
     method: 'POST',
     headers: {
       ...getAuthHeaders({ branchId }),
@@ -81,7 +81,7 @@ export async function startAsyncImport(file, { branchId } = {}) {
 }
 
 export async function getImportStatus(jobId) {
-  const res = await fetch(apiUrl(`/products/import/status/${jobId}`), {
+  const res = await authFetch(apiUrl(`/products/import/status/${jobId}`), {
     headers: {
       ...getAuthHeaders(),
     },

@@ -1,5 +1,12 @@
 import { API_BASE, apiUrl } from '../config/apiConfig.js';
-import { getOperationalBranchId, getToken } from './auth.js';
+import {
+  clearAuthSession,
+  getOperationalBranchId,
+  getRefreshToken,
+  getToken,
+  refreshAccessToken,
+  redirectToLogin,
+} from './auth.js';
 
 export { API_BASE, apiUrl };
 
@@ -76,13 +83,56 @@ async function parseResponse(res) {
 function buildJsonHeaders(options = {}) {
   return {
     'Content-Type': 'application/json',
-    ...getAuthHeaders(),
     ...options.headers,
+    ...getAuthHeaders(),
   };
 }
 
+async function handleUnauthorizedRetry(url, options, retried) {
+  if (retried || !getRefreshToken()) {
+    clearAuthSession();
+    redirectToLogin();
+    throw new Error('Session expired. Please log in again.');
+  }
+
+  try {
+    await refreshAccessToken();
+  } catch {
+    clearAuthSession();
+    redirectToLogin();
+    throw new Error('Session expired. Please log in again.');
+  }
+
+  const retryHeaders = { ...options.headers };
+  delete retryHeaders.Authorization;
+
+  return authFetch(url, {
+    ...options,
+    headers: {
+      ...retryHeaders,
+      ...getAuthHeaders(),
+    },
+  }, true);
+}
+
+/**
+ * Authenticated fetch — sends access token; on 401, refreshes tokens and retries once.
+ */
+export async function authFetch(url, options = {}, retried = false) {
+  const res = await fetch(url, {
+    ...options,
+    headers: options.headers,
+  });
+
+  if (res.status === 401 && getToken()) {
+    return handleUnauthorizedRetry(url, options, retried);
+  }
+
+  return res;
+}
+
 export async function apiFetch(path, options = {}) {
-  const res = await fetch(apiUrl(withBranchPath(path)), {
+  const res = await authFetch(apiUrl(withBranchPath(path)), {
     ...options,
     headers: buildJsonHeaders(options),
   });
@@ -92,7 +142,7 @@ export async function apiFetch(path, options = {}) {
 }
 
 export async function apiUpload(path, formData) {
-  const res = await fetch(apiUrl(path), {
+  const res = await authFetch(apiUrl(path), {
     method: 'POST',
     headers: {
       ...getAuthHeaders(),
@@ -105,7 +155,7 @@ export async function apiUpload(path, formData) {
 }
 
 export async function apiFetchPaged(path, options = {}) {
-  const res = await fetch(apiUrl(withBranchPath(path)), {
+  const res = await authFetch(apiUrl(withBranchPath(path)), {
     ...options,
     headers: buildJsonHeaders(options),
   });
@@ -122,7 +172,7 @@ export async function apiFetchReport(path, params = {}) {
   const query = buildQueryString(withBranchParams(params));
   const url = query ? `${path}?${query}` : path;
 
-  const res = await fetch(apiUrl(url), {
+  const res = await authFetch(apiUrl(url), {
     method: 'GET',
     headers: buildJsonHeaders(),
   });
@@ -144,7 +194,7 @@ export async function apiFetchReport(path, params = {}) {
 
 /** Authenticated fetch for non-JSON responses (e.g. file downloads). */
 export async function apiFetchRaw(path, options = {}) {
-  return fetch(apiUrl(withBranchPath(path)), {
+  return authFetch(apiUrl(withBranchPath(path)), {
     ...options,
     headers: {
       ...getAuthHeaders(),

@@ -12,16 +12,9 @@ import Masters from './pages/Masters.jsx'
 import Roles from './pages/Roles.jsx'
 import MainLayout from './layouts/MainLayout.jsx'
 
-function requireAuthLoader({ request }) {
+function requireAuthLoader() {
   if (isSessionValid()) return null
-
-  const url = new URL(request.url)
-  const next = `${url.pathname}${url.search}`
-  const loginPath = next && next !== '/' && next !== '/login'
-    ? `/login?next=${encodeURIComponent(next)}`
-    : '/login'
-
-  return redirect(loginPath)
+  return redirect('/login')
 }
 
 /** Visiting /login always starts a fresh session — same as logout. */

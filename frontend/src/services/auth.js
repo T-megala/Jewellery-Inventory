@@ -1,7 +1,8 @@
-import { apiUrl } from './api.js'
+import { apiUrl, authFetch } from './api.js'
 import { decodeJwtPayload } from '../utils/jwt.js'
 
 const TOKEN_KEY = 'auth_token'
+const REFRESH_TOKEN_KEY = 'auth_refresh_token'
 const USER_KEY = 'auth_user'
 const OPERATIONAL_BRANCH_KEY = 'auth_operational_branch'
 export const PENDING_BRANCH_KEY = 'auth_pending_branch_selection'
@@ -15,6 +16,7 @@ const authStorage = sessionStorage
 function clearLegacyAuthStorage() {
   const legacyKeys = [
     TOKEN_KEY,
+    REFRESH_TOKEN_KEY,
     USER_KEY,
     'auth_tab_id',
     'auth_login_epoch',
@@ -136,13 +138,17 @@ function parseAuthResponse(json, fallbackError = 'Request failed') {
 
   return {
     token: data.token,
+    refreshToken: data.refreshToken ?? null,
     user,
     permissions: data.permissions ?? user.permissions ?? [],
   }
 }
 
-function applyAuthSession(token, user) {
+function applyAuthSession(token, user, refreshToken) {
   authStorage.setItem(TOKEN_KEY, token)
+  if (refreshToken) {
+    authStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
+  }
   authStorage.setItem(USER_KEY, JSON.stringify(normalizeUser(user, token)))
   clearLegacyAuthStorage()
   dispatchBranchChange()
@@ -175,7 +181,7 @@ export async function login(username, password, branchIds = null) {
   }
 
   const data = parseAuthResponse(json, 'Login failed')
-  applyAuthSession(data.token, data.user)
+  applyAuthSession(data.token, data.user, data.refreshToken)
   setOperationalBranch(ALL_BRANCHES_VALUE)
   return data
 }
@@ -187,7 +193,7 @@ export async function selectBranches(branchIds) {
     throw new Error('Authentication token is required')
   }
 
-  const res = await fetch(apiUrl('/auth/select-branches'), {
+  const res = await authFetch(apiUrl('/auth/select-branches'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -208,7 +214,7 @@ export async function selectBranches(branchIds) {
   }
 
   const data = parseAuthResponse(json, 'Failed to select branches')
-  applyAuthSession(data.token, data.user)
+  applyAuthSession(data.token, data.user, data.refreshToken)
   setOperationalBranch(ALL_BRANCHES_VALUE)
   clearPendingBranchSelection()
   return data
@@ -221,7 +227,7 @@ export async function fetchProfile() {
     throw new Error('Authentication token is required')
   }
 
-  const res = await fetch(apiUrl('/auth/profile'), {
+  const res = await authFetch(apiUrl('/auth/profile'), {
     headers: { Authorization: `Bearer ${token}` },
   })
 
@@ -237,7 +243,7 @@ export async function fetchProfile() {
   }
 
   const data = json.data ?? json
-  const user = normalizeUser(data.user, token)
+  const user = normalizeUser(data.user, getToken())
   authStorage.setItem(USER_KEY, JSON.stringify(user))
   clearLegacyAuthStorage()
   dispatchBranchChange()
@@ -245,8 +251,52 @@ export async function fetchProfile() {
   return user
 }
 
-export function setSession(token, user) {
-  applyAuthSession(token, user)
+export function setSession(token, user, refreshToken) {
+  applyAuthSession(token, user, refreshToken)
+}
+
+let refreshPromise = null
+
+/** Exchange refresh token for a new access token (deduped when called concurrently). */
+export async function refreshAccessToken() {
+  const refreshToken = getRefreshToken()
+
+  if (!refreshToken) {
+    throw new Error('Refresh token is missing')
+  }
+
+  if (refreshPromise) {
+    return refreshPromise
+  }
+
+  refreshPromise = (async () => {
+    try {
+      const res = await fetch(apiUrl('/auth/refresh'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      })
+
+      let json
+      try {
+        json = await res.json()
+      } catch {
+        throw new Error('Unexpected server response')
+      }
+
+      if (!res.ok) {
+        throw new Error(json?.message || 'Session expired')
+      }
+
+      const data = parseAuthResponse(json, 'Session expired')
+      applyAuthSession(data.token, data.user, data.refreshToken)
+      return data.token
+    } finally {
+      refreshPromise = null
+    }
+  })()
+
+  return refreshPromise
 }
 
 export function markPendingBranchSelection() {
@@ -263,6 +313,10 @@ export function hasPendingBranchSelection() {
 
 export function getToken() {
   return authStorage.getItem(TOKEN_KEY)
+}
+
+export function getRefreshToken() {
+  return authStorage.getItem(REFRESH_TOKEN_KEY)
 }
 
 export function getUser() {
@@ -380,6 +434,7 @@ export function isSessionValid() {
 
 export function clearAuthSession() {
   authStorage.removeItem(TOKEN_KEY)
+  authStorage.removeItem(REFRESH_TOKEN_KEY)
   authStorage.removeItem(USER_KEY)
   clearLegacyAuthStorage()
   clearPendingBranchSelection()
@@ -395,11 +450,7 @@ export function logout() {
 const LOGIN_PATH = '/login'
 
 export function redirectToLogin() {
-  const next = `${window.location.pathname}${window.location.search}${window.location.hash}`
-  const loginUrl = next && next !== '/' && next !== LOGIN_PATH
-    ? `${LOGIN_PATH}?next=${encodeURIComponent(next)}`
-    : LOGIN_PATH
-  window.location.replace(loginUrl)
+  window.location.replace(LOGIN_PATH)
 }
 
 /** Reload pages restored from back/forward cache so route loaders re-check auth. */

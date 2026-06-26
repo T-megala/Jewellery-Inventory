@@ -28,10 +28,6 @@ function getInitialBranchIds(user) {
 function getRedirectPath(location) {
   const fromState = location.state?.from?.pathname
   if (fromState && fromState !== '/login') return fromState
-
-  const next = new URLSearchParams(location.search).get('next')
-  if (next && next.startsWith('/') && !next.startsWith('/login')) return next
-
   return '/dashboard'
 }
 
@@ -57,6 +53,12 @@ export default function Login() {
 
   const branchUser = getUser()
   const branches = branchUser?.branches ?? []
+
+  useEffect(() => {
+    if (location.search) {
+      navigate('/login', { replace: true })
+    }
+  }, [location.search, navigate])
 
   useEffect(() => {
     setStep('credentials')
