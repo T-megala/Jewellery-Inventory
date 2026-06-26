@@ -109,7 +109,10 @@ function UserBranchTags({ branches }) {
 }
 
 export default function Users() {
+  const canAdd = hasPermission('users.add')
+  const canUpdate = hasPermission('users.update')
   const canDelete = hasPermission('users.delete')
+  const showRowActions = canUpdate || canDelete
   const { operationalBranchId } = useBranchScope()
   const [users, setUsers] = useState([])
   const [branches, setBranches] = useState([])
@@ -271,6 +274,7 @@ export default function Users() {
   }
 
   function handleAddClick() {
+    if (!canAdd) return
     setEditingId(null)
     setEditingUser(null)
     setUsername('')
@@ -285,6 +289,7 @@ export default function Users() {
   }
 
   function handleEdit(user) {
+    if (!canUpdate) return
     const userBranchIds = normalizeBranchIds((user.branches || []).map((branch) => branch.id))
 
     setEditingId(user.id)
@@ -360,12 +365,15 @@ export default function Users() {
 
     if (!validateForm()) return
 
+    const isEdit = Boolean(editingId)
+    if (isEdit && !canUpdate) return
+    if (!isEdit && !canAdd) return
+
     setSaving(true)
 
     try {
       const trimmedUsername = username.trim()
       const parsedRoleId = Number(roleId)
-      const isEdit = Boolean(editingId)
 
       if (isEdit) {
         const payload = {
@@ -490,17 +498,19 @@ export default function Users() {
             <span className="users-list__count">
               {filteredUsers.length.toLocaleString('en-IN')} user{filteredUsers.length === 1 ? '' : 's'}
             </span>
-            <button
-              type="button"
-              className="users-btn users-btn--primary users-btn--add"
-              onClick={handleAddClick}
-              aria-label="Add user"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              </svg>
-              <span className="users-btn__label">Add User</span>
-            </button>
+            {canAdd && (
+              <button
+                type="button"
+                className="users-btn users-btn--primary users-btn--add"
+                onClick={handleAddClick}
+                aria-label="Add user"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+                <span className="users-btn__label">Add User</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -530,13 +540,13 @@ export default function Users() {
                   <th>Role</th>
                   <th>Branches</th>
                   <th>Created</th>
-                  <th aria-label="Actions" />
+                  {showRowActions && <th aria-label="Actions" />}
                 </tr>
               </thead>
               <tbody>
                 {filteredUsers.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="users-table__empty">No users found.</td>
+                    <td colSpan={showRowActions ? 6 : 5} className="users-table__empty">No users found.</td>
                   </tr>
                 )}
 
@@ -549,28 +559,32 @@ export default function Users() {
                       <UserBranchTags branches={user.branches} />
                     </td>
                     <td>{formatDate(user.createdAt)}</td>
-                    <td>
-                      <div className="users-table__actions">
-                        <button
-                          type="button"
-                          className="users-btn users-btn--ghost users-btn--sm"
-                          onClick={() => handleEdit(user)}
-                          disabled={saving || deletingId === user.id}
-                        >
-                          Edit
-                        </button>
-                        {canDelete && (
-                          <button
-                            type="button"
-                            className="users-btn users-btn--danger users-btn--sm"
-                            onClick={() => handleDelete(user)}
-                            disabled={saving || deletingId === user.id}
-                          >
-                            {deletingId === user.id ? 'Deleting…' : 'Delete'}
-                          </button>
-                        )}
-                      </div>
-                    </td>
+                    {showRowActions && (
+                      <td>
+                        <div className="users-table__actions">
+                          {canUpdate && (
+                            <button
+                              type="button"
+                              className="users-btn users-btn--ghost users-btn--sm"
+                              onClick={() => handleEdit(user)}
+                              disabled={saving || deletingId === user.id}
+                            >
+                              Edit
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button
+                              type="button"
+                              className="users-btn users-btn--danger users-btn--sm"
+                              onClick={() => handleDelete(user)}
+                              disabled={saving || deletingId === user.id}
+                            >
+                              {deletingId === user.id ? 'Deleting…' : 'Delete'}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

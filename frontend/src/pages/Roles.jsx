@@ -404,7 +404,10 @@ function setGroupCheckboxState(input, checked, indeterminate) {
 }
 
 export default function Roles() {
+  const canAdd = hasPermission('roles.add')
+  const canUpdate = hasPermission('roles.update')
   const canDelete = hasPermission('roles.delete')
+  const showRowActions = canUpdate || canDelete
   const [roles, setRoles] = useState([])
   const [permissions, setPermissions] = useState([])
   const [searchInput, setSearchInput] = useState('')
@@ -564,6 +567,7 @@ export default function Roles() {
   }
 
   function handleAddClick() {
+    if (!canAdd) return
     setEditingId(null)
     setEditingIsSystem(false)
     setForm(EMPTY_FORM)
@@ -575,6 +579,7 @@ export default function Roles() {
   }
 
   function handleEdit(role) {
+    if (!canUpdate) return
     setEditingId(role.id)
     setEditingIsSystem(role.isSystem)
     setPermissionSearchInput('')
@@ -653,6 +658,10 @@ export default function Roles() {
 
     if (!validateForm()) return
 
+    const isEdit = Boolean(editingId)
+    if (isEdit && !canUpdate) return
+    if (!isEdit && !canAdd) return
+
     setSaving(true)
 
     try {
@@ -662,8 +671,6 @@ export default function Roles() {
         description: form.description.trim() || null,
         permissionIds: form.permissionIds.filter((id) => assignableIds.has(id)),
       }
-
-      const isEdit = Boolean(editingId)
 
       if (isEdit) {
         await updateRole(editingId, payload)
@@ -746,17 +753,19 @@ export default function Roles() {
             <span className="roles-list__count">
               {filteredRoles.length.toLocaleString('en-IN')} role{filteredRoles.length === 1 ? '' : 's'}
             </span>
-            <button
-              type="button"
-              className="roles-btn roles-btn--primary roles-btn--add"
-              onClick={handleAddClick}
-              aria-label="Add role"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              </svg>
-              <span className="roles-btn__label">Add Role</span>
-            </button>
+            {canAdd && (
+              <button
+                type="button"
+                className="roles-btn roles-btn--primary roles-btn--add"
+                onClick={handleAddClick}
+                aria-label="Add role"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+                <span className="roles-btn__label">Add Role</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -785,13 +794,13 @@ export default function Roles() {
                   <th>Name</th>
                   <th>Description</th>
                   <th>Updated</th>
-                  <th aria-label="Actions" />
+                  {showRowActions && <th aria-label="Actions" />}
                 </tr>
               </thead>
               <tbody>
                 {filteredRoles.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="roles-table__empty">No roles found.</td>
+                    <td colSpan={showRowActions ? 5 : 4} className="roles-table__empty">No roles found.</td>
                   </tr>
                 )}
 
@@ -808,29 +817,33 @@ export default function Roles() {
                     </td>
                     <td>{role.description || '—'}</td>
                     <td>{formatDate(role.updatedAt)}</td>
-                    <td>
-                      <div className="roles-table__actions">
-                        <button
-                          type="button"
-                          className="roles-btn roles-btn--ghost roles-btn--sm"
-                          onClick={() => handleEdit(role)}
-                          disabled={saving || deletingId === role.id}
-                        >
-                          Edit
-                        </button>
-                        {canDelete && (
-                          <button
-                            type="button"
-                            className="roles-btn roles-btn--danger roles-btn--sm"
-                            onClick={() => handleDelete(role)}
-                            disabled={saving || deletingId === role.id || role.isSystem}
-                            title={role.isSystem ? 'System roles cannot be deleted' : undefined}
-                          >
-                            {deletingId === role.id ? 'Deleting…' : 'Delete'}
-                          </button>
-                        )}
-                      </div>
-                    </td>
+                    {showRowActions && (
+                      <td>
+                        <div className="roles-table__actions">
+                          {canUpdate && (
+                            <button
+                              type="button"
+                              className="roles-btn roles-btn--ghost roles-btn--sm"
+                              onClick={() => handleEdit(role)}
+                              disabled={saving || deletingId === role.id}
+                            >
+                              Edit
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button
+                              type="button"
+                              className="roles-btn roles-btn--danger roles-btn--sm"
+                              onClick={() => handleDelete(role)}
+                              disabled={saving || deletingId === role.id || role.isSystem}
+                              title={role.isSystem ? 'System roles cannot be deleted' : undefined}
+                            >
+                              {deletingId === role.id ? 'Deleting…' : 'Delete'}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

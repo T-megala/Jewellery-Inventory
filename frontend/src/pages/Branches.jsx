@@ -37,7 +37,10 @@ function formatDate(value) {
 }
 
 export default function Branches() {
+  const canAdd = hasPermission('branches.add')
+  const canUpdate = hasPermission('branches.update')
   const canDelete = hasPermission('branches.delete')
+  const showRowActions = canUpdate || canDelete
   const [branches, setBranches] = useState([])
   const [searchInput, setSearchInput] = useState('')
   const [page, setPage] = useState(1)
@@ -152,6 +155,7 @@ export default function Branches() {
   }
 
   function handleAddClick() {
+    if (!canAdd) return
     setEditingId(null)
     setForm(EMPTY_FORM)
     setError('')
@@ -161,6 +165,7 @@ export default function Branches() {
   }
 
   function handleEdit(branch) {
+    if (!canUpdate) return
     setEditingId(branch.id)
     setForm({
       name: branch.name,
@@ -204,6 +209,10 @@ export default function Branches() {
 
     if (!validateForm()) return
 
+    const isEdit = Boolean(editingId)
+    if (isEdit && !canUpdate) return
+    if (!isEdit && !canAdd) return
+
     setSaving(true)
 
     try {
@@ -213,8 +222,6 @@ export default function Branches() {
         city: form.city.trim() || null,
         phone: form.phone.trim() || null,
       }
-
-      const isEdit = Boolean(editingId)
 
       if (isEdit) {
         await updateBranch(editingId, payload)
@@ -296,17 +303,19 @@ export default function Branches() {
             <span className="branches-list__count">
               {filteredBranches.length.toLocaleString('en-IN')} branch{filteredBranches.length === 1 ? '' : 'es'}
             </span>
-            <button
-              type="button"
-              className="branches-btn branches-btn--primary branches-btn--add"
-              onClick={handleAddClick}
-              aria-label="Add branch"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              </svg>
-              <span className="branches-btn__label">Add Branch</span>
-            </button>
+            {canAdd && (
+              <button
+                type="button"
+                className="branches-btn branches-btn--primary branches-btn--add"
+                onClick={handleAddClick}
+                aria-label="Add branch"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+                <span className="branches-btn__label">Add Branch</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -336,13 +345,13 @@ export default function Branches() {
                   <th>City</th>
                   <th>Phone</th>
                   <th>Updated</th>
-                  <th aria-label="Actions" />
+                  {showRowActions && <th aria-label="Actions" />}
                 </tr>
               </thead>
               <tbody>
                 {filteredBranches.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="branches-table__empty">No branches found.</td>
+                    <td colSpan={showRowActions ? 6 : 5} className="branches-table__empty">No branches found.</td>
                   </tr>
                 )}
 
@@ -353,28 +362,32 @@ export default function Branches() {
                     <td>{branch.city || '—'}</td>
                     <td>{branch.phone || '—'}</td>
                     <td>{formatDate(branch.updatedAt)}</td>
-                    <td>
-                      <div className="branches-table__actions">
-                        <button
-                          type="button"
-                          className="branches-btn branches-btn--ghost branches-btn--sm"
-                          onClick={() => handleEdit(branch)}
-                          disabled={saving || deletingId === branch.id}
-                        >
-                          Edit
-                        </button>
-                        {canDelete && (
-                          <button
-                            type="button"
-                            className="branches-btn branches-btn--danger branches-btn--sm"
-                            onClick={() => handleDelete(branch)}
-                            disabled={saving || deletingId === branch.id}
-                          >
-                            {deletingId === branch.id ? 'Deleting…' : 'Delete'}
-                          </button>
-                        )}
-                      </div>
-                    </td>
+                    {showRowActions && (
+                      <td>
+                        <div className="branches-table__actions">
+                          {canUpdate && (
+                            <button
+                              type="button"
+                              className="branches-btn branches-btn--ghost branches-btn--sm"
+                              onClick={() => handleEdit(branch)}
+                              disabled={saving || deletingId === branch.id}
+                            >
+                              Edit
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button
+                              type="button"
+                              className="branches-btn branches-btn--danger branches-btn--sm"
+                              onClick={() => handleDelete(branch)}
+                              disabled={saving || deletingId === branch.id}
+                            >
+                              {deletingId === branch.id ? 'Deleting…' : 'Delete'}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
