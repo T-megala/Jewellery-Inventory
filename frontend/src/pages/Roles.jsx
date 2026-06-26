@@ -779,7 +779,6 @@ export default function Roles() {
                   <th>Si.No</th>
                   <th>Name</th>
                   <th>Description</th>
-                  <th>Permissions</th>
                   <th>Updated</th>
                   <th aria-label="Actions" />
                 </tr>
@@ -787,7 +786,7 @@ export default function Roles() {
               <tbody>
                 {filteredRoles.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="roles-table__empty">No roles found.</td>
+                    <td colSpan={5} className="roles-table__empty">No roles found.</td>
                   </tr>
                 )}
 
@@ -803,7 +802,6 @@ export default function Roles() {
                       </div>
                     </td>
                     <td>{role.description || '—'}</td>
-                    <td>{role.permissions.length}</td>
                     <td>{formatDate(role.updatedAt)}</td>
                     <td>
                       <div className="roles-table__actions">
