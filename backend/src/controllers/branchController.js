@@ -2,8 +2,6 @@ import ApiError from "../utils/ApiError.js";
 import { PERMISSIONS } from "../constants/permissions.js";
 import branchService from "../services/branchService.js";
 import userBranchService from "../services/userBranchService.js";
-import authService from "../services/authService.js";
-import { isSuperAdminRequester } from "../utils/superAdminScope.js";
 
 const parseId = (raw) => {
   const id = Number.parseInt(String(raw), 10);
@@ -74,25 +72,7 @@ export const createBranch = async (req, res) => {
     phone: req.body?.phone,
   });
 
-  const userId = Number(req.user?.id ?? req.user?.sub);
-  const data = { branch };
-
-  if (userId && isSuperAdminRequester(req)) {
-    const session = await authService.appendBranchToSession(
-      userId,
-      branch.id,
-      req.user?.selectedBranchIds ?? [],
-    );
-
-    Object.assign(data, {
-      token: session.token,
-      refreshToken: session.refreshToken,
-      user: session.user,
-      permissions: session.permissions,
-    });
-  }
-
-  res.status(201).json({ success: true, data });
+  res.status(201).json({ success: true, data: branch });
 };
 
 export const updateBranch = async (req, res) => {

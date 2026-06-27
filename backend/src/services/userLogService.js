@@ -16,47 +16,24 @@ const getRefreshExpiryDate = () => {
   return new Date(Date.now() + seconds * 1000);
 };
 
-const parseSelectedBranchIds = (value) => {
-  if (!value) {
-    return [];
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((id) => Number(id)).filter((id) => id > 0);
-  }
-
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed)
-      ? parsed.map((id) => Number(id)).filter((id) => id > 0)
-      : [];
-  } catch {
-    return [];
-  }
-};
-
 const mapSessionRow = (row) => ({
   id: Number(row.id),
   userId: Number(row.user_id),
-  selectedBranchIds: parseSelectedBranchIds(row.selected_branch_ids),
   expiresAt: row.expires_at,
   revokedAt: row.revoked_at,
   createdAt: row.created_at,
   lastUsedAt: row.last_used_at,
 });
 
-export const createRefreshSession = async (userId, selectedBranchIds = []) => {
+export const createRefreshSession = async (userId) => {
   const refreshToken = generateRefreshToken();
   const refreshTokenHash = hashRefreshToken(refreshToken);
   const expiresAt = getRefreshExpiryDate();
-  const branchIdsJson = JSON.stringify(
-    selectedBranchIds.map((id) => Number(id)).filter((id) => id > 0),
-  );
 
   await pool.execute(
     `INSERT INTO user_logs (user_id, refresh_token_hash, selected_branch_ids, expires_at)
-     VALUES (?, ?, ?, ?)`,
-    [userId, refreshTokenHash, branchIdsJson, expiresAt],
+     VALUES (?, ?, NULL, ?)`,
+    [userId, refreshTokenHash, expiresAt],
   );
 
   return refreshToken;

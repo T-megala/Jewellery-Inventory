@@ -5,7 +5,6 @@ export const login = async (req, res) => {
   const result = await authService.login({
     username: req.body?.username,
     password: req.body?.password,
-    branchIds: req.body?.branchIds,
   });
 
   res.status(200).json({
@@ -43,10 +42,7 @@ export const getProfile = async (req, res) => {
     throw new ApiError(401, "Authentication token is required");
   }
 
-  const profile = await authService.buildProfileResponse(
-    userId,
-    req.user?.selectedBranchIds ?? [],
-  );
+  const profile = await authService.buildProfileResponse(userId);
 
   if (!profile) {
     throw new ApiError(404, "User not found");
@@ -57,27 +53,6 @@ export const getProfile = async (req, res) => {
     data: {
       user: profile,
       permissions: profile.permissions,
-    },
-  });
-};
-
-export const selectBranches = async (req, res) => {
-  const userId = Number(req.user?.id ?? req.user?.sub);
-
-  if (!userId) {
-    throw new ApiError(401, "Authentication token is required");
-  }
-
-  const result = await authService.selectBranches(userId, req.body?.branchIds);
-
-  res.status(200).json({
-    success: true,
-    message: "Branches selected successfully",
-    data: {
-      token: result.token,
-      refreshToken: result.refreshToken,
-      user: result.user,
-      permissions: result.permissions,
     },
   });
 };

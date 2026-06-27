@@ -12,10 +12,5 @@ router.get(
   authenticateApi,
   asyncHandler(authController.getProfile),
 );
-router.post(
-  "/auth/select-branches",
-  authenticateApi,
-  asyncHandler(authController.selectBranches),
-);
 
 export default router;

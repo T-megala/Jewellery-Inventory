@@ -63,25 +63,12 @@ export const buildBranchSqlFilter = (
 };
 
 const getSessionBranchIds = (req) => {
-  const fromToken = Array.isArray(req.user?.selectedBranchIds)
-    ? req.user.selectedBranchIds.map((id) => Number(id)).filter((id) => id > 0)
-    : [];
-  if (fromToken.length > 0) {
-    return fromToken;
-  }
-
-  const fromRequest = Array.isArray(req.selectedBranchIds)
-    ? req.selectedBranchIds.map((id) => Number(id)).filter((id) => id > 0)
-    : [];
-  if (fromRequest.length > 0) {
-    return fromRequest;
-  }
-
-  const mapped = Array.isArray(req.user?.branchIds)
+  const fromToken = Array.isArray(req.user?.branchIds)
     ? req.user.branchIds.map((id) => Number(id)).filter((id) => id > 0)
     : [];
-  if (mapped.length > 0) {
-    return mapped;
+
+  if (fromToken.length > 0) {
+    return fromToken;
   }
 
   const single = parsePositiveInt(req.user?.branchId);
@@ -108,7 +95,7 @@ const getAssignedBranchIds = async (req) => {
   return single ? [single] : [];
 };
 
-/** Session scope: login-selected branches, or optional single-branch filter from query/header. */
+/** Branch scope from token branchIds, or optional single-branch filter from query/header. */
 export const resolveRequestBranchIds = async (req) => {
   const permissions = Array.isArray(req.user?.permissions)
     ? req.user.permissions
@@ -142,7 +129,7 @@ export const resolveRequestBranchIds = async (req) => {
     }
 
     if (!sessionBranchIds.includes(requestedBranchId)) {
-      throw new ApiError(403, "Branch is not in the current session selection");
+      throw new ApiError(403, "Branch is not assigned to this user");
     }
 
     return [requestedBranchId];

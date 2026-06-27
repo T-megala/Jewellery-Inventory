@@ -12,9 +12,6 @@ const mapTokenUser = (user) => ({
   branchIds: Array.isArray(user.branchIds)
     ? user.branchIds.map((id) => Number(id)).filter((id) => id > 0)
     : [],
-  selectedBranchIds: Array.isArray(user.selectedBranchIds)
-    ? user.selectedBranchIds.map((id) => Number(id)).filter((id) => id > 0)
-    : [],
   permissions: Array.isArray(user.permissions) ? user.permissions : [],
 });
 

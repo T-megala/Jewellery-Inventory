@@ -4,7 +4,6 @@ import { createAccessToken } from "../utils/token.js";
 import { verifyPassword } from "../utils/passwordHasher.js";
 import roleService from "./roleService.js";
 import userBranchService from "./userBranchService.js";
-import branchService from "./branchService.js";
 import userLogService from "./userLogService.js";
 
 const mapRole = (row) =>
@@ -15,68 +14,13 @@ const mapRole = (row) =>
       }
     : null;
 
-const parseBranchIdsInput = (value) => {
-  if (value === undefined || value === null) {
-    return null;
-  }
-
-  if (!Array.isArray(value)) {
-    throw new ApiError(400, "branchIds must be an array");
-  }
-
-  const parsed = [
-    ...new Set(
-      value
-        .map((id) => Number.parseInt(String(id), 10))
-        .filter((id) => Number.isInteger(id) && id > 0),
-    ),
-  ];
-
-  if (parsed.length === 0) {
-    throw new ApiError(400, "At least one branch must be selected");
-  }
-
-  return parsed;
-};
-
-const validateSelectedBranchIds = (selectedBranchIds, mappedBranchIds) => {
-  const mappedSet = new Set(mappedBranchIds);
-
-  for (const branchId of selectedBranchIds) {
-    if (!mappedSet.has(branchId)) {
-      throw new ApiError(
-        403,
-        "One or more branches are not assigned to this user",
-      );
-    }
-  }
-};
-
-const resolveActiveBranchId = (internalBranches, selectedBranchIds) => {
-  const selectedSet = new Set(selectedBranchIds);
+const resolveDefaultBranchId = (internalBranches) => {
   const defaultBranch =
-    internalBranches.find(
-      (branch) => branch.isDefault && selectedSet.has(branch.id),
-    ) ??
-    internalBranches.find((branch) => selectedSet.has(branch.id)) ??
+    internalBranches.find((branch) => branch.isDefault) ??
+    internalBranches[0] ??
     null;
 
-  return defaultBranch?.id ?? selectedBranchIds[0] ?? null;
-};
-
-const mapSelectedBranches = async (selectedBranchIds) => {
-  const branches = await branchService.getBranchesByIds(selectedBranchIds);
-
-  return branches.map(({ id, name }) => ({ id, name }));
-};
-
-const enrichProfileWithSelection = async (profile, selectedBranchIds) => {
-  const selectedBranches = await mapSelectedBranches(selectedBranchIds);
-
-  return {
-    ...profile,
-    selectedBranches,
-  };
+  return defaultBranch?.id ?? null;
 };
 
 export const loadUserAuthProfile = async (userId, preloadedBranches = null) => {
@@ -117,7 +61,7 @@ export const loadUserAuthProfile = async (userId, preloadedBranches = null) => {
   };
 };
 
-const buildTokenUser = (profile, defaultBranchId, selectedBranchIds) => ({
+const buildTokenUser = (profile, defaultBranchId) => ({
   id: profile.id,
   username: profile.username,
   name: profile.fullName,
@@ -125,42 +69,31 @@ const buildTokenUser = (profile, defaultBranchId, selectedBranchIds) => ({
   roleName: profile.role?.name ?? null,
   branchId: defaultBranchId,
   branchIds: profile.branches.map((branch) => branch.id),
-  selectedBranchIds,
   permissions: profile.permissions,
 });
 
 const issueAuthSession = async ({
   internalBranches,
   profile,
-  selectedBranchIds,
   rotateRefreshSessionId = null,
 }) => {
-  const defaultBranchId = resolveActiveBranchId(
-    internalBranches,
-    selectedBranchIds,
-  );
-  const user = await enrichProfileWithSelection(profile, selectedBranchIds);
+  const defaultBranchId = resolveDefaultBranchId(internalBranches);
 
   if (rotateRefreshSessionId) {
     await userLogService.revokeSession(rotateRefreshSessionId);
   }
 
-  const refreshToken = await userLogService.createRefreshSession(
-    profile.id,
-    selectedBranchIds,
-  );
+  const refreshToken = await userLogService.createRefreshSession(profile.id);
 
   return {
-    token: createAccessToken(
-      buildTokenUser(profile, defaultBranchId, selectedBranchIds),
-    ),
+    token: createAccessToken(buildTokenUser(profile, defaultBranchId)),
     refreshToken,
-    user,
+    user: profile,
     permissions: profile.permissions,
   };
 };
 
-export const login = async ({ username, password, branchIds }) => {
+export const login = async ({ username, password }) => {
   const normalizedUsername = String(username ?? "").trim();
   const plainPassword = String(password ?? "");
 
@@ -208,12 +141,6 @@ export const login = async ({ username, password, branchIds }) => {
     throw new ApiError(403, "User branch is not assigned");
   }
 
-  const mappedBranchIds = profile.branches.map((branch) => branch.id);
-  const requestedSelection = parseBranchIdsInput(branchIds);
-  const selectedBranchIds = requestedSelection ?? mappedBranchIds;
-
-  validateSelectedBranchIds(selectedBranchIds, mappedBranchIds);
-
   await pool.execute(`UPDATE users SET last_login_at = NOW() WHERE id = ?`, [
     dbUser.id,
   ]);
@@ -221,72 +148,6 @@ export const login = async ({ username, password, branchIds }) => {
   return issueAuthSession({
     internalBranches,
     profile,
-    selectedBranchIds,
-  });
-};
-
-export const selectBranches = async (userId, branchIds) => {
-  const selectedBranchIds = parseBranchIdsInput(branchIds);
-  const internalBranches = await userBranchService.getBranchesForUser(userId);
-  const profile = await loadUserAuthProfile(userId, internalBranches);
-
-  if (!profile) {
-    throw new ApiError(404, "User not found");
-  }
-
-  const mappedBranchIds = profile.branches.map((branch) => branch.id);
-  validateSelectedBranchIds(selectedBranchIds, mappedBranchIds);
-
-  return issueAuthSession({
-    internalBranches,
-    profile,
-    selectedBranchIds,
-  });
-};
-
-export const appendBranchToSession = async (
-  userId,
-  branchId,
-  currentSelectedBranchIds = [],
-) => {
-  const parsedBranchId = Number.parseInt(String(branchId ?? ""), 10);
-
-  if (!Number.isInteger(parsedBranchId) || parsedBranchId < 1) {
-    throw new ApiError(400, "branchId must be a positive integer");
-  }
-
-  const hasAccess = await userBranchService.userHasBranchAccess(
-    userId,
-    parsedBranchId,
-  );
-
-  if (!hasAccess) {
-    throw new ApiError(403, "Branch is not assigned to this user");
-  }
-
-  const internalBranches = await userBranchService.getBranchesForUser(userId);
-  const profile = await loadUserAuthProfile(userId, internalBranches);
-
-  if (!profile) {
-    throw new ApiError(404, "User not found");
-  }
-
-  const mappedBranchIds = profile.branches.map((branch) => branch.id);
-  const existingSelection = Array.isArray(currentSelectedBranchIds)
-    ? currentSelectedBranchIds
-        .map((id) => Number(id))
-        .filter((id) => Number.isInteger(id) && id > 0)
-    : [];
-  const selectedBranchIds = [
-    ...new Set([...existingSelection, parsedBranchId]),
-  ];
-
-  validateSelectedBranchIds(selectedBranchIds, mappedBranchIds);
-
-  return issueAuthSession({
-    internalBranches,
-    profile,
-    selectedBranchIds,
   });
 };
 
@@ -323,43 +184,22 @@ export const refreshAccessToken = async ({ refreshToken }) => {
     throw new ApiError(403, "User branch is not assigned");
   }
 
-  const mappedBranchIds = profile.branches.map((branch) => branch.id);
-  const selectedBranchIds =
-    session.selectedBranchIds.length > 0
-      ? session.selectedBranchIds
-      : mappedBranchIds;
-
-  validateSelectedBranchIds(selectedBranchIds, mappedBranchIds);
   await userLogService.touchSession(session.id);
 
   return issueAuthSession({
     internalBranches,
     profile,
-    selectedBranchIds,
     rotateRefreshSessionId: session.id,
   });
 };
 
-export const buildProfileResponse = async (userId, selectedBranchIds = []) => {
-  const profile = await loadUserAuthProfile(userId);
-
-  if (!profile) {
-    return null;
-  }
-
-  const resolvedSelection =
-    selectedBranchIds.length > 0
-      ? selectedBranchIds
-      : profile.branches.map((branch) => branch.id);
-
-  return enrichProfileWithSelection(profile, resolvedSelection);
+export const buildProfileResponse = async (userId) => {
+  return loadUserAuthProfile(userId);
 };
 
 export default {
   login,
   refreshAccessToken,
   loadUserAuthProfile,
-  selectBranches,
-  appendBranchToSession,
   buildProfileResponse,
 };

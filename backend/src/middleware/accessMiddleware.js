@@ -25,18 +25,6 @@ const getMappedBranchIds = (req) => {
   return single ? [single] : [];
 };
 
-const getSelectedBranchIds = (req) => {
-  const fromToken = Array.isArray(req.user?.selectedBranchIds)
-    ? req.user.selectedBranchIds.map((id) => Number(id)).filter((id) => id > 0)
-    : [];
-
-  if (fromToken.length > 0) {
-    return fromToken;
-  }
-
-  return getMappedBranchIds(req);
-};
-
 export const resolveBranchScope = async (req, res, next) => {
   if (isExemptPath(req.path)) {
     return next();
@@ -47,8 +35,6 @@ export const resolveBranchScope = async (req, res, next) => {
     : [];
   const canViewAll = permissions.includes(PERMISSIONS.BRANCHES_VIEW_ALL);
   const mappedBranchIds = getMappedBranchIds(req);
-  const selectedBranchIds = getSelectedBranchIds(req);
-  req.selectedBranchIds = selectedBranchIds;
 
   const requestedBranchId = parsePositiveInt(
     req.query?.branchId ?? req.headers["x-branch-id"],
@@ -57,12 +43,6 @@ export const resolveBranchScope = async (req, res, next) => {
   if (requestedBranchId) {
     if (!canViewAll && !mappedBranchIds.includes(requestedBranchId)) {
       return next(new ApiError(403, "Branch is not assigned to this user"));
-    }
-
-    if (!selectedBranchIds.includes(requestedBranchId)) {
-      return next(
-        new ApiError(403, "Branch is not in the current session selection"),
-      );
     }
 
     req.branchId = requestedBranchId;
