@@ -360,5 +360,6 @@ export default {
   refreshAccessToken,
   loadUserAuthProfile,
   selectBranches,
+  appendBranchToSession,
   buildProfileResponse,
 };
