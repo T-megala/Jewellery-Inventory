@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import BackToMastersLink from '../components/BackToMastersLink.jsx'
+import DeleteConfirmModal from '../components/DeleteConfirmModal.jsx'
 import { createPortal } from 'react-dom'
 import TablePagination from '../components/TablePagination.jsx'
 import FieldError from '../components/FieldError.jsx'
@@ -422,6 +423,7 @@ export default function Roles() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
   const [formError, setFormError] = useState('')
@@ -694,11 +696,10 @@ export default function Roles() {
     }
   }
 
-  async function handleDelete(role) {
-    if (!canDelete) return
-    if (role.isSystem) return
-    if (!window.confirm(`Delete role "${role.name}"?`)) return
+  async function handleConfirmDelete() {
+    if (!deleteTarget || !canDelete || deleteTarget.isSystem) return
 
+    const role = deleteTarget
     setDeletingId(role.id)
     setError('')
     setNotice('')
@@ -712,11 +713,22 @@ export default function Roles() {
 
       setNotice('Role deleted successfully.')
       await loadData()
+      setDeleteTarget(null)
     } catch (err) {
       setError(err.message || 'Failed to delete role.')
     } finally {
       setDeletingId(null)
     }
+  }
+
+  function handleDeleteClick(role) {
+    if (!canDelete || role.isSystem) return
+    setDeleteTarget(role)
+  }
+
+  function handleCancelDelete() {
+    if (deletingId) return
+    setDeleteTarget(null)
   }
 
   function handleCloseForm() {
@@ -729,7 +741,7 @@ export default function Roles() {
   const isEdit = Boolean(editingId)
 
   return (
-    <div className={`roles-page${showForm ? ' roles-page--modal-open' : ''}`}>
+    <div className={`roles-page${showForm || deleteTarget ? ' roles-page--modal-open' : ''}`}>
       <BackToMastersLink />
       <section className="roles-list-card">
         <div className="roles-list__toolbar">
@@ -834,7 +846,7 @@ export default function Roles() {
                             <button
                               type="button"
                               className="roles-btn roles-btn--danger roles-btn--sm"
-                              onClick={() => handleDelete(role)}
+                              onClick={() => handleDeleteClick(role)}
                               disabled={saving || deletingId === role.id || role.isSystem}
                               title={role.isSystem ? 'System roles cannot be deleted' : undefined}
                             >
@@ -1155,6 +1167,15 @@ export default function Roles() {
         </div>,
         document.body,
       )}
+
+      <DeleteConfirmModal
+        open={Boolean(deleteTarget)}
+        title="Delete role"
+        itemName={deleteTarget?.name ?? ''}
+        loading={Boolean(deletingId)}
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+      />
     </div>
   )
 }

@@ -90,8 +90,27 @@ export function isAllBranchesScope() {
   return !raw || raw === ALL_BRANCHES_VALUE
 }
 
+/** Drop stale dashboard filter when it is outside the current login session branches. */
+export function sanitizeOperationalBranch(user = getUser()) {
+  const raw = sessionStorage.getItem(OPERATIONAL_BRANCH_KEY)
+  if (!raw || raw === ALL_BRANCHES_VALUE) return
+
+  const parsed = Number(raw)
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    sessionStorage.setItem(OPERATIONAL_BRANCH_KEY, ALL_BRANCHES_VALUE)
+    return
+  }
+
+  const selectedIds = getSelectedBranchIds(user)
+  if (selectedIds.length > 0 && !selectedIds.includes(parsed)) {
+    sessionStorage.setItem(OPERATIONAL_BRANCH_KEY, ALL_BRANCHES_VALUE)
+  }
+}
+
 /** Branch used on API calls — null when "All branches" is selected (default). */
 export function getOperationalBranchId() {
+  sanitizeOperationalBranch()
+
   const raw = sessionStorage.getItem(OPERATIONAL_BRANCH_KEY)
   if (!raw || raw === ALL_BRANCHES_VALUE) return null
 
@@ -101,6 +120,8 @@ export function getOperationalBranchId() {
 
 /** Current dashboard dropdown value — defaults to all branches. */
 export function getOperationalBranchValue() {
+  sanitizeOperationalBranch()
+
   const raw = sessionStorage.getItem(OPERATIONAL_BRANCH_KEY)
   if (!raw || raw === ALL_BRANCHES_VALUE) return ALL_BRANCHES_VALUE
 
@@ -112,7 +133,14 @@ export function setOperationalBranch(value) {
   if (value === ALL_BRANCHES_VALUE) {
     sessionStorage.setItem(OPERATIONAL_BRANCH_KEY, ALL_BRANCHES_VALUE)
   } else if (value) {
-    sessionStorage.setItem(OPERATIONAL_BRANCH_KEY, String(Number(value)))
+    const id = Number(value)
+    const selectedIds = getSelectedBranchIds()
+
+    if (Number.isInteger(id) && id > 0 && (!selectedIds.length || selectedIds.includes(id))) {
+      sessionStorage.setItem(OPERATIONAL_BRANCH_KEY, String(id))
+    } else {
+      sessionStorage.setItem(OPERATIONAL_BRANCH_KEY, ALL_BRANCHES_VALUE)
+    }
   } else {
     sessionStorage.removeItem(OPERATIONAL_BRANCH_KEY)
   }
@@ -149,8 +177,10 @@ function applyAuthSession(token, user, refreshToken) {
   if (refreshToken) {
     authStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
   }
-  authStorage.setItem(USER_KEY, JSON.stringify(normalizeUser(user, token)))
+  const normalizedUser = normalizeUser(user, token)
+  authStorage.setItem(USER_KEY, JSON.stringify(normalizedUser))
   clearLegacyAuthStorage()
+  sanitizeOperationalBranch(normalizedUser)
   dispatchBranchChange()
   dispatchAuthSessionChange()
 }
@@ -246,6 +276,7 @@ export async function fetchProfile() {
   const user = normalizeUser(data.user, getToken())
   authStorage.setItem(USER_KEY, JSON.stringify(user))
   clearLegacyAuthStorage()
+  sanitizeOperationalBranch(user)
   dispatchBranchChange()
   dispatchAuthSessionChange()
   return user

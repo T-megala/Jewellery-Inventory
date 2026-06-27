@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import BackToMastersLink from '../components/BackToMastersLink.jsx'
+import DeleteConfirmModal from '../components/DeleteConfirmModal.jsx'
 import { createPortal } from 'react-dom'
 import TablePagination from '../components/TablePagination.jsx'
 import FieldError from '../components/FieldError.jsx'
@@ -53,6 +54,7 @@ export default function Branches() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
   const [formError, setFormError] = useState('')
@@ -245,10 +247,10 @@ export default function Branches() {
     }
   }
 
-  async function handleDelete(branch) {
-    if (!canDelete) return
-    if (!window.confirm(`Delete branch "${branch.name}"?`)) return
+  async function handleConfirmDelete() {
+    if (!deleteTarget || !canDelete) return
 
+    const branch = deleteTarget
     setDeletingId(branch.id)
     setError('')
     setNotice('')
@@ -262,11 +264,22 @@ export default function Branches() {
 
       setNotice('Branch deleted successfully.')
       await loadBranches()
+      setDeleteTarget(null)
     } catch (err) {
       setError(err.message || 'Failed to delete branch.')
     } finally {
       setDeletingId(null)
     }
+  }
+
+  function handleDeleteClick(branch) {
+    if (!canDelete) return
+    setDeleteTarget(branch)
+  }
+
+  function handleCancelDelete() {
+    if (deletingId) return
+    setDeleteTarget(null)
   }
 
   function handleCloseForm() {
@@ -279,7 +292,7 @@ export default function Branches() {
   const isEdit = Boolean(editingId)
 
   return (
-    <div className={`branches-page${showForm ? ' branches-page--modal-open' : ''}`}>
+    <div className={`branches-page${showForm || deleteTarget ? ' branches-page--modal-open' : ''}`}>
       <BackToMastersLink />
       <section className="branches-list-card">
         <div className="branches-list__toolbar">
@@ -379,7 +392,7 @@ export default function Branches() {
                             <button
                               type="button"
                               className="branches-btn branches-btn--danger branches-btn--sm"
-                              onClick={() => handleDelete(branch)}
+                              onClick={() => handleDeleteClick(branch)}
                               disabled={saving || deletingId === branch.id}
                             >
                               {deletingId === branch.id ? 'Deleting…' : 'Delete'}
@@ -542,6 +555,15 @@ export default function Branches() {
         </div>,
         document.body,
       )}
+
+      <DeleteConfirmModal
+        open={Boolean(deleteTarget)}
+        title="Delete branch"
+        itemName={deleteTarget?.name ?? ''}
+        loading={Boolean(deletingId)}
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+      />
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import BackToMastersLink from '../components/BackToMastersLink.jsx'
+import DeleteConfirmModal from '../components/DeleteConfirmModal.jsx'
 import BranchMultiSelect from '../components/BranchMultiSelect.jsx'
 import FieldError from '../components/FieldError.jsx'
 import TablePagination from '../components/TablePagination.jsx'
@@ -134,6 +135,7 @@ export default function Users() {
   const [optionsLoading, setOptionsLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
   const [formError, setFormError] = useState('')
@@ -428,10 +430,10 @@ export default function Users() {
     }
   }
 
-  async function handleDelete(user) {
-    if (!canDelete) return
-    if (!window.confirm(`Delete user "${user.username}"?`)) return
+  async function handleConfirmDelete() {
+    if (!deleteTarget || !canDelete) return
 
+    const user = deleteTarget
     setDeletingId(user.id)
     setError('')
     setNotice('')
@@ -445,11 +447,22 @@ export default function Users() {
 
       setNotice('User deleted successfully.')
       await loadUsers()
+      setDeleteTarget(null)
     } catch (err) {
       setError(err.message || 'Failed to delete user.')
     } finally {
       setDeletingId(null)
     }
+  }
+
+  function handleDeleteClick(user) {
+    if (!canDelete) return
+    setDeleteTarget(user)
+  }
+
+  function handleCancelDelete() {
+    if (deletingId) return
+    setDeleteTarget(null)
   }
 
   function handleCloseForm() {
@@ -462,7 +475,7 @@ export default function Users() {
   const isEdit = Boolean(editingId)
 
   return (
-    <div className={`users-page${showForm ? ' users-page--modal-open' : ''}`}>
+    <div className={`users-page${showForm || deleteTarget ? ' users-page--modal-open' : ''}`}>
       <BackToMastersLink />
       <section className="users-list-card">
         <div className="users-list__toolbar">
@@ -576,7 +589,7 @@ export default function Users() {
                             <button
                               type="button"
                               className="users-btn users-btn--danger users-btn--sm"
-                              onClick={() => handleDelete(user)}
+                              onClick={() => handleDeleteClick(user)}
                               disabled={saving || deletingId === user.id}
                             >
                               {deletingId === user.id ? 'Deleting…' : 'Delete'}
@@ -792,6 +805,15 @@ export default function Users() {
         </div>,
         document.body,
       )}
+
+      <DeleteConfirmModal
+        open={Boolean(deleteTarget)}
+        title="Delete user"
+        itemName={deleteTarget?.username ?? ''}
+        loading={Boolean(deletingId)}
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+      />
     </div>
   )
 }

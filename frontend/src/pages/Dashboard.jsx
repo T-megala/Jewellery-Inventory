@@ -1275,13 +1275,15 @@ function CounterDisplayAccuracyPanel({ counterAccuracy, loading }) {
   )
 }
 
-function ErpPhysicalBarChart({ data }) {
+function ErpPhysicalBarChart({ data, compact = false }) {
   if (!data.length) {
     return <p className="analytics-empty">No branch comparison data available.</p>
   }
 
   const maxValue = Math.max(...data.flatMap((row) => [row.erp, row.physical]), 1)
-  const chartHeight = Math.min(188, Math.max(132, 88 + data.length * 32))
+  const chartHeight = compact
+    ? 148
+    : Math.min(188, Math.max(132, 88 + data.length * 32))
 
   return (
     <div className="erp-physical-chart">
@@ -1412,7 +1414,7 @@ function MultiBranchComparisonCard({ data, loading, error }) {
             <section className="insight-card__section insight-card__section--chart">
               <p className="insight-card__eyebrow">ERP vs. physical item count</p>
               <ErpPhysicalSummary erpVsPhysical={erpVsPhysical} />
-              <ErpPhysicalBarChart data={chartData} />
+              <ErpPhysicalBarChart data={chartData} compact />
             </section>
           </>
         )}
@@ -1426,6 +1428,12 @@ function StockMovementCard({ data, loading, error }) {
   const fastItems = data?.fastMovers?.items ?? []
   const slowDays = data?.slowMovers?.thresholdDays ?? 60
   const fastDays = data?.fastMovers?.periodDays ?? 30
+  const slowTotalPieces = slowItems.reduce((sum, item) => sum + Number(item.pieceCount ?? 0), 0)
+  const fastTotalRestocked = fastItems.reduce(
+    (sum, item) => sum + Number(item.restockedPieces || item.restockedTags || 0),
+    0,
+  )
+  const showMovementSummary = slowItems.length > 0 || fastItems.length > 0
 
   return (
     <article className="analytics-tile insight-card insight-card--movement">
@@ -1468,6 +1476,34 @@ function StockMovementCard({ data, loading, error }) {
                 </ul>
               )}
             </section>
+
+            {showMovementSummary && (
+              <div className="movement-summary-strip" aria-label="Stock movement summary">
+                <div className="movement-summary-strip__item movement-summary-strip__item--slow">
+                  <span className="movement-summary-strip__label">Slow inventory</span>
+                  <strong className="movement-summary-strip__value dashboard-num">
+                    {formatCount(slowTotalPieces)}
+                    {' '}
+                    pcs
+                  </strong>
+                </div>
+                <div className="movement-summary-strip__item movement-summary-strip__item--fast">
+                  <span className="movement-summary-strip__label">
+                    Restocked (last
+                    {' '}
+                    {fastDays}
+                    {' '}
+                    days)
+                  </span>
+                  <strong className="movement-summary-strip__value dashboard-num">
+                    +
+                    {formatCount(fastTotalRestocked)}
+                    {' '}
+                    pcs
+                  </strong>
+                </div>
+              </div>
+            )}
 
             <section className="insight-card__section insight-card__section--chart">
               <p className="insight-card__eyebrow">
@@ -2132,7 +2168,7 @@ export default function Dashboard() {
       setStockMovementError('')
 
       try {
-        const movementData = await fetchStockMovement({ limit: 3 })
+        const movementData = await fetchStockMovement({ limit: 5 })
         if (!cancelled) {
           setStockMovement(movementData)
         }

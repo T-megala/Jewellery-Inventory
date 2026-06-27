@@ -10,6 +10,33 @@ import {
 
 export { API_BASE, apiUrl };
 
+/** Matches backend BRANCH_SCOPE_EXEMPT_PATHS — no branch filter on these APIs. */
+export const BRANCH_SCOPE_EXEMPT_PREFIXES = [
+  '/auth',
+  '/branches',
+  '/roles',
+  '/permissions',
+  '/users',
+];
+
+function getRequestPathname(path) {
+  const [pathname] = String(path).split('?');
+  return pathname.startsWith('/') ? pathname : `/${pathname}`;
+}
+
+export function isBranchScopeExemptPath(path) {
+  const pathname = getRequestPathname(path);
+  return BRANCH_SCOPE_EXEMPT_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
+function resolveScopeBranch(path, options = {}) {
+  if (options.scopeBranch === false) return false;
+  if (options.scopeBranch === true) return true;
+  return !isBranchScopeExemptPath(path);
+}
+
 /** Bearer token and optional active branch scope for protected APIs. */
 export function getAuthHeaders({ branchId, scopeBranch = true } = {}) {
   const token = getToken();
@@ -80,11 +107,13 @@ async function parseResponse(res) {
   return json;
 }
 
-function buildJsonHeaders(options = {}) {
+function buildJsonHeaders(path, options = {}) {
+  const scopeBranch = resolveScopeBranch(path, options);
+
   return {
     'Content-Type': 'application/json',
     ...options.headers,
-    ...getAuthHeaders(),
+    ...getAuthHeaders({ scopeBranch }),
   };
 }
 
@@ -106,11 +135,13 @@ async function handleUnauthorizedRetry(url, options, retried) {
   const retryHeaders = { ...options.headers };
   delete retryHeaders.Authorization;
 
+  const scopeBranch = options.scopeBranch !== false;
+
   return authFetch(url, {
     ...options,
     headers: {
       ...retryHeaders,
-      ...getAuthHeaders(),
+      ...getAuthHeaders({ scopeBranch }),
     },
   }, true);
 }
@@ -132,9 +163,13 @@ export async function authFetch(url, options = {}, retried = false) {
 }
 
 export async function apiFetch(path, options = {}) {
-  const res = await authFetch(apiUrl(withBranchPath(path)), {
+  const scopeBranch = resolveScopeBranch(path, options);
+  const requestPath = scopeBranch ? withBranchPath(path) : path;
+
+  const res = await authFetch(apiUrl(requestPath), {
     ...options,
-    headers: buildJsonHeaders(options),
+    scopeBranch,
+    headers: buildJsonHeaders(path, options),
   });
 
   const json = await parseResponse(res);
@@ -155,9 +190,13 @@ export async function apiUpload(path, formData) {
 }
 
 export async function apiFetchPaged(path, options = {}) {
-  const res = await authFetch(apiUrl(withBranchPath(path)), {
+  const scopeBranch = resolveScopeBranch(path, options);
+  const requestPath = scopeBranch ? withBranchPath(path) : path;
+
+  const res = await authFetch(apiUrl(requestPath), {
     ...options,
-    headers: buildJsonHeaders(options),
+    scopeBranch,
+    headers: buildJsonHeaders(path, options),
   });
 
   const json = await parseResponse(res);
@@ -169,12 +208,14 @@ export async function apiFetchPaged(path, options = {}) {
 }
 
 export async function apiFetchReport(path, params = {}) {
-  const query = buildQueryString(withBranchParams(params));
+  const scopeBranch = resolveScopeBranch(path);
+  const query = buildQueryString(scopeBranch ? withBranchParams(params) : params);
   const url = query ? `${path}?${query}` : path;
 
   const res = await authFetch(apiUrl(url), {
     method: 'GET',
-    headers: buildJsonHeaders(),
+    scopeBranch,
+    headers: buildJsonHeaders(path),
   });
 
   const json = await parseResponse(res);
@@ -194,10 +235,14 @@ export async function apiFetchReport(path, params = {}) {
 
 /** Authenticated fetch for non-JSON responses (e.g. file downloads). */
 export async function apiFetchRaw(path, options = {}) {
-  return authFetch(apiUrl(withBranchPath(path)), {
+  const scopeBranch = resolveScopeBranch(path, options);
+  const requestPath = scopeBranch ? withBranchPath(path) : path;
+
+  return authFetch(apiUrl(requestPath), {
     ...options,
+    scopeBranch,
     headers: {
-      ...getAuthHeaders(),
+      ...getAuthHeaders({ scopeBranch }),
       ...options.headers,
     },
   });
