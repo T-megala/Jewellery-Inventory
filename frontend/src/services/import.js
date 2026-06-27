@@ -1,4 +1,5 @@
 import { apiUrl, authFetch, buildQueryString, getAuthHeaders } from './api.js';
+import { createUserError } from '../utils/userErrorMessage.js';
 
 /** Bulk stock import — POST multipart/form-data with field name "file" */
 export const BULK_STOCK_IMPORT_URL = apiUrl('/products/import');
@@ -34,11 +35,11 @@ async function parseJsonResponse(res) {
   try {
     json = await res.json();
   } catch {
-    throw new Error('Unexpected server response');
+    throw createUserError(null, 'Unable to upload file. Please try again.');
   }
 
   if (!json.success && json.status !== true && res.status !== 202) {
-    throw new Error(json.message || json.error || 'Request failed');
+    throw createUserError(json.message || json.error, 'Unable to upload file. Please try again.');
   }
 
   return json;
@@ -73,7 +74,7 @@ export async function startAsyncImport(file, { branchId } = {}) {
 
   if (!res.ok || res.status !== 202) {
     console.error('[import] upload failed', json);
-    throw new Error(json.message || json.error || 'Failed to start import');
+    throw createUserError(json.message || json.error, 'Unable to start import. Please try again.');
   }
 
   console.info('[import] upload accepted', json.data);
@@ -89,7 +90,7 @@ export async function getImportStatus(jobId) {
   const json = await parseJsonResponse(res);
 
   if (!res.ok) {
-    throw new Error(json.message || json.error || 'Failed to fetch import status');
+    throw createUserError(json.message || json.error, 'Unable to check import status. Please try again.');
   }
 
   return json.data;
@@ -141,7 +142,7 @@ export async function uploadStockExcel(file, { branchId, onProgress } = {}) {
 
     if (status.status === 'failed') {
       console.error('[import] failed', status);
-      throw new Error(status.error || status.message || 'Import failed');
+      throw createUserError(status.error || status.message, 'Import failed. Please try again.');
     }
   }
 }

@@ -1,3 +1,5 @@
+import { toUserErrorMessage } from './userErrorMessage.js'
+
 export function scrollToFirstFieldError(errors, idPrefix = 'field-error-') {
   const firstKey = Object.keys(errors).find((key) => key !== '_form' && errors[key])
   if (!firstKey) return
@@ -15,7 +17,7 @@ export function scrollToFirstFieldError(errors, idPrefix = 'field-error-') {
 }
 
 export function mapUserSaveError(message) {
-  const text = String(message || 'Failed to save user.')
+  const text = toUserErrorMessage(message, 'Failed to save user. Please try again.')
   const lower = text.toLowerCase()
 
   if (lower.includes('username')) return { username: text }
@@ -27,13 +29,13 @@ export function mapUserSaveError(message) {
 }
 
 export function mapBranchSaveError(message) {
-  const text = String(message || 'Failed to save branch.')
+  const text = toUserErrorMessage(message, 'Failed to save branch. Please try again.')
   if (text.toLowerCase().includes('name')) return { name: text }
   return { _form: text }
 }
 
 export function mapRoleSaveError(message) {
-  const text = String(message || 'Failed to save role.')
+  const text = toUserErrorMessage(message, 'Failed to save role. Please try again.')
   if (text.toLowerCase().includes('name')) return { name: text }
   return { _form: text }
 }

@@ -1,4 +1,5 @@
 import { apiFetch, apiUrl, authFetch, buildQueryString, getAuthHeaders, withBranchParams } from './api.js';
+import { createUserError } from '../utils/userErrorMessage.js';
 
 const EMPTY_VERIFICATION = {
   totalFound: 0,
@@ -144,11 +145,11 @@ export async function fetchDayWiseSales({ period = 'week', counter = 'all' } = {
   try {
     json = await res.json();
   } catch {
-    throw new Error('Unexpected server response');
+    throw createUserError(null, 'Unable to load day-wise sales. Please try again.');
   }
 
   if (!res.ok || json?.success === false) {
-    throw new Error(json?.message || 'Failed to load day-wise sales');
+    throw createUserError(json?.message, 'Unable to load day-wise sales. Please try again.');
   }
 
   return {
@@ -177,11 +178,11 @@ export async function fetchDailyImports({ period = 'week', counter = 'ALL' } = {
   try {
     json = await res.json();
   } catch {
-    throw new Error('Unexpected server response');
+    throw createUserError(null, 'Unable to load daily imports. Please try again.');
   }
 
   if (!res.ok || json?.success === false) {
-    throw new Error(json?.message || 'Failed to load daily imports');
+    throw createUserError(json?.message, 'Unable to load daily imports. Please try again.');
   }
 
   return {
@@ -266,11 +267,11 @@ export async function fetchStockMovement({ slowDays = 60, fastDays = 30, limit =
   try {
     json = await res.json();
   } catch {
-    throw new Error('Unexpected server response');
+    throw createUserError(null, 'Unable to load stock movement. Please try again.');
   }
 
   if (!res.ok || json?.success === false) {
-    throw new Error(json?.message || 'Failed to load stock movement');
+    throw createUserError(json?.message, 'Unable to load stock movement. Please try again.');
   }
 
   const data = json.data ?? json ?? {};

@@ -1,4 +1,5 @@
 import { API_BASE, apiUrl } from '../config/apiConfig.js';
+import { createUserError } from '../utils/userErrorMessage.js';
 import {
   clearAuthSession,
   getOperationalBranchId,
@@ -76,8 +77,8 @@ export function buildQueryString(params) {
     .join('&');
 }
 
-function getErrorMessage(json, fallback = 'Request failed') {
-  return json?.message || json?.error || fallback;
+function throwRequestError(message, fallback = 'Something went wrong. Please try again.') {
+  throw createUserError(message, fallback);
 }
 
 function isSuccessResponse(res, json) {
@@ -97,11 +98,11 @@ async function parseResponse(res) {
   try {
     json = await res.json();
   } catch {
-    throw new Error('Unexpected server response');
+    throwRequestError(null, 'Unable to load data. Please try again.');
   }
 
   if (!isSuccessResponse(res, json)) {
-    throw new Error(getErrorMessage(json));
+    throwRequestError(json?.message || json?.error, 'Something went wrong. Please try again.');
   }
 
   return json;
@@ -166,45 +167,66 @@ export async function apiFetch(path, options = {}) {
   const scopeBranch = resolveScopeBranch(path, options);
   const requestPath = scopeBranch ? withBranchPath(path) : path;
 
-  const res = await authFetch(apiUrl(requestPath), {
-    ...options,
-    scopeBranch,
-    headers: buildJsonHeaders(path, options),
-  });
+  try {
+    const res = await authFetch(apiUrl(requestPath), {
+      ...options,
+      scopeBranch,
+      headers: buildJsonHeaders(path, options),
+    });
 
-  const json = await parseResponse(res);
-  return json.data;
+    const json = await parseResponse(res);
+    return json.data;
+  } catch (err) {
+    throw createUserError(
+      err?.message,
+      options.fallbackMessage || 'Something went wrong. Please try again.',
+    );
+  }
 }
 
-export async function apiUpload(path, formData) {
-  const res = await authFetch(apiUrl(path), {
-    method: 'POST',
-    headers: {
-      ...getAuthHeaders(),
-    },
-    body: formData,
-  });
+export async function apiUpload(path, formData, options = {}) {
+  try {
+    const res = await authFetch(apiUrl(path), {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders(),
+      },
+      body: formData,
+    });
 
-  const json = await parseResponse(res);
-  return json.data;
+    const json = await parseResponse(res);
+    return json.data;
+  } catch (err) {
+    throw createUserError(
+      err?.message,
+      options.fallbackMessage || 'Upload failed. Please try again.',
+    );
+  }
 }
 
 export async function apiFetchPaged(path, options = {}) {
   const scopeBranch = resolveScopeBranch(path, options);
   const requestPath = scopeBranch ? withBranchPath(path) : path;
 
-  const res = await authFetch(apiUrl(requestPath), {
-    ...options,
-    scopeBranch,
-    headers: buildJsonHeaders(path, options),
-  });
+  try {
+    const res = await authFetch(apiUrl(requestPath), {
+      ...options,
+      scopeBranch,
+      headers: buildJsonHeaders(path, options),
+    });
 
-  const json = await parseResponse(res);
+    const json = await parseResponse(res);
 
-  return {
-    rows: json.data || [],
-    pagination: json.pagination || null,
-  };
+    return {
+      rows: json.data || [],
+      pagination: json.pagination || null,
+    };
+  } catch (err) {
+    throw createUserError(
+      err?.message,
+      options.fallbackMessage || 'Unable to load list. Please try again.',
+    );
+  }
 }
 
 export async function apiFetchReport(path, params = {}) {
@@ -212,25 +234,29 @@ export async function apiFetchReport(path, params = {}) {
   const query = buildQueryString(scopeBranch ? withBranchParams(params) : params);
   const url = query ? `${path}?${query}` : path;
 
-  const res = await authFetch(apiUrl(url), {
-    method: 'GET',
-    scopeBranch,
-    headers: buildJsonHeaders(path),
-  });
+  try {
+    const res = await authFetch(apiUrl(url), {
+      method: 'GET',
+      scopeBranch,
+      headers: buildJsonHeaders(path),
+    });
 
-  const json = await parseResponse(res);
+    const json = await parseResponse(res);
 
-  return {
-    rows: (json.data || []).map(normalizeReportRow),
-    pagination: json.pagination || null,
-    branchId: json.branchId ?? null,
-    summary: {
-      totalTags: json.pagination?.totalRecords ?? json.data?.length ?? 0,
-      totalFound: json.summary?.foundCount ?? 0,
-      totalMissing: json.summary?.missingCount ?? 0,
-      totalNew: json.summary?.newCount ?? 0,
-    },
-  };
+    return {
+      rows: (json.data || []).map(normalizeReportRow),
+      pagination: json.pagination || null,
+      branchId: json.branchId ?? null,
+      summary: {
+        totalTags: json.pagination?.totalRecords ?? json.data?.length ?? 0,
+        totalFound: json.summary?.foundCount ?? 0,
+        totalMissing: json.summary?.missingCount ?? 0,
+        totalNew: json.summary?.newCount ?? 0,
+      },
+    };
+  } catch (err) {
+    throw createUserError(err?.message, 'Unable to load report. Please try again.');
+  }
 }
 
 /** Authenticated fetch for non-JSON responses (e.g. file downloads). */

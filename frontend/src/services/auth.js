@@ -1,4 +1,5 @@
 import { apiUrl, authFetch } from './api.js'
+import { createUserError, toUserErrorMessage } from '../utils/userErrorMessage.js'
 import { decodeJwtPayload } from '../utils/jwt.js'
 
 const TOKEN_KEY = 'auth_token'
@@ -157,15 +158,15 @@ export function clearOperationalBranch() {
   sessionStorage.removeItem(OPERATIONAL_BRANCH_KEY)
 }
 
-function parseAuthResponse(json, fallbackError = 'Request failed') {
+function parseAuthResponse(json, fallbackError = 'Something went wrong. Please try again.') {
   if (!json || json?.success === false) {
-    throw new Error(json?.message || fallbackError)
+    throw createUserError(json?.message, fallbackError)
   }
 
   const data = json.data ?? json
 
   if (!data.token || !data.user) {
-    throw new Error('Authentication response is missing token data')
+    throw createUserError(null, 'Unable to sign in. Please try again.')
   }
 
   const user = normalizeUser(data.user)
@@ -205,11 +206,11 @@ export async function login(username, password) {
   try {
     json = await res.json()
   } catch {
-    throw new Error('Unexpected server response')
+    throw createUserError(null, 'Unable to sign in. Please try again.')
   }
 
   if (!res.ok) {
-    throw new Error(json?.message || 'Login failed')
+    throw createUserError(json?.message, 'Invalid username or password.')
   }
 
   const data = parseAuthResponse(json, 'Login failed')
@@ -244,11 +245,11 @@ export async function refreshSessionBranches() {
   try {
     json = await res.json()
   } catch {
-    throw new Error('Unexpected server response')
+    throw createUserError(null, 'Unable to load branches. Please try again.')
   }
 
   if (!res.ok || json?.success === false) {
-    throw new Error(json?.message || 'Failed to load branches')
+    throw createUserError(json?.message, 'Unable to load branches. Please try again.')
   }
 
   const data = json.data ?? json
@@ -260,7 +261,7 @@ export async function fetchProfile() {
   const token = getToken()
 
   if (!token) {
-    throw new Error('Authentication token is required')
+    throw createUserError(null, 'Your session has expired. Please log in again.')
   }
 
   const res = await authFetch(apiUrl('/auth/profile'), {
@@ -271,11 +272,11 @@ export async function fetchProfile() {
   try {
     json = await res.json()
   } catch {
-    throw new Error('Unexpected server response')
+    throw createUserError(null, 'Unable to load profile. Please try again.')
   }
 
   if (!res.ok || json?.success === false) {
-    throw new Error(json?.message || 'Failed to load profile')
+    throw createUserError(json?.message, 'Unable to load profile. Please try again.')
   }
 
   const data = json.data ?? json
@@ -297,7 +298,7 @@ export async function refreshAccessToken() {
   const refreshToken = getRefreshToken()
 
   if (!refreshToken) {
-    throw new Error('Refresh token is missing')
+    throw createUserError(null, 'Your session has expired. Please log in again.')
   }
 
   if (refreshPromise) {
@@ -316,11 +317,11 @@ export async function refreshAccessToken() {
       try {
         json = await res.json()
       } catch {
-        throw new Error('Unexpected server response')
+        throw createUserError(null, 'Your session has expired. Please log in again.')
       }
 
       if (!res.ok) {
-        throw new Error(json?.message || 'Session expired')
+        throw createUserError(json?.message, 'Your session has expired. Please log in again.')
       }
 
       const data = parseAuthResponse(json, 'Session expired')

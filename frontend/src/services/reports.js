@@ -1,4 +1,5 @@
 import { DEFAULT_PAGE_SIZE } from '../components/TablePagination.jsx';
+import { createUserError } from '../utils/userErrorMessage.js';
 import { apiFetchRaw, apiFetchReport, buildQueryString, withBranchParams } from './api.js';
 
 function buildReportParams(filters = {}) {
@@ -41,7 +42,7 @@ export async function downloadReportExport(filters = {}, exportType) {
     } catch {
       // binary or empty error body
     }
-    throw new Error(message);
+    throw createUserError(message, 'Export failed. Please try again.');
   }
 
   const blob = await res.blob();
