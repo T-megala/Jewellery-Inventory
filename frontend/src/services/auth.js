@@ -4,8 +4,8 @@ import { decodeJwtPayload } from '../utils/jwt.js'
 const TOKEN_KEY = 'auth_token'
 const REFRESH_TOKEN_KEY = 'auth_refresh_token'
 const USER_KEY = 'auth_user'
+const SESSION_BRANCHES_KEY = 'auth_session_branches'
 const OPERATIONAL_BRANCH_KEY = 'auth_operational_branch'
-export const PENDING_BRANCH_KEY = 'auth_pending_branch_selection'
 export const BRANCH_CHANGE_EVENT = 'auth:branch-changed'
 export const AUTH_SESSION_EVENT = 'auth:session-changed'
 export const ALL_BRANCHES_VALUE = 'all'
@@ -40,36 +40,42 @@ function normalizeBranch(branch) {
   }
 }
 
-function resolveActiveBranch(branches, selectedBranches, branchId) {
-  const activeId = Number(branchId) || null
-  if (!activeId) return null
-
-  return (
-    selectedBranches.find((branch) => branch.id === activeId)
-    ?? branches.find((branch) => branch.id === activeId)
-    ?? { id: activeId, name: `Branch ${activeId}` }
-  )
+function readStoredSessionBranches() {
+  try {
+    const raw = authStorage.getItem(SESSION_BRANCHES_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.map(normalizeBranch) : []
+  } catch {
+    return []
+  }
 }
 
-export function normalizeUser(user, token = getToken()) {
+function writeStoredSessionBranches(branches) {
+  const normalized = (branches || []).map(normalizeBranch)
+  authStorage.setItem(SESSION_BRANCHES_KEY, JSON.stringify(normalized))
+  return normalized
+}
+
+function stripLoginUser(user) {
   if (!user) return null
 
-  const branches = (user.branches || []).map(normalizeBranch)
-  const selectedBranches = (user.selectedBranches || branches).map(normalizeBranch)
-  const payload = token ? decodeJwtPayload(token) : null
-  const activeBranchId = Number(
-    payload?.branchId
-    ?? selectedBranches[0]?.id
-    ?? branches[0]?.id
-    ?? 0,
-  ) || null
+  const {
+    branches: _branches,
+    selectedBranches: _selectedBranches,
+    activeBranch: _activeBranch,
+    activeBranchId: _activeBranchId,
+    ...profile
+  } = user
+
+  return profile
+}
+
+export function normalizeUser(user) {
+  if (!user) return null
 
   return {
-    ...user,
-    branches,
-    selectedBranches,
-    activeBranchId,
-    activeBranch: resolveActiveBranch(branches, selectedBranches, activeBranchId),
+    ...stripLoginUser(user),
     permissions: Array.isArray(user.permissions) ? user.permissions : [],
   }
 }
@@ -90,8 +96,8 @@ export function isAllBranchesScope() {
   return !raw || raw === ALL_BRANCHES_VALUE
 }
 
-/** Drop stale dashboard filter when it is outside the current login session branches. */
-export function sanitizeOperationalBranch(user = getUser()) {
+/** Drop stale dashboard filter when it is outside the current session branches. */
+export function sanitizeOperationalBranch() {
   const raw = sessionStorage.getItem(OPERATIONAL_BRANCH_KEY)
   if (!raw || raw === ALL_BRANCHES_VALUE) return
 
@@ -101,7 +107,7 @@ export function sanitizeOperationalBranch(user = getUser()) {
     return
   }
 
-  const selectedIds = getSelectedBranchIds(user)
+  const selectedIds = getSelectedBranchIds()
   if (selectedIds.length > 0 && !selectedIds.includes(parsed)) {
     sessionStorage.setItem(OPERATIONAL_BRANCH_KEY, ALL_BRANCHES_VALUE)
   }
@@ -162,7 +168,7 @@ function parseAuthResponse(json, fallbackError = 'Request failed') {
     throw new Error('Authentication response is missing token data')
   }
 
-  const user = normalizeUser(data.user, data.token)
+  const user = normalizeUser(data.user)
 
   return {
     token: data.token,
@@ -177,21 +183,17 @@ function applyAuthSession(token, user, refreshToken) {
   if (refreshToken) {
     authStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
   }
-  const normalizedUser = normalizeUser(user, token)
+  const normalizedUser = normalizeUser(stripLoginUser(user))
   authStorage.setItem(USER_KEY, JSON.stringify(normalizedUser))
   clearLegacyAuthStorage()
-  sanitizeOperationalBranch(normalizedUser)
+  sanitizeOperationalBranch()
   dispatchBranchChange()
   dispatchAuthSessionChange()
 }
 
-/** Login — optional branchIds for one-step session selection. */
-export async function login(username, password, branchIds = null) {
+/** Login — session branches are loaded separately via GET /branches. */
+export async function login(username, password) {
   const body = { username, password }
-
-  if (Array.isArray(branchIds) && branchIds.length) {
-    body.branchIds = branchIds
-  }
 
   const res = await fetch(apiUrl('/auth/login'), {
     method: 'POST',
@@ -214,62 +216,16 @@ export async function login(username, password, branchIds = null) {
   applyAuthSession(data.token, data.user, data.refreshToken)
   await refreshSessionBranches()
   setOperationalBranch(ALL_BRANCHES_VALUE)
-  clearPendingBranchSelection()
   return data
 }
 
-export async function selectBranches(branchIds) {
-  const token = getToken()
-
-  if (!token) {
-    throw new Error('Authentication token is required')
-  }
-
-  const res = await authFetch(apiUrl('/auth/select-branches'), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ branchIds }),
-  })
-
-  let json
-  try {
-    json = await res.json()
-  } catch {
-    throw new Error('Unexpected server response')
-  }
-
-  if (!res.ok) {
-    throw new Error(json?.message || 'Failed to select branches')
-  }
-
-  const data = parseAuthResponse(json, 'Failed to select branches')
-  applyAuthSession(data.token, data.user, data.refreshToken)
-  setOperationalBranch(ALL_BRANCHES_VALUE)
-  clearPendingBranchSelection()
-  return data
-}
-
-/** Persist branch list from GET /branches (user mapping), not login payload. */
-export function updateUserBranches(branches) {
-  const user = getUser()
-  if (!user) return null
-
-  const normalized = (branches || []).map(normalizeBranch)
-  const updatedUser = normalizeUser({
-    ...user,
-    branches: normalized,
-    selectedBranches: normalized,
-  }, getToken())
-
-  authStorage.setItem(USER_KEY, JSON.stringify(updatedUser))
-  clearLegacyAuthStorage()
-  sanitizeOperationalBranch(updatedUser)
+/** Persist branch list from GET /branches — never from login response. */
+export function updateSessionBranches(branches) {
+  const normalized = writeStoredSessionBranches(branches)
+  sanitizeOperationalBranch()
   dispatchBranchChange()
   dispatchAuthSessionChange()
-  return updatedUser
+  return normalized
 }
 
 /** Load current user's branches with the access token and sync session storage. */
@@ -297,7 +253,7 @@ export async function refreshSessionBranches() {
 
   const data = json.data ?? json
   const branches = Array.isArray(data) ? data : []
-  return updateUserBranches(branches)
+  return updateSessionBranches(branches)
 }
 
 export async function fetchProfile() {
@@ -323,12 +279,10 @@ export async function fetchProfile() {
   }
 
   const data = json.data ?? json
-  const user = normalizeUser(data.user, getToken())
+  const user = normalizeUser(stripLoginUser(data.user))
   authStorage.setItem(USER_KEY, JSON.stringify(user))
   clearLegacyAuthStorage()
-  sanitizeOperationalBranch(user)
-  dispatchBranchChange()
-  dispatchAuthSessionChange()
+  await refreshSessionBranches()
   return user
 }
 
@@ -371,6 +325,7 @@ export async function refreshAccessToken() {
 
       const data = parseAuthResponse(json, 'Session expired')
       applyAuthSession(data.token, data.user, data.refreshToken)
+      await refreshSessionBranches()
       return data.token
     } finally {
       refreshPromise = null
@@ -378,18 +333,6 @@ export async function refreshAccessToken() {
   })()
 
   return refreshPromise
-}
-
-export function markPendingBranchSelection() {
-  sessionStorage.setItem(PENDING_BRANCH_KEY, '1')
-}
-
-export function clearPendingBranchSelection() {
-  sessionStorage.removeItem(PENDING_BRANCH_KEY)
-}
-
-export function hasPendingBranchSelection() {
-  return sessionStorage.getItem(PENDING_BRANCH_KEY) === '1'
 }
 
 export function getToken() {
@@ -409,74 +352,30 @@ export function getUser() {
   }
 }
 
-/** All branches assigned to the user (login picker). */
-export function getUserBranches(user = getUser()) {
-  return user?.branches ?? []
+/** Branches for header/filter — always from GET /branches, never login response. */
+export function getSessionBranches() {
+  return readStoredSessionBranches()
 }
 
-/** Branches available in this session (from branch list API, not login snapshot). */
-export function getSessionBranches(user = getUser()) {
-  const selected = user?.selectedBranches ?? []
-  if (selected.length) return selected
-  return user?.branches ?? []
+export function getSelectedBranchIds() {
+  return getSessionBranches().map((branch) => branch.id)
 }
 
-export function getSelectedBranchIds(user = getUser()) {
-  const fromUser = getSessionBranches(user).map((branch) => branch.id)
-  if (fromUser.length) return fromUser
-
-  const payload = decodeJwtPayload(getToken())
-  if (Array.isArray(payload?.selectedBranchIds) && payload.selectedBranchIds.length) {
-    return payload.selectedBranchIds.map(Number)
-  }
-
-  return getUserBranches(user).map((branch) => branch.id)
-}
-
-export function getActiveBranchId(user = getUser()) {
-  if (user?.activeBranchId) return user.activeBranchId
-
+export function getActiveBranchId() {
   const payload = decodeJwtPayload(getToken())
   const fromToken = Number(payload?.branchId)
   if (fromToken) return fromToken
 
-  const selected = getSelectedBranchIds(user)
-  return selected[0] ?? null
+  const session = getSessionBranches()
+  return session[0]?.id ?? null
 }
 
-export function getActiveBranch(user = getUser()) {
-  if (user?.activeBranch) return user.activeBranch
-
-  const activeId = getActiveBranchId(user)
+export function getActiveBranch() {
+  const activeId = getActiveBranchId()
   if (!activeId) return null
 
-  return getSessionBranches(user).find((branch) => branch.id === activeId)
-    ?? getUserBranches(user).find((branch) => branch.id === activeId)
+  return getSessionBranches().find((branch) => branch.id === activeId)
     ?? { id: activeId, name: `Branch ${activeId}` }
-}
-
-/** @deprecated Use getActiveBranch() */
-export function getUserBranch(user = getUser()) {
-  return getActiveBranch(user)
-}
-
-export async function completeBranchSelection(selectedIds) {
-  const ids = [...new Set((selectedIds || []).map(Number).filter(Boolean))]
-
-  if (!ids.length) {
-    throw new Error('Please select at least one branch.')
-  }
-
-  await selectBranches(ids)
-  return getActiveBranchId()
-}
-
-export function needsBranchSelection(user = getUser()) {
-  return getUserBranches(user).length > 1
-}
-
-export function needsActiveBranchSwitcher(user = getUser()) {
-  return getSessionBranches(user).length > 1
 }
 
 export function getUserDisplayName(user = getUser()) {
@@ -518,8 +417,8 @@ export function clearAuthSession() {
   authStorage.removeItem(TOKEN_KEY)
   authStorage.removeItem(REFRESH_TOKEN_KEY)
   authStorage.removeItem(USER_KEY)
+  authStorage.removeItem(SESSION_BRANCHES_KEY)
   clearLegacyAuthStorage()
-  clearPendingBranchSelection()
   clearOperationalBranch()
   dispatchBranchChange()
   dispatchAuthSessionChange()

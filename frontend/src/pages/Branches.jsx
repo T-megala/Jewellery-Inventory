@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import BackToMastersLink from '../components/BackToMastersLink.jsx'
 import DeleteConfirmModal from '../components/DeleteConfirmModal.jsx'
 import { createPortal } from 'react-dom'
-import TablePagination from '../components/TablePagination.jsx'
+import TablePagination, { DEFAULT_PAGE_SIZE } from '../components/TablePagination.jsx'
 import FieldError from '../components/FieldError.jsx'
 import {
   createBranch,
@@ -10,12 +10,10 @@ import {
   fetchBranches,
   updateBranch,
 } from '../services/branches.js'
-import { hasPermission } from '../services/auth.js'
+import { hasPermission, refreshSessionBranches } from '../services/auth.js'
 import '../components/FieldError.css'
 import { mapBranchSaveError, scrollToFirstFieldError } from '../utils/formValidation.js'
 import './Branches.css'
-
-const DEFAULT_PAGE_SIZE = 10
 
 const EMPTY_FORM = {
   name: '',
@@ -232,6 +230,7 @@ export default function Branches() {
       }
 
       await loadBranches()
+      await refreshSessionBranches()
       resetForm()
       setNotice(isEdit ? 'Branch updated successfully.' : 'Branch created successfully.')
     } catch (err) {
@@ -264,6 +263,7 @@ export default function Branches() {
 
       setNotice('Branch deleted successfully.')
       await loadBranches()
+      await refreshSessionBranches()
       setDeleteTarget(null)
     } catch (err) {
       setError(err.message || 'Failed to delete branch.')

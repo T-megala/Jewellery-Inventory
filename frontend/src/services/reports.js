@@ -1,9 +1,10 @@
+import { DEFAULT_PAGE_SIZE } from '../components/TablePagination.jsx';
 import { apiFetchRaw, apiFetchReport, buildQueryString, withBranchParams } from './api.js';
 
 function buildReportParams(filters = {}) {
   return {
     page: filters.page ?? 1,
-    limit: filters.limit ?? 10,
+    limit: filters.limit ?? DEFAULT_PAGE_SIZE,
     productName: filters.productName,
     subProductName: filters.subProductName,
     centerName: filters.centerName,

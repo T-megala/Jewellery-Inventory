@@ -4,7 +4,7 @@ import BackToMastersLink from '../components/BackToMastersLink.jsx'
 import DeleteConfirmModal from '../components/DeleteConfirmModal.jsx'
 import BranchMultiSelect from '../components/BranchMultiSelect.jsx'
 import FieldError from '../components/FieldError.jsx'
-import TablePagination from '../components/TablePagination.jsx'
+import TablePagination, { DEFAULT_PAGE_SIZE } from '../components/TablePagination.jsx'
 import { fetchBranches } from '../services/branches.js'
 import { fetchRoles } from '../services/roles.js'
 import {
@@ -20,7 +20,6 @@ import '../components/FieldError.css'
 import { mapUserSaveError, scrollToFirstFieldError } from '../utils/formValidation.js'
 import './Users.css'
 
-const DEFAULT_PAGE_SIZE = 10
 const SUPER_ADMIN_ROLE = 'Super Admin'
 
 function normalizeBranchIds(branchIds) {

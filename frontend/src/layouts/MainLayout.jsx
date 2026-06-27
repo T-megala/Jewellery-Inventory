@@ -130,8 +130,9 @@ export default function MainLayout() {
   const isMastersArea = MASTER_PATHS.includes(location.pathname)
 
   useEffect(() => {
+    if (!BRANCH_FILTER_PATHS.includes(location.pathname)) return
     refreshSessionBranches().catch(() => {})
-  }, [])
+  }, [location.pathname])
 
   useEffect(() => {
     setMobileNavOpen(false)

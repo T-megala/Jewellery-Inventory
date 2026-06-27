@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import BackToMastersLink from '../components/BackToMastersLink.jsx'
 import DeleteConfirmModal from '../components/DeleteConfirmModal.jsx'
 import { createPortal } from 'react-dom'
-import TablePagination from '../components/TablePagination.jsx'
+import TablePagination, { DEFAULT_PAGE_SIZE } from '../components/TablePagination.jsx'
 import FieldError from '../components/FieldError.jsx'
 import {
   createRole,
@@ -15,8 +15,6 @@ import { hasPermission } from '../services/auth.js'
 import '../components/FieldError.css'
 import { mapRoleSaveError, scrollToFirstFieldError } from '../utils/formValidation.js'
 import './Roles.css'
-
-const DEFAULT_PAGE_SIZE = 10
 
 const EMPTY_FORM = {
   name: '',

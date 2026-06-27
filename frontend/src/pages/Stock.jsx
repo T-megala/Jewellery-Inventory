@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import TablePagination from '../components/TablePagination.jsx'
+import TablePagination, { DEFAULT_PAGE_SIZE } from '../components/TablePagination.jsx'
 import { useBranchScope } from '../hooks/useBranchScope.js'
 import { getUser, hasPermission } from '../services/auth.js'
 import { fetchProductList } from '../services/stock.js'
 import './Module.css'
 import './Stock.css'
 
-const DEFAULT_PAGE_SIZE = 10
 const SEARCH_DEBOUNCE_MS = 400
 
 function formatValue(value) {

@@ -4,13 +4,11 @@ import {
   downloadReportExport,
   fetchStockVerificationReport,
 } from '../services/reports.js'
-import TablePagination from '../components/TablePagination.jsx'
+import TablePagination, { DEFAULT_PAGE_SIZE } from '../components/TablePagination.jsx'
 import { useBranchScope } from '../hooks/useBranchScope.js'
 import { getUser, hasPermission } from '../services/auth.js'
 import './Module.css'
 import './Reports.css'
-
-const DEFAULT_PAGE_SIZE = 10
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All Statuses' },
