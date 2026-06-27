@@ -9,6 +9,7 @@ import {
   getUserRoleLabel,
   hasPermission,
   logout,
+  refreshSessionBranches,
 } from '../services/auth.js'
 import '../components/ActiveBranchSelect.css'
 import './MainLayout.css'
@@ -127,6 +128,10 @@ export default function MainLayout() {
   const isFillPage = location.pathname === '/import' || isTablePage
   const isWidePage = location.pathname === '/dashboard' || location.pathname === '/masters'
   const isMastersArea = MASTER_PATHS.includes(location.pathname)
+
+  useEffect(() => {
+    refreshSessionBranches().catch(() => {})
+  }, [])
 
   useEffect(() => {
     setMobileNavOpen(false)

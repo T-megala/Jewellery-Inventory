@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
+  AUTH_SESSION_EVENT,
   BRANCH_CHANGE_EVENT,
   getActiveBranch,
   getActiveBranchId,
@@ -32,7 +33,11 @@ export function useBranchScope() {
     }
 
     window.addEventListener(BRANCH_CHANGE_EVENT, syncScope)
-    return () => window.removeEventListener(BRANCH_CHANGE_EVENT, syncScope)
+    window.addEventListener(AUTH_SESSION_EVENT, syncScope)
+    return () => {
+      window.removeEventListener(BRANCH_CHANGE_EVENT, syncScope)
+      window.removeEventListener(AUTH_SESSION_EVENT, syncScope)
+    }
   }, [])
 
   return scope

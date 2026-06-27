@@ -212,6 +212,7 @@ export async function login(username, password, branchIds = null) {
 
   const data = parseAuthResponse(json, 'Login failed')
   applyAuthSession(data.token, data.user, data.refreshToken)
+  await refreshSessionBranches()
   setOperationalBranch(ALL_BRANCHES_VALUE)
   clearPendingBranchSelection()
   return data
@@ -249,6 +250,54 @@ export async function selectBranches(branchIds) {
   setOperationalBranch(ALL_BRANCHES_VALUE)
   clearPendingBranchSelection()
   return data
+}
+
+/** Persist branch list from GET /branches (user mapping), not login payload. */
+export function updateUserBranches(branches) {
+  const user = getUser()
+  if (!user) return null
+
+  const normalized = (branches || []).map(normalizeBranch)
+  const updatedUser = normalizeUser({
+    ...user,
+    branches: normalized,
+    selectedBranches: normalized,
+  }, getToken())
+
+  authStorage.setItem(USER_KEY, JSON.stringify(updatedUser))
+  clearLegacyAuthStorage()
+  sanitizeOperationalBranch(updatedUser)
+  dispatchBranchChange()
+  dispatchAuthSessionChange()
+  return updatedUser
+}
+
+/** Load current user's branches with the access token and sync session storage. */
+export async function refreshSessionBranches() {
+  const token = getToken()
+
+  if (!token) {
+    return null
+  }
+
+  const res = await authFetch(apiUrl('/branches'), {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+
+  let json
+  try {
+    json = await res.json()
+  } catch {
+    throw new Error('Unexpected server response')
+  }
+
+  if (!res.ok || json?.success === false) {
+    throw new Error(json?.message || 'Failed to load branches')
+  }
+
+  const data = json.data ?? json
+  const branches = Array.isArray(data) ? data : []
+  return updateUserBranches(branches)
 }
 
 export async function fetchProfile() {
@@ -365,9 +414,11 @@ export function getUserBranches(user = getUser()) {
   return user?.branches ?? []
 }
 
-/** Branches selected for this session (Level 1). */
+/** Branches available in this session (from branch list API, not login snapshot). */
 export function getSessionBranches(user = getUser()) {
-  return user?.selectedBranches ?? []
+  const selected = user?.selectedBranches ?? []
+  if (selected.length) return selected
+  return user?.branches ?? []
 }
 
 export function getSelectedBranchIds(user = getUser()) {
