@@ -234,15 +234,17 @@ export default function MainLayout() {
             </div>
           </div>
 
-          <div className="topbar-right">
-            {showBranchFilter && (
+          {showBranchFilter && (
+            <div className="topbar-branch">
               <ActiveBranchSelect
                 branches={sessionBranches}
                 alwaysShow
                 layout="header"
               />
-            )}
+            </div>
+          )}
 
+          <div className="topbar-right">
             <button
               type="button"
               className={`topbar-settings${isMastersArea ? ' topbar-settings--active' : ''}`}
