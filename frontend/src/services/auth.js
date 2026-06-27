@@ -185,23 +185,6 @@ function applyAuthSession(token, user, refreshToken) {
   dispatchAuthSessionChange()
 }
 
-/**
- * Apply rotated tokens from an API payload (e.g. super admin create branch)
- * without logging the user out.
- */
-export function applySessionFromPayload(payload) {
-  if (!payload?.token || !payload?.user) {
-    return false
-  }
-
-  applyAuthSession(
-    payload.token,
-    payload.user,
-    payload.refreshToken ?? getRefreshToken(),
-  )
-  return true
-}
-
 /** Login — optional branchIds for one-step session selection. */
 export async function login(username, password, branchIds = null) {
   const body = { username, password }

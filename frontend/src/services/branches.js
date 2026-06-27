@@ -1,5 +1,4 @@
 import { apiFetch } from './api.js';
-import { applySessionFromPayload } from './auth.js';
 
 function normalizeBranch(branch) {
   return {
@@ -24,8 +23,6 @@ export async function createBranch(payload) {
     method: 'POST',
     body: JSON.stringify(payload),
   });
-
-  applySessionFromPayload(data);
 
   const branch = data?.branch ?? data;
   return normalizeBranch(branch);
