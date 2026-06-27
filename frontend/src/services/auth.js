@@ -230,6 +230,7 @@ export async function login(username, password, branchIds = null) {
   const data = parseAuthResponse(json, 'Login failed')
   applyAuthSession(data.token, data.user, data.refreshToken)
   setOperationalBranch(ALL_BRANCHES_VALUE)
+  clearPendingBranchSelection()
   return data
 }
 
@@ -476,7 +477,6 @@ export function isAuthenticated() {
 
 export function isSessionValid() {
   if (!isAuthenticated()) return false
-  if (hasPendingBranchSelection() && needsBranchSelection()) return false
   return true
 }
 

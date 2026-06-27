@@ -1,29 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import LoginBranchSelect from '../components/LoginBranchSelect.jsx'
 import FieldError from '../components/FieldError.jsx'
-import {
-  clearAuthSession,
-  clearPendingBranchSelection,
-  completeBranchSelection,
-  getSelectedBranchIds,
-  getUser,
-  login,
-  markPendingBranchSelection,
-} from '../services/auth.js'
+import { login } from '../services/auth.js'
 import '../components/FieldError.css'
 import { scrollToFirstFieldError } from '../utils/formValidation.js'
 import './Login.css'
-
-function getInitialBranchIds(user) {
-  const allowedIds = (user?.branches ?? []).map((branch) => branch.id)
-  if (!allowedIds.length) return []
-
-  const sessionIds = getSelectedBranchIds(user).filter((id) => allowedIds.includes(id))
-  if (sessionIds.length) return sessionIds
-
-  return allowedIds
-}
 
 function getRedirectPath(location) {
   const fromState = location.state?.from?.pathname
@@ -35,10 +16,8 @@ export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
   const redirectTo = getRedirectPath(location)
-  const [step, setStep] = useState('credentials')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [selectedBranchIds, setSelectedBranchIdsState] = useState([])
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
@@ -47,13 +26,6 @@ export default function Login() {
   const passwordRef = useRef(null)
   const submitRef = useRef(null)
 
-  function enterAuthenticatedApp() {
-    navigate(redirectTo)
-  }
-
-  const branchUser = getUser()
-  const branches = branchUser?.branches ?? []
-
   useEffect(() => {
     if (location.search) {
       navigate('/login', { replace: true })
@@ -61,10 +33,8 @@ export default function Login() {
   }, [location.search, navigate])
 
   useEffect(() => {
-    setStep('credentials')
     setUsername('')
     setPassword('')
-    setSelectedBranchIdsState([])
     setError('')
     setFieldErrors({})
   }, [location.key])
@@ -93,21 +63,6 @@ export default function Login() {
     })
   }
 
-  function toggleBranch(branchId) {
-    setSelectedBranchIdsState((current) => {
-      if (current.includes(branchId)) {
-        return current.filter((id) => id !== branchId)
-      }
-      return [...current, branchId]
-    })
-    clearFieldError('branches')
-  }
-
-  function handleSelectAllBranches(branchIds) {
-    setSelectedBranchIdsState(branchIds)
-    clearFieldError('branches')
-  }
-
   async function handleCredentialsSubmit(e) {
     e.preventDefault()
     setError('')
@@ -129,18 +84,8 @@ export default function Login() {
 
     setLoading(true)
     try {
-      const data = await login(username.trim(), password)
-      const userBranches = data.user?.branches ?? []
-
-      if (userBranches.length <= 1) {
-        clearPendingBranchSelection()
-        enterAuthenticatedApp()
-        return
-      }
-
-      markPendingBranchSelection()
-      setSelectedBranchIdsState(getInitialBranchIds(data.user))
-      setStep('branch')
+      await login(username.trim(), password)
+      navigate(redirectTo)
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.')
       setFieldErrors({})
@@ -149,41 +94,8 @@ export default function Login() {
     }
   }
 
-  async function handleBranchSubmit(e) {
-    e.preventDefault()
-    setError('')
-
-    if (selectedBranchIds.length === 0) {
-      const errors = { branches: 'Please select at least one branch to continue.' }
-      setFieldErrors(errors)
-      scrollToFirstFieldError(errors)
-      return
-    }
-
-    setFieldErrors({})
-    setLoading(true)
-    try {
-      await completeBranchSelection(selectedBranchIds)
-      enterAuthenticatedApp()
-    } catch (err) {
-      setError(err.message || 'Failed to save branch selection. Please try again.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  function handleBackToLogin() {
-    clearAuthSession()
-    setStep('credentials')
-    setUsername('')
-    setPassword('')
-    setSelectedBranchIdsState([])
-    setError('')
-    setFieldErrors({})
-  }
-
   return (
-    <div className={`login-page${step === 'branch' ? ' login-page--branch' : ''}`}>
+    <div className="login-page">
       <aside className="login-hero">
         <div className="hero-overlay" aria-hidden="true" />
 
@@ -215,145 +127,86 @@ export default function Login() {
       </aside>
 
       <main className="login-main">
-        <div className={`login-card${step === 'branch' ? ' login-card--branch' : ''}`}>
-          {step === 'credentials' ? (
-            <>
-              <div className="login-form-header">
-                <p className="form-eyebrow">Welcome Back</p>
-                <h2>Login to your account</h2>
-                <p>Enter your username and password to continue</p>
+        <div className="login-card">
+          <div className="login-form-header">
+            <p className="form-eyebrow">Welcome Back</p>
+            <h2>Login to your account</h2>
+            <p>Enter your username and password to continue</p>
+          </div>
+
+          <form ref={formRef} className="login-form" onSubmit={handleCredentialsSubmit} noValidate>
+            {error && (
+              <div className="form-banner-error" role="alert">
+                {error}
               </div>
+            )}
 
-              <form ref={formRef} className="login-form" onSubmit={handleCredentialsSubmit} noValidate>
-                {error && (
-                  <div className="form-banner-error" role="alert">
-                    {error}
-                  </div>
-                )}
+            <div className={`form-field${fieldErrors.username ? ' field-invalid' : ''}`}>
+              <label htmlFor="username">Username</label>
+              <div className="input-box">
+                <svg className="field-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M20 21a8 8 0 10-16 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                  <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.8" />
+                </svg>
+                <input
+                  id="username"
+                  type="text"
+                  placeholder="Enter your username"
+                  value={username}
+                  onChange={(e) => {
+                    setUsername(e.target.value)
+                    clearFieldError('username')
+                  }}
+                  onKeyDown={handleUsernameKeyDown}
+                  autoComplete="username"
+                  disabled={loading}
+                  aria-invalid={Boolean(fieldErrors.username)}
+                  aria-describedby={fieldErrors.username ? 'field-error-username' : undefined}
+                />
+              </div>
+              <FieldError id="field-error-username" message={fieldErrors.username} />
+            </div>
 
-                <div className={`form-field${fieldErrors.username ? ' field-invalid' : ''}`}>
-                  <label htmlFor="username">Username</label>
-                  <div className="input-box">
-                    <svg className="field-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <path d="M20 21a8 8 0 10-16 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                      <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.8" />
-                    </svg>
-                    <input
-                      id="username"
-                      type="text"
-                      placeholder="Enter your username"
-                      value={username}
-                      onChange={(e) => {
-                        setUsername(e.target.value)
-                        clearFieldError('username')
-                      }}
-                      onKeyDown={handleUsernameKeyDown}
-                      autoComplete="username"
-                      disabled={loading}
-                      aria-invalid={Boolean(fieldErrors.username)}
-                      aria-describedby={fieldErrors.username ? 'field-error-username' : undefined}
-                    />
-                  </div>
-                  <FieldError id="field-error-username" message={fieldErrors.username} />
-                </div>
-
-                <div className={`form-field${fieldErrors.password ? ' field-invalid' : ''}`}>
-                  <label htmlFor="password">Password</label>
-                  <div className="input-box">
-                    <svg className="field-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                      <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.8" />
-                      <path d="M8 11V8a4 4 0 118 0v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                    </svg>
-                    <input
-                      id="password"
-                      ref={passwordRef}
-                      type={showPassword ? 'text' : 'password'}
-                      placeholder="Enter your password"
-                      value={password}
-                      onChange={(e) => {
-                        setPassword(e.target.value)
-                        clearFieldError('password')
-                      }}
-                      onKeyDown={handlePasswordKeyDown}
-                      autoComplete="current-password"
-                      disabled={loading}
-                      aria-invalid={Boolean(fieldErrors.password)}
-                      aria-describedby={fieldErrors.password ? 'field-error-password' : undefined}
-                    />
-                    <button
-                      type="button"
-                      className="show-btn"
-                      onClick={() => setShowPassword((v) => !v)}
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                      tabIndex={-1}
-                    >
-                      {showPassword ? 'Hide' : 'Show'}
-                    </button>
-                  </div>
-                  <FieldError id="field-error-password" message={fieldErrors.password} />
-                </div>
-
-                <button ref={submitRef} type="submit" className="login-btn" disabled={loading}>
-                  {loading ? 'Logging in…' : 'Login'}
+            <div className={`form-field${fieldErrors.password ? ' field-invalid' : ''}`}>
+              <label htmlFor="password">Password</label>
+              <div className="input-box">
+                <svg className="field-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.8" />
+                  <path d="M8 11V8a4 4 0 118 0v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+                <input
+                  id="password"
+                  ref={passwordRef}
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value)
+                    clearFieldError('password')
+                  }}
+                  onKeyDown={handlePasswordKeyDown}
+                  autoComplete="current-password"
+                  disabled={loading}
+                  aria-invalid={Boolean(fieldErrors.password)}
+                  aria-describedby={fieldErrors.password ? 'field-error-password' : undefined}
+                />
+                <button
+                  type="button"
+                  className="show-btn"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  tabIndex={-1}
+                >
+                  {showPassword ? 'Hide' : 'Show'}
                 </button>
-              </form>
-            </>
-          ) : (
-            <>
-              <div className="login-form-header login-form-header--branch">
-                <p className="form-eyebrow">Branch access</p>
-                <h2>Select your branches</h2>
-                <p>
-                  Signed in as
-                  {' '}
-                  <strong>{branchUser?.fullName || branchUser?.username}</strong>
-                  . Choose one or more branches for this session.
-                </p>
               </div>
+              <FieldError id="field-error-password" message={fieldErrors.password} />
+            </div>
 
-              <form className="login-form login-form--branch" onSubmit={handleBranchSubmit} noValidate>
-                {error && (
-                  <div className="form-banner-error" role="alert">
-                    {error}
-                  </div>
-                )}
-
-                <div className={`login-branch-picker${fieldErrors.branches ? ' field-invalid' : ''}`}>
-                  <LoginBranchSelect
-                    branches={branches}
-                    selectedIds={selectedBranchIds}
-                    onToggle={toggleBranch}
-                    onSelectAll={handleSelectAllBranches}
-                    onClearAll={() => {
-                      setSelectedBranchIdsState([])
-                      clearFieldError('branches')
-                    }}
-                    disabled={loading}
-                    emptyMessage="No branches are assigned to your account."
-                  />
-                  <FieldError id="field-error-branches" message={fieldErrors.branches} />
-                </div>
-
-                <div className="login-branch-actions">
-                  <button
-                    type="button"
-                    className="login-btn login-btn--ghost"
-                    onClick={handleBackToLogin}
-                    disabled={loading}
-                  >
-                    Back
-                  </button>
-                  <button
-                    type="submit"
-                    className="login-btn"
-                    disabled={loading || selectedBranchIds.length === 0}
-                  >
-                    {loading ? 'Continuing…' : 'Continue'}
-                  </button>
-                </div>
-              </form>
-            </>
-          )}
+            <button ref={submitRef} type="submit" className="login-btn" disabled={loading}>
+              {loading ? 'Logging in…' : 'Login'}
+            </button>
+          </form>
         </div>
       </main>
     </div>
