@@ -55,7 +55,7 @@ export const loadUserAuthProfile = async (userId, preloadedBranches = null) => {
     username: row.username,
     fullName: row.full_name ?? row.username,
     isActive: Boolean(row.is_active),
-    branches: userBranchService.mapBranchesForResponse(branches),
+    //branches: userBranchService.mapBranchesForResponse(branches),
     role: mapRole(row),
     permissions,
   };
@@ -67,8 +67,8 @@ const buildTokenUser = (profile, defaultBranchId) => ({
   name: profile.fullName,
   roleId: profile.role?.id ?? null,
   roleName: profile.role?.name ?? null,
-  branchId: defaultBranchId,
-  branchIds: profile.branches.map((branch) => branch.id),
+  // branchId: defaultBranchId,
+  // branchIds: profile.branches.map((branch) => branch.id),
   permissions: profile.permissions,
 });
 
@@ -137,9 +137,9 @@ export const login = async ({ username, password }) => {
     throw new ApiError(403, "User role is not assigned");
   }
 
-  if (profile.branches.length === 0) {
-    throw new ApiError(403, "User branch is not assigned");
-  }
+  // if (profile.branches.length === 0) {
+  //   throw new ApiError(403, "User branch is not assigned");
+  // }
 
   await pool.execute(`UPDATE users SET last_login_at = NOW() WHERE id = ?`, [
     dbUser.id,
