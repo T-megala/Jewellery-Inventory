@@ -1,4 +1,5 @@
 import { apiFetch } from './api.js';
+import { applySessionFromPayload } from './auth.js';
 
 function normalizeBranch(branch) {
   return {
@@ -18,11 +19,16 @@ export async function fetchBranches() {
   return (data || []).map(normalizeBranch);
 }
 
-export function createBranch(payload) {
-  return apiFetch('/branches', {
+export async function createBranch(payload) {
+  const data = await apiFetch('/branches', {
     method: 'POST',
     body: JSON.stringify(payload),
-  }).then(normalizeBranch);
+  });
+
+  applySessionFromPayload(data);
+
+  const branch = data?.branch ?? data;
+  return normalizeBranch(branch);
 }
 
 export function updateBranch(id, payload) {
