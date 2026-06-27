@@ -290,6 +290,8 @@
 }
 
 .topbar {
+  position: relative;
+  z-index: 10;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas: 'left actions';
@@ -319,7 +321,15 @@
 
 .topbar-branch {
   grid-area: branch;
+  display: flex;
+  align-items: center;
   min-width: 0;
+  position: relative;
+  z-index: 4;
+}
+
+.topbar-branch:has(.active-branch-select__field--open) {
+  z-index: 50;
 }
 
 .topbar-right {
@@ -564,6 +574,7 @@
 
   .topbar-branch {
     width: 100%;
+    align-items: center;
   }
 
   .topbar-left {
