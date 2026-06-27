@@ -29,4 +29,5 @@ export const BRANCH_SCOPE_EXEMPT_PATHS = [
   "/permissions",
   "/users",
   "/auth",
+  "/dashboard/branch-comparison",
 ];

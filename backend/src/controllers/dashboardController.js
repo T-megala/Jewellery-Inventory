@@ -1,4 +1,4 @@
-import { resolveRequestBranchIds } from '../utils/branchScope.js';
+import { resolveRequestBranchIds, resolveComparisonBranchIds } from '../utils/branchScope.js';
 import dashboardService from '../services/dashboardService.js';
 import smartAlertsService from '../services/smartAlertsService.js';
 import { getRequestParam } from '../utils/requestParams.js';
@@ -134,14 +134,14 @@ export const getStockMovement = async (req, res) => {
 };
 
 export const getBranchComparison = async (req, res) => {
-  const branchIds = await resolveRequestBranchIds(req);
+  const branchIds = await resolveComparisonBranchIds(req);
   const data = await dashboardService.getBranchComparison({ branchIds });
 
   res.status(200).json({
     success: true,
     message: 'Branch comparison fetched successfully',
     branchIds,
-    branchId: branchIds.length === 1 ? branchIds[0] : null,
+    branchId: null,
     data,
   });
 };

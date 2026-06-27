@@ -115,13 +115,15 @@ const buildInventoryScopeConditions = (
   const conditions = ["tag_packet_no IS NOT NULL", `TRIM(tag_packet_no) != ''`];
   const params = [];
 
-  if (isAllProducts(product)) {
-    // Full-inventory scope: compare against all product rows (per business spec).
-  } else if (activeBatchId) {
-    // Scoped verification: active batch plus legacy rows not yet linked to a batch.
-    conditions.push("(batch_id = ? OR batch_id IS NULL)");
-    params.push(activeBatchId);
-  } else {
+  if (activeBatchId) {
+    if (isAllProducts(product)) {
+      conditions.push("batch_id = ?");
+      params.push(activeBatchId);
+    } else {
+      conditions.push("(batch_id = ? OR batch_id IS NULL)");
+      params.push(activeBatchId);
+    }
+  } else if (!isAllProducts(product)) {
     conditions.push("batch_id IS NULL");
   }
 

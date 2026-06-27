@@ -18,6 +18,7 @@ export const BRANCH_SCOPE_EXEMPT_PREFIXES = [
   '/roles',
   '/permissions',
   '/users',
+  '/dashboard/branch-comparison',
 ];
 
 function getRequestPathname(path) {

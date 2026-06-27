@@ -106,6 +106,27 @@ export const resolveRequestBranchIds = async (req) => {
   return sessionBranchIds;
 };
 
+/** All assigned branches for multi-branch comparison (ignores branchId filter). */
+export const resolveComparisonBranchIds = async (req) => {
+  const permissions = Array.isArray(req.user?.permissions)
+    ? req.user.permissions
+    : [];
+  const canViewAll = permissions.includes(PERMISSIONS.BRANCHES_VIEW_ALL);
+
+  let sessionBranchIds = await getAssignedBranchIds(req);
+
+  if (sessionBranchIds.length === 0 && canViewAll) {
+    const allBranches = await branchService.getAllBranches();
+    sessionBranchIds = allBranches.map((branch) => branch.id);
+  }
+
+  if (sessionBranchIds.length === 0) {
+    throw new ApiError(403, "Branch is not assigned to this user");
+  }
+
+  return sessionBranchIds;
+};
+
 /** Android/public dropdowns: require explicit branchId (no auth token). */
 export const resolveAndroidBranchIds = async (req) => {
   const branchId =

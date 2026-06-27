@@ -135,9 +135,10 @@ export async function fetchDayWiseSales({ period = 'week', counter = 'all' } = {
   const query = buildQueryString(withBranchParams({ period, counter }));
   const res = await authFetch(apiUrl(`/dashboard/day-wise-sales?${query}`), {
     method: 'GET',
+    scopeBranch: true,
     headers: {
       'Content-Type': 'application/json',
-      ...getAuthHeaders(),
+      ...getAuthHeaders({ scopeBranch: true }),
     },
   });
 
@@ -155,6 +156,8 @@ export async function fetchDayWiseSales({ period = 'week', counter = 'all' } = {
   return {
     period: json.period ?? period,
     counter: json.counter ?? counter,
+    branchId: json.branchId ?? null,
+    branchIds: Array.isArray(json.branchIds) ? json.branchIds : [],
     totalSoldPieces: Number(json.totalSoldPieces ?? 0),
     data: (json.data || []).map((row) => ({
       date: row.date,
@@ -199,16 +202,18 @@ export async function fetchDailyImports({ period = 'week', counter = 'ALL' } = {
 }
 
 export async function fetchBranchComparison() {
-  const data = await apiFetch('/dashboard/branch-comparison') ?? {};
+  const data = await apiFetch('/dashboard/branch-comparison', { scopeBranch: false }) ?? {};
   return {
-    mode: data.mode ?? 'single',
-    currentBranch: data.currentBranch ?? null,
+    mode: data.mode ?? 'multi',
     branches: (data.branches || []).map((row) => ({
       id: row.id ?? null,
       name: row.name ?? '',
       itemCount: Number(row.itemCount ?? row.totalExpected ?? 0),
       totalExpected: Number(row.totalExpected ?? row.itemCount ?? 0),
       itemsScanned: Number(row.itemsScanned ?? 0),
+      foundCount: Number(row.foundCount ?? 0),
+      missingCount: Number(row.missingCount ?? 0),
+      newCount: Number(row.newCount ?? 0),
       accuracyPercent: Number(row.accuracyPercent ?? 0),
     })),
     erpVsPhysical: {

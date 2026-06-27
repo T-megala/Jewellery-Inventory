@@ -42,9 +42,13 @@ const buildInventoryScopeConditions = () => `
   p.tag_packet_no IS NOT NULL
   AND TRIM(p.tag_packet_no) != ''
   AND (
-    sv.product_name = '${SCOPE_NAMES.ALL_PRODUCTS}'
+    (
+      sv.product_name = '${SCOPE_NAMES.ALL_PRODUCTS}'
+      AND p.batch_id = ${ACTIVE_BATCH_FOR_BRANCH_SQL}
+    )
     OR (
-      (p.batch_id = ${ACTIVE_BATCH_FOR_BRANCH_SQL} OR p.batch_id IS NULL)
+      sv.product_name != '${SCOPE_NAMES.ALL_PRODUCTS}'
+      AND (p.batch_id = ${ACTIVE_BATCH_FOR_BRANCH_SQL} OR p.batch_id IS NULL)
       AND p.product = sv.product_name
       AND (
         sv.sub_product_name = '${SCOPE_NAMES.ALL_SUB_PRODUCTS}'

@@ -12,7 +12,7 @@ import {
   batchProductsFrom,
   batchAllProductsFrom,
 } from "../utils/productQueryHelper.js";
-import { TAG_EXPR } from "../utils/verificationScope.js";
+import { TAG_EXPR, buildInventoryScopeFilterFromStoredLabels } from "../utils/verificationScope.js";
 import {
   activeBranchProductsJoin,
   activeBranchProductsWhere,
@@ -460,6 +460,55 @@ const aggregateStocktakeRowsToRow = (rows) => {
   };
 };
 
+const computeExpectedTagCountForStocktake = async (row) => {
+  const branchId = Number(row.branch_id);
+
+  if (!branchId) {
+    return Number(row.total_expected ?? 0);
+  }
+
+  const activeBatchId = await getActiveBatchId(branchId);
+
+  if (!activeBatchId) {
+    return Number(row.total_expected ?? 0);
+  }
+
+  const scope = buildInventoryScopeFilterFromStoredLabels(
+    activeBatchId,
+    row.product_name,
+    row.sub_product_name,
+    row.center_name,
+  );
+
+  const [countRows] = await pool.execute(
+    `SELECT COUNT(DISTINCT ${TAG_EXPR}) AS total
+     FROM products
+     WHERE ${scope.whereClause}`,
+    scope.params,
+  );
+
+  return Number(countRows[0]?.total ?? 0);
+};
+
+const reconcileStocktakeRowCounts = async (row) => {
+  if (!row) {
+    return null;
+  }
+
+  const totalExpected = await computeExpectedTagCountForStocktake(row);
+  const foundCount = Number(row.found_count ?? 0);
+  const newCount = Number(row.new_count ?? 0);
+  const missingCount = Math.max(totalExpected - foundCount, 0);
+
+  return {
+    ...row,
+    total_expected: totalExpected,
+    found_count: foundCount,
+    missing_count: missingCount,
+    new_count: newCount,
+  };
+};
+
 const getActiveBatchIdByBranch = async (branchIds = []) => {
   const scope = normalizeBranchIds({ branchIds });
 
@@ -617,22 +666,28 @@ const getStocktakeHistory = async ({
     right.localeCompare(left),
   );
   const selectedDays = dayKeys.slice(0, STOCKTAKE_HISTORY_LIMIT);
-  const sessions = selectedDays
-    .map((dayKey) => {
-      const branchMaps = rowsByDay.get(dayKey);
-      const pickedRows = [];
+  const sessions = (
+    await Promise.all(
+      selectedDays.map(async (dayKey) => {
+        const branchMaps = rowsByDay.get(dayKey);
+        const pickedRows = [];
 
-      for (const branchRows of branchMaps.values()) {
-        const picked = pickPreferredStocktakeRow(branchRows);
+        for (const branchRows of branchMaps.values()) {
+          const picked = pickPreferredStocktakeRow(branchRows);
 
-        if (picked) {
-          pickedRows.push(picked);
+          if (picked) {
+            pickedRows.push(picked);
+          }
         }
-      }
 
-      return aggregateStocktakeRowsToRow(pickedRows);
-    })
-    .filter(Boolean);
+        const reconciledRows = await Promise.all(
+          pickedRows.map(reconcileStocktakeRowCounts),
+        );
+
+        return aggregateStocktakeRowsToRow(reconciledRows.filter(Boolean));
+      }),
+    )
+  ).filter(Boolean);
 
   const verificationIds = sessions.map((row) => Number(row.id));
   const durationMap =
@@ -748,8 +803,11 @@ const getLatestStocktakeRow = async ({
 } = {}) => {
   const scope = normalizeBranchIds({ branchId, branchIds });
   const rows = await getPreferredStocktakeRowsPerBranch(scope);
+  const reconciledRows = await Promise.all(
+    rows.map(reconcileStocktakeRowCounts),
+  );
 
-  return aggregateStocktakeRowsToRow(rows);
+  return aggregateStocktakeRowsToRow(reconciledRows.filter(Boolean));
 };
 
 const getStocktakeSummary = async ({
@@ -1103,7 +1161,12 @@ const getTopSoldProducts = async ({
        COALESCE(SUM(isa.sold_pieces), 0) AS soldCount
      FROM inventory_sales_audit isa
      INNER JOIN product_upload_batches b ON b.id = isa.batch_id
+     LEFT JOIN product_upload_batches prev ON prev.id = isa.previous_batch_id
      WHERE ${conditions.join(" AND ")} ${branchFilter.clause}
+       AND (
+         isa.previous_batch_id IS NULL
+         OR prev.branch_id = b.branch_id
+       )
      GROUP BY isa.product
      HAVING soldCount > 0 OR soldTags > 0
      ORDER BY soldCount DESC, soldTags DESC, isa.product ASC
@@ -1145,6 +1208,10 @@ const formatDayLabel = (batchDate) => {
   return DAY_LABELS[date.getDay()];
 };
 
+const SAME_BRANCH_SALES_AUDIT_FILTER = `
+  (isa.previous_batch_id IS NULL OR prev.branch_id = pub.branch_id)
+`;
+
 const getDayWiseSales = async ({
   period = "week",
   counter = "all",
@@ -1173,20 +1240,33 @@ const getDayWiseSales = async ({
   }
 
   const branchFilter = buildBranchSqlFilter("pub.branch_id", scope);
+  const counterCondition =
+    counterName === dailySalesSummaryService.ALL_COUNTER
+      ? ""
+      : "AND isa.counter_name = ?";
+  const queryParams = [intervalDays];
+
+  if (counterName !== dailySalesSummaryService.ALL_COUNTER) {
+    queryParams.push(counterName);
+  }
+
+  queryParams.push(...branchFilter.params);
 
   const [rows] = await pool.execute(
     `SELECT
-       dss.batch_date,
-       SUM(dss.sold_pieces) AS sold_pieces,
-       SUM(dss.sold_tags) AS sold_tags
-     FROM daily_sales_summary dss
-     INNER JOIN product_upload_batches pub ON pub.id = dss.batch_id
-     WHERE dss.counter_name = ?
-       AND dss.batch_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+       pub.batch_date,
+       COALESCE(SUM(isa.sold_pieces), 0) AS sold_pieces,
+       COALESCE(SUM(isa.sold_tags), 0) AS sold_tags
+     FROM inventory_sales_audit isa
+     INNER JOIN product_upload_batches pub ON pub.id = isa.batch_id
+     LEFT JOIN product_upload_batches prev ON prev.id = isa.previous_batch_id
+     WHERE pub.batch_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+       AND ${SAME_BRANCH_SALES_AUDIT_FILTER}
+       ${counterCondition}
        ${branchFilter.clause}
-     GROUP BY dss.batch_date
-     ORDER BY dss.batch_date ASC`,
-    [counterName, intervalDays, ...branchFilter.params],
+     GROUP BY pub.batch_date
+     ORDER BY pub.batch_date ASC`,
+    queryParams,
   );
 
   const data = rows.map((row) => ({
@@ -1522,34 +1602,6 @@ const getStockMovement = async ({
   };
 };
 
-const resolveCurrentBranch = async (branchId = null) => {
-  if (branchId) {
-    const branch = await branchService.getBranchById(branchId);
-
-    if (branch) {
-      return {
-        id: branch.id,
-        name: branch.name,
-      };
-    }
-  }
-
-  const branches = await branchService.getAllBranches();
-  const selected = branches[0] ?? null;
-
-  if (!selected) {
-    return {
-      id: null,
-      name: "Unassigned",
-    };
-  }
-
-  return {
-    id: selected.id,
-    name: selected.name,
-  };
-};
-
 const emptyBranchStocktake = () => ({
   verificationDay: null,
   lastStocktakeAt: null,
@@ -1563,7 +1615,26 @@ const emptyBranchStocktake = () => ({
   discrepancies: 0,
 });
 
+const getActiveBatchTaggedCount = async (branchId) => {
+  const batchId = await getActiveBatchId(branchId);
+
+  if (!batchId) {
+    return 0;
+  }
+
+  const [rows] = await pool.execute(
+    `SELECT COUNT(*) AS total
+     FROM products
+     WHERE batch_id = ?
+       AND ${PRODUCT_TAG_FILTER.replace(/\n\s*/g, " ")}`,
+    [batchId],
+  );
+
+  return Number(rows[0]?.total ?? 0);
+};
+
 const buildBranchStocktakeEntry = async (branch) => {
+  const inventoryItemCount = await getActiveBatchTaggedCount(branch.id);
   const latestRow = await getLatestStocktakeRow({ branchIds: [branch.id] });
 
   if (!latestRow) {
@@ -1571,11 +1642,13 @@ const buildBranchStocktakeEntry = async (branch) => {
       id: branch.id,
       name: branch.name,
       ...emptyBranchStocktake(),
-      itemCount: 0,
+      totalExpected: inventoryItemCount,
+      itemCount: inventoryItemCount,
     };
   }
 
-  const totalExpected = Number(latestRow.total_expected ?? 0);
+  const totalExpected =
+    Number(latestRow.total_expected ?? 0) || inventoryItemCount;
   const itemsScanned = Number(latestRow.total_scanned ?? 0);
   const foundCount = Number(latestRow.found_count ?? 0);
   const missingCount = Number(latestRow.missing_count ?? 0);
@@ -1604,32 +1677,32 @@ const buildBranchStocktakeEntry = async (branch) => {
   };
 };
 
-const getBranchComparison = async ({
-  branchId = null,
-  branchIds = null,
-} = {}) => {
-  const scope = normalizeBranchIds({ branchId, branchIds });
+const getBranchComparison = async ({ branchIds = null } = {}) => {
+  const scope = normalizeBranchIds({ branchIds });
+
+  const emptyResponse = {
+    mode: "multi",
+    branches: [],
+    erpVsPhysical: {
+      erp: 0,
+      physical: 0,
+      matched: 0,
+      difference: 0,
+      missing: 0,
+      new: 0,
+    },
+  };
 
   if (scope.length === 0) {
-    return {
-      mode: "single",
-      currentBranch: { id: null, name: "Unassigned" },
-      lastStocktake: emptyBranchStocktake(),
-      branches: [],
-      erpVsPhysical: {
-        erp: 0,
-        physical: 0,
-        matched: 0,
-        difference: 0,
-        missing: 0,
-        new: 0,
-      },
-    };
+    return emptyResponse;
   }
 
   const branches = await branchService.getBranchesByIds(scope);
+  const sortedBranches = [...branches].sort((left, right) =>
+    left.name.localeCompare(right.name),
+  );
   const branchEntries = await Promise.all(
-    branches.map((branch) => buildBranchStocktakeEntry(branch)),
+    sortedBranches.map((branch) => buildBranchStocktakeEntry(branch)),
   );
 
   const totals = branchEntries.reduce(
@@ -1643,16 +1716,8 @@ const getBranchComparison = async ({
     { erp: 0, physical: 0, matched: 0, missing: 0, new: 0 },
   );
 
-  const currentBranch = {
-    id: branches[0]?.id ?? null,
-    name: branches[0]?.name ?? "Unassigned",
-  };
-  const primaryStocktake = branchEntries[0] ?? emptyBranchStocktake();
-
   return {
-    mode: scope.length > 1 ? "multi" : "single",
-    currentBranch,
-    lastStocktake: primaryStocktake,
+    mode: "multi",
     branches: branchEntries,
     erpVsPhysical: {
       ...totals,

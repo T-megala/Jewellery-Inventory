@@ -5,7 +5,6 @@ import ApiError from "../utils/ApiError.js";
 import {
   TAG_EXPR,
   buildInventoryScopeFilter,
-  isAllProducts,
   normalizeTag,
   resolveStoredScope,
 } from "../utils/verificationScope.js";
@@ -424,11 +423,10 @@ const uploadStockVerification = async ({
   tagData,
   branchId = null,
 }) => {
-  const allProductsScope = isAllProducts(product);
   const resolvedBranchId = await resolveOperationalBranchId({ branchId });
   const activeBatchId = await getActiveBatchId(resolvedBranchId);
 
-  if (!allProductsScope && !activeBatchId) {
+  if (!activeBatchId) {
     throw new ApiError(
       400,
       "No active product batch found. Upload inventory first.",
@@ -447,7 +445,6 @@ const uploadStockVerification = async ({
   const sampleTags = await sampleExpectedTags(scope);
 
   logVerificationDebug("scope", {
-    allProductsScope,
     activeBatchId,
     whereClause: scope.whereClause,
     params: scope.params,

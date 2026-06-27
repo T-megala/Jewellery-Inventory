@@ -1275,51 +1275,93 @@ function CounterDisplayAccuracyPanel({ counterAccuracy, loading }) {
   )
 }
 
-function ErpPhysicalBarChart({ data, compact = false }) {
-  if (!data.length) {
+function ErpPhysicalBarChart({ data, compact = false, singleBranch = false }) {
+  const visibleData = data.filter((row) => row.erp > 0 || row.physical > 0)
+
+  if (!visibleData.length) {
     return <p className="analytics-empty">No branch comparison data available.</p>
   }
 
-  const maxValue = Math.max(...data.flatMap((row) => [row.erp, row.physical]), 1)
-  const chartHeight = compact
-    ? 148
-    : Math.min(188, Math.max(132, 88 + data.length * 32))
+  const actualValues = visibleData.flatMap((row) => [row.erp, row.physical])
+  const actualMax = Math.max(...actualValues, 1)
+  const positiveValues = actualValues.filter((value) => value > 0)
+  const actualMin = positiveValues.length ? Math.min(...positiveValues) : 1
+  const useLogScale = !singleBranch
+    && visibleData.length > 1
+    && actualMax / Math.max(actualMin, 1) > 50
+
+  const chartRows = visibleData.map((row) => ({
+    ...row,
+    axisLabel: singleBranch ? row.name : row.shortName,
+    erpChart: useLogScale ? Math.max(row.erp, 1) : row.erp,
+    physicalChart: useLogScale ? Math.max(row.physical, 1) : row.physical,
+  }))
+
+  const maxValue = useLogScale
+    ? Math.max(...chartRows.flatMap((row) => [row.erpChart, row.physicalChart]), 1)
+    : Math.max(actualMax, 1)
+
+  const chartHeight = singleBranch
+    ? 168
+    : compact
+      ? 148
+      : Math.min(188, Math.max(132, 88 + chartRows.length * 32))
 
   return (
-    <div className="erp-physical-chart">
+    <div className={`erp-physical-chart${singleBranch ? ' erp-physical-chart--single' : ''}`}>
       <ResponsiveContainer width="100%" height={chartHeight}>
         <BarChart
-          data={data}
-          margin={{ top: 8, right: 10, left: 0, bottom: 0 }}
-          barGap={4}
-          barCategoryGap="20%"
+          data={chartRows}
+          margin={{ top: 8, right: 12, left: 4, bottom: singleBranch ? 8 : 0 }}
+          barGap={singleBranch ? 10 : 4}
+          barCategoryGap={singleBranch ? '32%' : '20%'}
         >
           <CartesianGrid stroke="#ebe4d8" vertical={false} />
           <XAxis
-            dataKey="shortName"
+            dataKey="axisLabel"
             tick={{ fontSize: 11, fill: '#9a8b78', fontWeight: 500 }}
             axisLine={{ stroke: '#e0d8cc' }}
             tickLine={false}
-            height={28}
+            height={singleBranch ? 36 : 28}
+            interval={0}
           />
           <YAxis
-            domain={[0, maxValue]}
+            scale={useLogScale ? 'log' : 'linear'}
+            domain={useLogScale ? [1, maxValue] : [0, Math.ceil(maxValue * 1.12)]}
+            allowDataOverflow={useLogScale}
             tick={{ fontSize: 11, fill: '#9a8b78' }}
             axisLine={{ stroke: '#e0d8cc' }}
             tickLine={false}
-            width={42}
+            width={46}
             tickFormatter={formatHeatmapCount}
           />
           <Tooltip
-            formatter={(value, name) => [formatCount(value), name]}
+            formatter={(value, name, item) => {
+              const actual = name === 'ERP'
+                ? item.payload.erp
+                : item.payload.physical
+              return [formatCount(actual), name]
+            }}
             contentStyle={{
               borderRadius: 10,
               border: '1px solid #ebe3d6',
               fontSize: 12,
             }}
           />
-          <Bar dataKey="erp" name="ERP" fill="#8ecae6" radius={[4, 4, 0, 0]} maxBarSize={26} />
-          <Bar dataKey="physical" name="Physical" fill="#21a371" radius={[4, 4, 0, 0]} maxBarSize={26} />
+          <Bar
+            dataKey="erpChart"
+            name="ERP"
+            fill="#8ecae6"
+            radius={[4, 4, 0, 0]}
+            maxBarSize={singleBranch ? 42 : 26}
+          />
+          <Bar
+            dataKey="physicalChart"
+            name="Physical"
+            fill="#21a371"
+            radius={[4, 4, 0, 0]}
+            maxBarSize={singleBranch ? 42 : 26}
+          />
         </BarChart>
       </ResponsiveContainer>
       <div className="erp-physical-chart__legend" aria-hidden="true">
@@ -1330,13 +1372,18 @@ function ErpPhysicalBarChart({ data, compact = false }) {
   )
 }
 
-function ErpPhysicalSummary({ erpVsPhysical }) {
+function ErpPhysicalSummary({ erpVsPhysical, branchName = null }) {
   const erp = Number(erpVsPhysical?.erp ?? 0)
   const physical = Number(erpVsPhysical?.physical ?? 0)
   const matched = Number(erpVsPhysical?.matched ?? 0)
 
   return (
     <div className="insight-erp-summary" aria-label="ERP vs physical summary">
+      {branchName ? (
+        <p className="insight-erp-summary__scope">{branchName}</p>
+      ) : (
+        <p className="insight-erp-summary__scope">All branches</p>
+      )}
       <div className="insight-erp-summary__item">
         <span className="insight-erp-summary__label">ERP items</span>
         <strong className="insight-erp-summary__value dashboard-num">{formatCount(erp)}</strong>
@@ -1356,16 +1403,61 @@ function ErpPhysicalSummary({ erpVsPhysical }) {
 function MultiBranchComparisonCard({ data, loading, error }) {
   const branches = data?.branches ?? []
   const erpVsPhysical = data?.erpVsPhysical
-  const chartData = useMemo(
-    () => branches.map((branch, index) => ({
-      name: branch.name,
-      shortName: shortBranchLabel(branch.name),
-      erp: Number(branch.totalExpected ?? branch.itemCount ?? 0),
-      physical: Number(branch.itemsScanned ?? 0),
-      color: BRANCH_CHART_COLORS[index % BRANCH_CHART_COLORS.length],
-    })),
-    [branches],
+  const [selectedBranchId, setSelectedBranchId] = useState(null)
+
+  useEffect(() => {
+    if (selectedBranchId == null) {
+      return
+    }
+
+    const stillExists = branches.some((branch) => branch.id === selectedBranchId)
+    if (!stillExists) {
+      setSelectedBranchId(null)
+    }
+  }, [branches, selectedBranchId])
+
+  const selectedBranch = useMemo(
+    () => branches.find((branch) => branch.id === selectedBranchId) ?? null,
+    [branches, selectedBranchId],
   )
+
+  const displaySummary = useMemo(() => {
+    if (!selectedBranch) {
+      return erpVsPhysical
+    }
+
+    const erp = Number(selectedBranch.totalExpected ?? selectedBranch.itemCount ?? 0)
+    const physical = Number(selectedBranch.itemsScanned ?? 0)
+    const matched = Number(selectedBranch.foundCount ?? 0)
+
+    return {
+      erp,
+      physical,
+      matched,
+      difference: erp - physical,
+      missing: Number(selectedBranch.missingCount ?? 0),
+      new: Number(selectedBranch.newCount ?? 0),
+    }
+  }, [selectedBranch, erpVsPhysical])
+
+  const chartData = useMemo(
+    () => {
+      const source = selectedBranch ? [selectedBranch] : branches
+
+      return source.map((branch, index) => ({
+        name: branch.name,
+        shortName: shortBranchLabel(branch.name),
+        erp: Number(branch.totalExpected ?? branch.itemCount ?? 0),
+        physical: Number(branch.itemsScanned ?? 0),
+        color: BRANCH_CHART_COLORS[index % BRANCH_CHART_COLORS.length],
+      }))
+    },
+    [branches, selectedBranch],
+  )
+
+  const toggleBranchSelection = (branchId) => {
+    setSelectedBranchId((current) => (current === branchId ? null : branchId))
+  }
 
   return (
     <article className="analytics-tile insight-card insight-card--branch">
@@ -1392,18 +1484,25 @@ function MultiBranchComparisonCard({ data, loading, error }) {
                     const itemCount = Number(branch.itemCount ?? branch.totalExpected ?? 0)
 
                     return (
-                      <li key={branch.id ?? branch.name} className="branch-compare-list__row">
-                        <span className="branch-compare-list__dot" style={{ background: color }} aria-hidden="true" />
-                        <span className="branch-compare-list__name" title={branch.name}>{branch.name}</span>
-                        <span className="branch-compare-list__items dashboard-num">
-                          {formatCount(itemCount)}
-                          {' '}
-                          items
-                        </span>
-                        <span className={`branch-compare-list__accuracy dashboard-num branch-compare-list__accuracy--${tone}`}>
-                          {formatAccuracyPercent(branch.accuracyPercent)}
-                          %
-                        </span>
+                      <li key={branch.id ?? branch.name}>
+                        <button
+                          type="button"
+                          className={`branch-compare-list__row${selectedBranchId === branch.id ? ' branch-compare-list__row--selected' : ''}`}
+                          onClick={() => toggleBranchSelection(branch.id)}
+                          aria-pressed={selectedBranchId === branch.id}
+                        >
+                          <span className="branch-compare-list__dot" style={{ background: color }} aria-hidden="true" />
+                          <span className="branch-compare-list__name" title={branch.name}>{branch.name}</span>
+                          <span className="branch-compare-list__items dashboard-num">
+                            {formatCount(itemCount)}
+                            {' '}
+                            items
+                          </span>
+                          <span className={`branch-compare-list__accuracy dashboard-num branch-compare-list__accuracy--${tone}`}>
+                            {formatAccuracyPercent(branch.accuracyPercent)}
+                            %
+                          </span>
+                        </button>
                       </li>
                     )
                   })}
@@ -1413,8 +1512,15 @@ function MultiBranchComparisonCard({ data, loading, error }) {
 
             <section className="insight-card__section insight-card__section--chart">
               <p className="insight-card__eyebrow">ERP vs. physical item count</p>
-              <ErpPhysicalSummary erpVsPhysical={erpVsPhysical} />
-              <ErpPhysicalBarChart data={chartData} compact />
+              <ErpPhysicalSummary
+                erpVsPhysical={displaySummary}
+                branchName={selectedBranch?.name ?? null}
+              />
+              <ErpPhysicalBarChart
+                data={chartData}
+                compact
+                singleBranch={Boolean(selectedBranch)}
+              />
             </section>
           </>
         )}
@@ -1547,6 +1653,7 @@ function DayWiseSalesCard({
   error,
   data,
   totalSoldPieces,
+  branchLabel = 'All branches',
 }) {
   return (
     <article className="analytics-tile day-sales-card">
@@ -1554,6 +1661,7 @@ function DayWiseSalesCard({
         <DashboardTitleRow>
           <h3 className="day-sales-card__title">Day-wise sales — pieces sold</h3>
         </DashboardTitleRow>
+        <p className="day-sales-card__scope">{branchLabel}</p>
         <div className="day-sales-card__toolbar">
           <div className="day-sales-pills">
             {DAY_SALES_COUNTERS.map((option) => (
@@ -1978,7 +2086,12 @@ function DashboardSkeleton() {
 }
 
 export default function Dashboard() {
-  const { operationalValue } = useBranchScope()
+  const {
+    operationalValue,
+    operationalBranchId,
+    isAllBranches,
+    sessionBranches,
+  } = useBranchScope()
   const user = getUser()
   const [summary, setSummary] = useState(null)
   const [stocktake, setStocktake] = useState(EMPTY_STOCKTAKE)
@@ -1992,6 +2105,15 @@ export default function Dashboard() {
   const [dayWiseSales, setDayWiseSales] = useState({ data: [], totalSoldPieces: 0 })
   const [dayWiseLoading, setDayWiseLoading] = useState(true)
   const [dayWiseError, setDayWiseError] = useState('')
+
+  const dayWiseBranchLabel = useMemo(() => {
+    if (isAllBranches) {
+      return 'All branches'
+    }
+
+    const branch = sessionBranches.find((item) => item.id === operationalBranchId)
+    return branch?.name ?? 'Selected branch'
+  }, [isAllBranches, operationalBranchId, sessionBranches])
   const [importPeriod, setImportPeriod] = useState('week')
   const [importCounter, setImportCounter] = useState('ALL')
   const [dailyImports, setDailyImports] = useState({ data: [] })
@@ -2158,7 +2280,7 @@ export default function Dashboard() {
 
     loadBranchComparison()
     return () => { cancelled = true }
-  }, [operationalValue])
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -2441,6 +2563,7 @@ export default function Dashboard() {
                     error={dayWiseError}
                     data={dayWiseSales.data}
                     totalSoldPieces={dayWiseSales.totalSoldPieces}
+                    branchLabel={dayWiseBranchLabel}
                   />
                 )}
 

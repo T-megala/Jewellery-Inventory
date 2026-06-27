@@ -145,11 +145,57 @@ const insertPieceReductionAudits = async (
   return Number(result.affectedRows ?? 0);
 };
 
+const resolveSameBranchPreviousBatchId = async (
+  connection,
+  batchId,
+  previousBatchId,
+) => {
+  if (!previousBatchId) {
+    return null;
+  }
+
+  const [[currentRows], [previousRows]] = await Promise.all([
+    connection.execute(
+      `SELECT branch_id FROM product_upload_batches WHERE id = ?`,
+      [batchId],
+    ),
+    connection.execute(
+      `SELECT branch_id FROM product_upload_batches WHERE id = ?`,
+      [previousBatchId],
+    ),
+  ]);
+
+  const currentBranchId = Number(currentRows[0]?.branch_id ?? 0);
+  const previousBranchId = Number(previousRows[0]?.branch_id ?? 0);
+
+  if (
+    !currentBranchId ||
+    !previousBranchId ||
+    currentBranchId !== previousBranchId
+  ) {
+    logAudit("previous batch ignored: different branch", {
+      batchId,
+      previousBatchId,
+      currentBranchId,
+      previousBranchId,
+    });
+    return null;
+  }
+
+  return Number(previousBatchId);
+};
+
 export const rebuildBatchSalesAudit = async (
   connection,
   batchId,
   previousBatchId,
 ) => {
+  previousBatchId = await resolveSameBranchPreviousBatchId(
+    connection,
+    batchId,
+    previousBatchId,
+  );
+
   if (!previousBatchId) {
     await deleteBatchSalesAudit(connection, batchId);
     return {

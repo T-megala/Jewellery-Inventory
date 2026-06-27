@@ -788,11 +788,11 @@
 }
 
 .insight-card--branch .branch-compare-list__row {
-  flex: 1;
+  flex: 0 0 auto;
   align-items: center;
   min-height: 32px;
-  max-height: 46px;
-  padding: 6px 0;
+  max-height: none;
+  padding: 8px 10px;
 }
 
 .insight-card--branch .branch-compare-list::-webkit-scrollbar {
@@ -849,6 +849,14 @@
   gap: 8px;
 }
 
+.insight-erp-summary__scope {
+  grid-column: 1 / -1;
+  margin: 0 0 2px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
 .insight-erp-summary__item {
   display: flex;
   flex-direction: column;
@@ -898,6 +906,26 @@
   grid-template-columns: 10px minmax(0, 1.3fr) auto auto;
   align-items: center;
   gap: 10px 12px;
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.branch-compare-list__row:hover {
+  background: #faf6f1;
+}
+
+.branch-compare-list__row--selected {
+  background: #f6f0e8;
+  box-shadow: inset 0 0 0 1px #e0d5c7;
 }
 
 .branch-compare-list__dot {
@@ -937,6 +965,11 @@
 
 .erp-physical-chart {
   min-height: 0;
+  width: 100%;
+}
+
+.erp-physical-chart--single .recharts-cartesian-axis-tick-value {
+  font-size: 12px;
 }
 
 .erp-physical-chart__legend {
@@ -1807,6 +1840,13 @@
   font-weight: 700;
   color: var(--color-text);
   line-height: 1.35;
+}
+
+.day-sales-card__scope {
+  margin: -4px 0 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
 }
 
 .day-sales-card__toolbar {
@@ -3070,7 +3110,11 @@
   }
 
   .insight-erp-summary {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .insight-erp-summary__scope {
+    grid-column: 1 / -1;
   }
 
   .branch-compare-list__row {
