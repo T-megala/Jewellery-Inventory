@@ -1,6 +1,4 @@
 import ApiError from "./ApiError.js";
-import { PERMISSIONS } from "../constants/permissions.js";
-import branchService from "../services/branchService.js";
 import { getBranchIdsForUser } from "../services/userBranchService.js";
 import { getRequestParam } from "./requestParams.js";
 
@@ -74,22 +72,12 @@ const getAssignedBranchIds = async (req) => {
 
 /** Branch scope from user_branches (DB), or optional single-branch filter from query/header. */
 export const resolveRequestBranchIds = async (req) => {
-  const permissions = Array.isArray(req.user?.permissions)
-    ? req.user.permissions
-    : [];
-  const canViewAll = permissions.includes(PERMISSIONS.BRANCHES_VIEW_ALL);
-
   const requestedBranchId =
     parsePositiveInt(req.branchId) ??
     parsePositiveInt(getRequestParam(req, "branchId")) ??
     parsePositiveInt(req.headers?.["x-branch-id"]);
 
-  let sessionBranchIds = await getAssignedBranchIds(req);
-
-  if (sessionBranchIds.length === 0 && canViewAll) {
-    const allBranches = await branchService.getAllBranches();
-    sessionBranchIds = allBranches.map((branch) => branch.id);
-  }
+  const sessionBranchIds = await getAssignedBranchIds(req);
 
   if (sessionBranchIds.length === 0) {
     throw new ApiError(403, "Branch is not assigned to this user");
@@ -108,17 +96,7 @@ export const resolveRequestBranchIds = async (req) => {
 
 /** All assigned branches for multi-branch comparison (ignores branchId filter). */
 export const resolveComparisonBranchIds = async (req) => {
-  const permissions = Array.isArray(req.user?.permissions)
-    ? req.user.permissions
-    : [];
-  const canViewAll = permissions.includes(PERMISSIONS.BRANCHES_VIEW_ALL);
-
-  let sessionBranchIds = await getAssignedBranchIds(req);
-
-  if (sessionBranchIds.length === 0 && canViewAll) {
-    const allBranches = await branchService.getAllBranches();
-    sessionBranchIds = allBranches.map((branch) => branch.id);
-  }
+  const sessionBranchIds = await getAssignedBranchIds(req);
 
   if (sessionBranchIds.length === 0) {
     throw new ApiError(403, "Branch is not assigned to this user");

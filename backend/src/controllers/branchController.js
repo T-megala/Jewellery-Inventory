@@ -1,5 +1,4 @@
 import ApiError from "../utils/ApiError.js";
-import { PERMISSIONS } from "../constants/permissions.js";
 import branchService from "../services/branchService.js";
 import userBranchService from "../services/userBranchService.js";
 
@@ -21,21 +20,13 @@ const resolveListedBranches = async (req) => {
     return [];
   }
 
-  const permissions = Array.isArray(req.user?.permissions)
-    ? req.user.permissions
-    : [];
-  const canViewAll = permissions.includes(PERMISSIONS.BRANCHES_VIEW_ALL);
   const assignedIds = await userBranchService.getBranchIdsForUser(userId);
 
-  if (assignedIds.length > 0) {
-    return branchService.getBranchesByIds(assignedIds);
+  if (assignedIds.length === 0) {
+    return [];
   }
 
-  if (canViewAll) {
-    return branchService.getAllBranches();
-  }
-
-  return [];
+  return branchService.getBranchesByIds(assignedIds);
 };
 
 export const listBranches = async (req, res) => {

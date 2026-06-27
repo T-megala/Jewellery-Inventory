@@ -45,7 +45,6 @@ const PERMISSION_MODULE_ORDER = [
 
 const PERMISSION_ACTION_ORDER = [
   'view',
-  'view_all',
   'import',
   'upload',
   'add',
@@ -66,7 +65,6 @@ const ACTION_LABELS = {
   report: 'Report',
   export: 'Export',
   manage: 'Manage',
-  view_all: 'View all',
 }
 
 function titleCase(value) {

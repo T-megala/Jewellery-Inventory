@@ -8,7 +8,7 @@ export const MASTER_GROUPS = [
         label: "Branches",
         description: "Showroom locations and branch setup",
         icon: "branches",
-        permissions: ["branches.view", "branches.manage", "branches.view_all"],
+        permissions: ["branches.view", "branches.manage"],
       },
     ],
   },

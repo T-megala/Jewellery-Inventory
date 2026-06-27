@@ -8,13 +8,13 @@ const router = express.Router();
 
 router.get(
   "/branches",
-  authorize(PERMISSIONS.BRANCHES_VIEW, PERMISSIONS.BRANCHES_VIEW_ALL),
+  authorize(PERMISSIONS.BRANCHES_VIEW),
   asyncHandler(branchController.listBranches),
 );
 
 router.get(
   "/branches/:id",
-  authorize(PERMISSIONS.BRANCHES_VIEW, PERMISSIONS.BRANCHES_VIEW_ALL),
+  authorize(PERMISSIONS.BRANCHES_VIEW),
   asyncHandler(branchController.getBranch),
 );
 router.post(

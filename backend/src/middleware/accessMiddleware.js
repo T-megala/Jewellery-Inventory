@@ -1,8 +1,5 @@
 import ApiError from "../utils/ApiError.js";
-import {
-  PERMISSIONS,
-  BRANCH_SCOPE_EXEMPT_PATHS,
-} from "../constants/permissions.js";
+import { BRANCH_SCOPE_EXEMPT_PATHS } from "../constants/permissions.js";
 import { getBranchIdsForUser } from "../services/userBranchService.js";
 
 const parsePositiveInt = (value) => {
@@ -28,10 +25,6 @@ export const resolveBranchScope = async (req, res, next) => {
     return next();
   }
 
-  const permissions = Array.isArray(req.user?.permissions)
-    ? req.user.permissions
-    : [];
-  const canViewAll = permissions.includes(PERMISSIONS.BRANCHES_VIEW_ALL);
   const assignedBranchIds = await getAssignedBranchIds(req);
 
   const requestedBranchId = parsePositiveInt(
@@ -39,7 +32,7 @@ export const resolveBranchScope = async (req, res, next) => {
   );
 
   if (requestedBranchId) {
-    if (!canViewAll && !assignedBranchIds.includes(requestedBranchId)) {
+    if (!assignedBranchIds.includes(requestedBranchId)) {
       return next(new ApiError(403, "Branch is not assigned to this user"));
     }
 

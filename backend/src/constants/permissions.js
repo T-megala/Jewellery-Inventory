@@ -14,7 +14,6 @@ export const PERMISSIONS = {
   BRANCHES_ADD: "branches.add",
   BRANCHES_UPDATE: "branches.update",
   BRANCHES_DELETE: "branches.delete",
-  BRANCHES_VIEW_ALL: "branches.view_all",
   ROLES_VIEW: "roles.view",
   ROLES_ADD: "roles.add",
   ROLES_UPDATE: "roles.update",
