@@ -3,6 +3,7 @@ import {
   PERMISSIONS,
   BRANCH_SCOPE_EXEMPT_PATHS,
 } from "../constants/permissions.js";
+import { getBranchIdsForUser } from "../services/userBranchService.js";
 
 const parsePositiveInt = (value) => {
   const parsed = Number.parseInt(String(value), 10);
@@ -12,17 +13,14 @@ const parsePositiveInt = (value) => {
 const isExemptPath = (path) =>
   BRANCH_SCOPE_EXEMPT_PATHS.some((prefix) => path.startsWith(prefix));
 
-const getMappedBranchIds = (req) => {
-  const fromToken = Array.isArray(req.user?.branchIds)
-    ? req.user.branchIds.map((id) => Number(id)).filter((id) => id > 0)
-    : [];
+const getAssignedBranchIds = async (req) => {
+  const userId = req.user?.id ?? parsePositiveInt(req.user?.sub);
 
-  if (fromToken.length > 0) {
-    return fromToken;
+  if (!userId) {
+    return [];
   }
 
-  const single = parsePositiveInt(req.user?.branchId);
-  return single ? [single] : [];
+  return getBranchIdsForUser(userId);
 };
 
 export const resolveBranchScope = async (req, res, next) => {
@@ -34,14 +32,14 @@ export const resolveBranchScope = async (req, res, next) => {
     ? req.user.permissions
     : [];
   const canViewAll = permissions.includes(PERMISSIONS.BRANCHES_VIEW_ALL);
-  const mappedBranchIds = getMappedBranchIds(req);
+  const assignedBranchIds = await getAssignedBranchIds(req);
 
   const requestedBranchId = parsePositiveInt(
     req.query?.branchId ?? req.headers["x-branch-id"],
   );
 
   if (requestedBranchId) {
-    if (!canViewAll && !mappedBranchIds.includes(requestedBranchId)) {
+    if (!canViewAll && !assignedBranchIds.includes(requestedBranchId)) {
       return next(new ApiError(403, "Branch is not assigned to this user"));
     }
 

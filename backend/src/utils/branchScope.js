@@ -62,40 +62,17 @@ export const buildBranchSqlFilter = (
     : { clause: `AND ${column} IN (${placeholders})`, params: ids };
 };
 
-const getSessionBranchIds = (req) => {
-  const fromToken = Array.isArray(req.user?.branchIds)
-    ? req.user.branchIds.map((id) => Number(id)).filter((id) => id > 0)
-    : [];
-
-  if (fromToken.length > 0) {
-    return fromToken;
-  }
-
-  const single = parsePositiveInt(req.user?.branchId);
-  return single ? [single] : [];
-};
-
 const getAssignedBranchIds = async (req) => {
-  if (req.user?.id) {
-    const fromDb = await getBranchIdsForUser(req.user.id);
-    if (fromDb.length > 0) {
-      return fromDb;
-    }
+  const userId = req.user?.id ?? parsePositiveInt(req.user?.sub);
+
+  if (!userId) {
+    return [];
   }
 
-  const fromToken = Array.isArray(req.user?.branchIds)
-    ? req.user.branchIds.map((id) => Number(id)).filter((id) => id > 0)
-    : [];
-
-  if (fromToken.length > 0) {
-    return fromToken;
-  }
-
-  const single = parsePositiveInt(req.user?.branchId);
-  return single ? [single] : [];
+  return getBranchIdsForUser(userId);
 };
 
-/** Branch scope from token branchIds, or optional single-branch filter from query/header. */
+/** Branch scope from user_branches (DB), or optional single-branch filter from query/header. */
 export const resolveRequestBranchIds = async (req) => {
   const permissions = Array.isArray(req.user?.permissions)
     ? req.user.permissions
@@ -107,12 +84,7 @@ export const resolveRequestBranchIds = async (req) => {
     parsePositiveInt(getRequestParam(req, "branchId")) ??
     parsePositiveInt(req.headers?.["x-branch-id"]);
 
-  let sessionBranchIds = getSessionBranchIds(req);
-  const assignedBranchIds = await getAssignedBranchIds(req);
-
-  if (sessionBranchIds.length === 0) {
-    sessionBranchIds = assignedBranchIds;
-  }
+  let sessionBranchIds = await getAssignedBranchIds(req);
 
   if (sessionBranchIds.length === 0 && canViewAll) {
     const allBranches = await branchService.getAllBranches();
@@ -124,10 +96,6 @@ export const resolveRequestBranchIds = async (req) => {
   }
 
   if (requestedBranchId) {
-    if (!canViewAll && !assignedBranchIds.includes(requestedBranchId)) {
-      throw new ApiError(403, "Branch is not assigned to this user");
-    }
-
     if (!sessionBranchIds.includes(requestedBranchId)) {
       throw new ApiError(403, "Branch is not assigned to this user");
     }
@@ -158,7 +126,7 @@ export const resolveAndroidBranchIds = async (req) => {
   return [branchId];
 };
 
-/** Dropdown APIs: token session scope, or explicit branchId when unauthenticated. */
+/** Dropdown APIs: DB branch scope, or explicit branchId when unauthenticated. */
 export const resolveDropdownBranchIds = async (req) => {
   if (req.user?.id || req.user?.sub) {
     return resolveRequestBranchIds(req);
