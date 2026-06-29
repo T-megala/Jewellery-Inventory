@@ -1,7 +1,7 @@
 import './TablePagination.css'
 
 export const DEFAULT_PAGE_SIZE = 20
-export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
+export const PAGE_SIZE_OPTIONS = [20, 50, 100]
 
 function buildPageItems(currentPage, totalPages, siblingCount = 1) {
   const total = Math.max(totalPages, 1)

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import TablePagination, { DEFAULT_PAGE_SIZE } from '../components/TablePagination.jsx'
 import { useBranchScope } from '../hooks/useBranchScope.js'
-import { getUser, hasPermission } from '../services/auth.js'
+import { getUser, hasPermission, isAuthenticated, isLogoutInProgress } from '../services/auth.js'
 import { fetchProductList } from '../services/stock.js'
 import './Module.css'
 import './Stock.css'
@@ -72,7 +72,17 @@ export default function Stock() {
     loadStock(1, search, nextSize)
   }
 
+  if (isLogoutInProgress()) {
+    return null
+  }
+
+  if (!user || !isAuthenticated()) {
+    return null
+  }
+
   if (!canViewStock) {
+    if (isLogoutInProgress()) return null
+
     return (
       <div className="stock-page">
         <div className="module-access-denied">

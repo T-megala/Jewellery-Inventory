@@ -395,11 +395,13 @@ export function getUserPermissions(user = getUser()) {
 }
 
 export function hasPermission(permission, user = getUser()) {
+  if (isLogoutInProgress()) return true
   return getUserPermissions(user).includes(permission)
 }
 
 export function hasAnyPermission(permissions = [], user = getUser()) {
   if (!permissions.length) return true
+  if (isLogoutInProgress()) return true
   const granted = getUserPermissions(user)
   if (!granted.length) return true
   return permissions.some((permission) => granted.includes(permission))
@@ -410,29 +412,105 @@ export function isAuthenticated() {
 }
 
 export function isSessionValid() {
-  if (!isAuthenticated()) return false
-  return true
+  return isAuthenticated() && !!getUser()
 }
 
-export function clearAuthSession() {
+export function clearAuthSession({ notify = true } = {}) {
   authStorage.removeItem(TOKEN_KEY)
   authStorage.removeItem(REFRESH_TOKEN_KEY)
   authStorage.removeItem(USER_KEY)
   authStorage.removeItem(SESSION_BRANCHES_KEY)
   clearLegacyAuthStorage()
   clearOperationalBranch()
-  dispatchBranchChange()
-  dispatchAuthSessionChange()
-}
-
-export function logout() {
-  clearAuthSession()
+  if (notify) {
+    dispatchBranchChange()
+    dispatchAuthSessionChange()
+  }
 }
 
 const LOGIN_PATH = '/login'
+const LOGGING_OUT_KEY = 'auth:logging-out'
+const LOGOUT_OVERLAY_ID = 'auth-logout-overlay'
+const LOGOUT_HTML_CLASS = 'auth-logging-out'
+
+let logoutInProgress = false
+
+function showLogoutOverlay() {
+  if (typeof document === 'undefined') return
+  if (document.getElementById(LOGOUT_OVERLAY_ID)) return
+
+  const overlay = document.createElement('div')
+  overlay.id = LOGOUT_OVERLAY_ID
+  overlay.setAttribute('aria-hidden', 'true')
+  overlay.style.cssText = [
+    'position:fixed',
+    'inset:0',
+    'z-index:2147483647',
+    'background:#f8f5f0',
+    'margin:0',
+    'padding:0',
+  ].join(';')
+  document.body.appendChild(overlay)
+}
+
+function hideLogoutOverlay() {
+  if (typeof document === 'undefined') return
+  document.getElementById(LOGOUT_OVERLAY_ID)?.remove()
+}
+
+export function beginLogout() {
+  logoutInProgress = true
+  try {
+    sessionStorage.setItem(LOGGING_OUT_KEY, '1')
+  } catch {
+    // ignore storage errors
+  }
+  if (typeof document !== 'undefined') {
+    document.documentElement.classList.add(LOGOUT_HTML_CLASS)
+    showLogoutOverlay()
+  }
+}
+
+export function endLogoutTransition() {
+  logoutInProgress = false
+  try {
+    sessionStorage.removeItem(LOGGING_OUT_KEY)
+  } catch {
+    // ignore storage errors
+  }
+  if (typeof document !== 'undefined') {
+    document.documentElement.classList.remove(LOGOUT_HTML_CLASS)
+    hideLogoutOverlay()
+  }
+}
+
+export function isLogoutInProgress() {
+  if (logoutInProgress) return true
+  try {
+    return sessionStorage.getItem(LOGGING_OUT_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function goToLoginPage() {
+  if (typeof document !== 'undefined') {
+    document.documentElement.classList.add(LOGOUT_HTML_CLASS)
+    showLogoutOverlay()
+  }
+  window.location.replace(LOGIN_PATH)
+}
+
+export function performLogout() {
+  goToLoginPage()
+}
 
 export function redirectToLogin() {
-  window.location.replace(LOGIN_PATH)
+  goToLoginPage()
+}
+
+export function logout() {
+  goToLoginPage()
 }
 
 /** Reload pages restored from back/forward cache so route loaders re-check auth. */

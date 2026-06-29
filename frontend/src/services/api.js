@@ -1,7 +1,6 @@
 import { API_BASE, apiUrl } from '../config/apiConfig.js';
 import { createUserError } from '../utils/userErrorMessage.js';
 import {
-  clearAuthSession,
   getOperationalBranchId,
   getRefreshToken,
   getToken,
@@ -121,17 +120,15 @@ function buildJsonHeaders(path, options = {}) {
 
 async function handleUnauthorizedRetry(url, options, retried) {
   if (retried || !getRefreshToken()) {
-    clearAuthSession();
-    redirectToLogin();
-    throw new Error('Session expired. Please log in again.');
+    redirectToLogin()
+    throw new Error('Session expired. Please log in again.')
   }
 
   try {
-    await refreshAccessToken();
+    await refreshAccessToken()
   } catch {
-    clearAuthSession();
-    redirectToLogin();
-    throw new Error('Session expired. Please log in again.');
+    redirectToLogin()
+    throw new Error('Session expired. Please log in again.')
   }
 
   const retryHeaders = { ...options.headers };

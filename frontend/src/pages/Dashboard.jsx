@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useBranchScope } from '../hooks/useBranchScope.js'
-import { getUser, hasPermission } from '../services/auth.js'
+import { getUser, hasPermission, isAuthenticated, isLogoutInProgress } from '../services/auth.js'
 import {
   Area,
   Bar,
@@ -1581,35 +1581,35 @@ function StockMovementCard({ data, loading, error }) {
                   ))}
                 </ul>
               )}
-            </section>
 
-            {showMovementSummary && (
-              <div className="movement-summary-strip" aria-label="Stock movement summary">
-                <div className="movement-summary-strip__item movement-summary-strip__item--slow">
-                  <span className="movement-summary-strip__label">Slow inventory</span>
-                  <strong className="movement-summary-strip__value dashboard-num">
-                    {formatCount(slowTotalPieces)}
-                    {' '}
-                    pcs
-                  </strong>
+              {showMovementSummary && (
+                <div className="movement-summary-strip" aria-label="Stock movement summary">
+                  <div className="movement-summary-strip__item movement-summary-strip__item--slow">
+                    <span className="movement-summary-strip__label">Slow inventory</span>
+                    <strong className="movement-summary-strip__value dashboard-num">
+                      {formatCount(slowTotalPieces)}
+                      {' '}
+                      pcs
+                    </strong>
+                  </div>
+                  <div className="movement-summary-strip__item movement-summary-strip__item--fast">
+                    <span className="movement-summary-strip__label">
+                      Restocked (last
+                      {' '}
+                      {fastDays}
+                      {' '}
+                      days)
+                    </span>
+                    <strong className="movement-summary-strip__value dashboard-num">
+                      +
+                      {formatCount(fastTotalRestocked)}
+                      {' '}
+                      pcs
+                    </strong>
+                  </div>
                 </div>
-                <div className="movement-summary-strip__item movement-summary-strip__item--fast">
-                  <span className="movement-summary-strip__label">
-                    Restocked (last
-                    {' '}
-                    {fastDays}
-                    {' '}
-                    days)
-                  </span>
-                  <strong className="movement-summary-strip__value dashboard-num">
-                    +
-                    {formatCount(fastTotalRestocked)}
-                    {' '}
-                    pcs
-                  </strong>
-                </div>
-              </div>
-            )}
+              )}
+            </section>
 
             <section className="insight-card__section insight-card__section--chart">
               <p className="insight-card__eyebrow">
@@ -2394,6 +2394,10 @@ export default function Dashboard() {
     [byCounter],
   )
 
+  if (isLogoutInProgress()) {
+    return null
+  }
+
   if (loading) {
     return (
       <div className="dashboard">
@@ -2414,7 +2418,13 @@ export default function Dashboard() {
     )
   }
 
+  if (!user || !isAuthenticated()) {
+    return null
+  }
+
   if (!canViewDashboard) {
+    if (isLogoutInProgress()) return null
+
     return (
       <div className="dashboard">
         <div className="dashboard-empty">

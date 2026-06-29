@@ -13,6 +13,20 @@
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   </head>
   <body>
+    <script>
+      try {
+        if (sessionStorage.getItem('auth:logging-out') === '1' && !window.location.pathname.endsWith('/login')) {
+          document.documentElement.classList.add('auth-logging-out');
+          var overlay = document.createElement('div');
+          overlay.id = 'auth-logout-overlay';
+          overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#f8f5f0';
+          document.addEventListener('DOMContentLoaded', function () {
+            document.body.appendChild(overlay);
+            window.location.href = '/login';
+          });
+        }
+      } catch (e) {}
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

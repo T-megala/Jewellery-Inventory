@@ -6,7 +6,7 @@ import {
 } from '../services/reports.js'
 import TablePagination, { DEFAULT_PAGE_SIZE } from '../components/TablePagination.jsx'
 import { useBranchScope } from '../hooks/useBranchScope.js'
-import { getUser, hasPermission } from '../services/auth.js'
+import { getUser, hasPermission, isAuthenticated, isLogoutInProgress } from '../services/auth.js'
 import './Module.css'
 import './Reports.css'
 
@@ -340,7 +340,7 @@ export default function Reports() {
   }
 
   async function handleExport(exportType, label) {
-    if (!hasSearched) return
+    if (!hasSearched || rows.length === 0) return
 
     setExporting(true)
     setError('')
@@ -358,7 +358,17 @@ export default function Reports() {
     await handleExport('excel', 'Excel')
   }
 
+  if (isLogoutInProgress()) {
+    return null
+  }
+
+  if (!user || !isAuthenticated()) {
+    return null
+  }
+
   if (!canViewReports) {
+    if (isLogoutInProgress()) return null
+
     return (
       <div className="reports-page">
         <div className="module-access-denied">
@@ -499,7 +509,8 @@ export default function Reports() {
                   type="button"
                   className={`report-btn report-btn--export${exporting ? ' report-btn--loading' : ''}`}
                   onClick={handleExportExcel}
-                  disabled={exporting || loadingReport}
+                  disabled={exporting || loadingReport || rows.length === 0}
+                  title={rows.length === 0 ? 'No data to export' : undefined}
                 >
                   {exporting && <span className="report-btn__spin report-btn__spin--export" aria-hidden="true" />}
                   Excel

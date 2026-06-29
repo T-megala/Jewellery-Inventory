@@ -77,10 +77,6 @@
   box-shadow: 0 0 0 3px rgba(184, 134, 11, 0.1);
 }
 
-.stock-search__field input::-webkit-search-cancel-button {
-  display: none;
-}
-
 .stock-search__clear {
   position: absolute;
   right: 8px;

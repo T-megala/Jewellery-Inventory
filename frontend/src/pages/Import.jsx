@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useBranchScope } from '../hooks/useBranchScope.js'
-import { getUser, hasPermission } from '../services/auth.js'
+import { getUser, hasPermission, isAuthenticated, isLogoutInProgress } from '../services/auth.js'
 import { uploadStockExcel } from '../services/import.js'
 import './Import.css'
 import './Module.css'
@@ -119,7 +119,17 @@ export default function Import() {
   const progressValue = importStatus?.progress ?? 0
   const progressLabel = importStatus?.message || 'Processing import…'
 
+  if (isLogoutInProgress()) {
+    return null
+  }
+
+  if (!user || !isAuthenticated()) {
+    return null
+  }
+
   if (!canImport) {
+    if (isLogoutInProgress()) return null
+
     return (
       <div className="import-page">
         <div className="module-access-denied">

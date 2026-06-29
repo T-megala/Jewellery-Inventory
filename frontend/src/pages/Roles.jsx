@@ -755,6 +755,16 @@ export default function Roles() {
               placeholder="Search role or permission…"
               aria-label="Search roles"
             />
+            {searchInput && (
+              <button
+                type="button"
+                className="roles-search__clear"
+                onClick={() => setSearchInput('')}
+                aria-label="Clear search"
+              >
+                ×
+              </button>
+            )}
           </div>
 
           <div className="roles-list__actions">

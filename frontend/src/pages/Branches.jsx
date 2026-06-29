@@ -310,6 +310,16 @@ export default function Branches() {
               placeholder="Search name, city or phone…"
               aria-label="Search branches"
             />
+            {searchInput && (
+              <button
+                type="button"
+                className="branches-search__clear"
+                onClick={() => setSearchInput('')}
+                aria-label="Clear search"
+              >
+                ×
+              </button>
+            )}
           </div>
 
           <div className="branches-list__actions">

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import FieldError from '../components/FieldError.jsx'
-import { login } from '../services/auth.js'
+import { endLogoutTransition, login } from '../services/auth.js'
 import '../components/FieldError.css'
 import { scrollToFirstFieldError } from '../utils/formValidation.js'
 import './Login.css'
@@ -25,6 +25,10 @@ export default function Login() {
   const formRef = useRef(null)
   const passwordRef = useRef(null)
   const submitRef = useRef(null)
+
+  useEffect(() => {
+    endLogoutTransition()
+  }, [])
 
   useEffect(() => {
     if (location.search) {

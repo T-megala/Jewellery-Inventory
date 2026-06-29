@@ -17,9 +17,9 @@ function requireAuthLoader() {
   return redirect('/login')
 }
 
-/** Visiting /login always starts a fresh session — same as logout. */
+/** Visiting /login clears the session — only place logout cleanup runs. */
 function loginLoader() {
-  clearAuthSession()
+  clearAuthSession({ notify: false })
   return null
 }
 

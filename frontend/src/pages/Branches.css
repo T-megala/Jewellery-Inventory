@@ -396,13 +396,37 @@ body.branches-modal-open {
 
 .branches-search input {
   width: 100%;
-  padding: 10px 14px 10px 42px;
+  padding: 10px 36px 10px 42px;
   border: 1px solid var(--color-border);
   border-radius: 10px;
   font-family: var(--font-body);
   font-size: 0.875rem;
   color: var(--color-text);
   background: #fff;
+}
+
+.branches-search__clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: #f5f0ea;
+  color: #6b5d4d;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.branches-search__clear:hover {
+  background: #ebe3d6;
 }
 
 .branches-search input:focus {
