@@ -29,8 +29,12 @@ const files = [
   "025_split_master_permissions.sql",
   "026_stock_verification_report_indexes.sql",
   "027_verification_per_branch_latest_scan.sql",
+  "028_dashboard_widget_permissions.sql",
   "029_permissions_parent_child.sql",
   "030_user_logs_refresh_tokens.sql",
+  "031_remove_branches_view_all.sql",
+  "032_db_integrity_cleanup.sql",
+  "033_schema_collation_and_indexes.sql",
 ];
 
 const SKIPPABLE_ERROR_CODES = new Set([

@@ -192,7 +192,7 @@ function applyAuthSession(token, user, refreshToken) {
   dispatchAuthSessionChange()
 }
 
-/** Login — session branches are loaded separately via GET /branches. */
+/** Login — session branches are loaded separately via GET /dropdown/branches. */
 export async function login(username, password) {
   const body = { username, password }
 
@@ -220,7 +220,7 @@ export async function login(username, password) {
   return data
 }
 
-/** Persist branch list from GET /branches — never from login response. */
+/** Persist branch list from GET /dropdown/branches — never from login response. */
 export function updateSessionBranches(branches) {
   const normalized = writeStoredSessionBranches(branches)
   sanitizeOperationalBranch()
@@ -229,7 +229,7 @@ export function updateSessionBranches(branches) {
   return normalized
 }
 
-/** Load current user's branches with the access token and sync session storage. */
+/** Load current user's mapped branches (dropdown API) and sync session storage. */
 export async function refreshSessionBranches() {
   const token = getToken()
 
@@ -237,7 +237,7 @@ export async function refreshSessionBranches() {
     return null
   }
 
-  const res = await authFetch(apiUrl('/branches'), {
+  const res = await authFetch(apiUrl('/dropdown/branches'), {
     headers: { Authorization: `Bearer ${token}` },
   })
 
@@ -353,7 +353,7 @@ export function getUser() {
   }
 }
 
-/** Branches for header/filter — always from GET /branches, never login response. */
+/** Branches for header/filter — from GET /dropdown/branches (user_branches mapping). */
 export function getSessionBranches() {
   return readStoredSessionBranches()
 }

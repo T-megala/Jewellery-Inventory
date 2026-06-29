@@ -24,6 +24,7 @@ export const ALL_PERMISSION_NAMES = Object.values(PERMISSIONS);
 
 export const BRANCH_SCOPE_EXEMPT_PATHS = [
   "/branches",
+  "/dropdown/branches",
   "/roles",
   "/permissions",
   "/users",

@@ -15,5 +15,6 @@ router.post(
 );
 router.get('/dropdown/centers', asyncHandler(dropdownController.getCenters));
 router.post('/dropdown/centers', asyncHandler(dropdownController.getCenters));
+router.get('/dropdown/branches', asyncHandler(dropdownController.getBranches));
 
 export default router;

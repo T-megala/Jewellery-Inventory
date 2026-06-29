@@ -14,6 +14,7 @@ export { API_BASE, apiUrl };
 export const BRANCH_SCOPE_EXEMPT_PREFIXES = [
   '/auth',
   '/branches',
+  '/dropdown/branches',
   '/roles',
   '/permissions',
   '/users',

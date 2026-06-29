@@ -1,24 +1,23 @@
 const errorHandler = (err, req, res, next) => {
-  if (err.code === 'LIMIT_FILE_SIZE') {
+  if (err.code === "LIMIT_FILE_SIZE") {
     return res.status(400).json({
       success: false,
-      message: 'File size exceeds the 20MB limit',
+      message: "File size exceeds the 20MB limit",
       data: null,
     });
   }
 
   // Body-parser JSON syntax errors (empty or malformed JSON body)
-  if (err.type === 'entity.parse.failed') {
+  if (err.type === "entity.parse.failed") {
     return res.status(400).json({
       success: false,
-      message: 'Invalid JSON in request body',
+      message: "Invalid JSON in request body",
       data: null,
     });
   }
 
   const statusCode = err.statusCode || 500;
-  const message =
-    err.isOperational ? err.message : 'Internal server error';
+  const message = err.isOperational ? err.message : "Internal server error";
 
   if (!err.isOperational) {
     console.error(err);
