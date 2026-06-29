@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useBranchScope } from '../hooks/useBranchScope.js'
-import { getUser, hasPermission, isAuthenticated, isLogoutInProgress } from '../services/auth.js'
+import {
+  getUser,
+  hasPermission,
+  isAuthenticated,
+  isLogoutInProgress,
+  setOperationalBranch,
+} from '../services/auth.js'
 import { uploadStockExcel } from '../services/import.js'
 import './Import.css'
 import './Module.css'
@@ -34,10 +40,8 @@ export default function Import() {
   const user = getUser()
   const canImport = hasPermission('products.import', user)
   const fileInputRef = useRef(null)
-  const { sessionBranches, operationalBranchId, isAllBranches } = useBranchScope()
-  const importBranchId = sessionBranches.length === 1
-    ? sessionBranches[0].id
-    : operationalBranchId
+  const { sessionBranches, operationalBranchId } = useBranchScope()
+  const [chosenBranchId, setChosenBranchId] = useState('')
   const [selectedFile, setSelectedFile] = useState(null)
   const [result, setResult] = useState(null)
   const [importStatus, setImportStatus] = useState(null)
@@ -51,6 +55,26 @@ export default function Import() {
     const timer = setTimeout(() => setToast(''), 5000)
     return () => clearTimeout(timer)
   }, [toast])
+
+  useEffect(() => {
+    if (sessionBranches.length === 1) {
+      setChosenBranchId(String(sessionBranches[0].id))
+      return
+    }
+    if (operationalBranchId) {
+      setChosenBranchId(String(operationalBranchId))
+      return
+    }
+    setChosenBranchId('')
+  }, [sessionBranches, operationalBranchId])
+
+  const importBranchId = sessionBranches.length === 1
+    ? sessionBranches[0].id
+    : chosenBranchId
+      ? Number(chosenBranchId)
+      : null
+  const needsBranchSelection = sessionBranches.length > 1
+  const hasNoBranches = sessionBranches.length === 0
 
   function selectFile(file) {
     if (!file) return
@@ -249,9 +273,42 @@ export default function Import() {
 
               {error && <p className="import-msg import-msg--error" role="alert">{error}</p>}
 
-              {isAllBranches && sessionBranches.length > 1 && (
+              {hasNoBranches && (
+                <p className="import-msg import-msg--error" role="alert">
+                  You don&apos;t have a branch to import into.
+                </p>
+              )}
+
+              {needsBranchSelection && (
+                <div className="import-branch-field">
+                  <label className="import-branch-field__label" htmlFor="import-branch-select">
+                    Branch
+                  </label>
+                  <select
+                    id="import-branch-select"
+                    value={chosenBranchId}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      setChosenBranchId(value)
+                      if (value) {
+                        setOperationalBranch(Number(value))
+                      }
+                    }}
+                    disabled={isUploading}
+                  >
+                    <option value="">Select branch</option>
+                    {sessionBranches.map((branch) => (
+                      <option key={branch.id} value={String(branch.id)}>
+                        {branch.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {needsBranchSelection && !importBranchId && (
                 <p className="import-msg import-msg--info" role="status">
-                  Select a branch in the header before importing.
+                  Select a branch to import.
                 </p>
               )}
 
@@ -259,7 +316,7 @@ export default function Import() {
                 type="button"
                 className="import-send"
                 onClick={handleSend}
-                disabled={isUploading || !importBranchId}
+                disabled={isUploading || !importBranchId || hasNoBranches}
               >
                 {isUploading ? (
                   <>

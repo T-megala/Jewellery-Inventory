@@ -165,7 +165,8 @@ export default function Reports() {
   const user = getUser()
   const canViewReports = hasPermission('stock_verification.report', user)
   const canExportReports = hasPermission('stock_verification.export', user)
-  const { operationalValue } = useBranchScope()
+  const { operationalValue, sessionBranches } = useBranchScope()
+  const hasNoBranches = sessionBranches.length === 0
   const [product, setProduct] = useState('')
   const [subProduct, setSubProduct] = useState('')
   const [counter, setCounter] = useState('')
@@ -188,6 +189,8 @@ export default function Reports() {
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState('')
   const [filtersNotice, setFiltersNotice] = useState('')
+
+  const isBranchBlocked = hasNoBranches || /branch is not assigned/i.test(error)
 
   const filterParams = useMemo(() => ({
     productName: product || undefined,
@@ -483,14 +486,14 @@ export default function Reports() {
               type="button"
               className="report-btn report-btn--ghost"
               onClick={handleReset}
-              disabled={loadingReport || exporting}
+              disabled={loadingReport || exporting || isBranchBlocked}
             >
               Reset
             </button>
             <button
               type="submit"
               className={`report-btn report-btn--primary${loadingReport ? ' report-btn--loading' : ''}`}
-              disabled={loadingReport || loadingFilters || exporting}
+              disabled={loadingReport || loadingFilters || exporting || isBranchBlocked}
             >
               {loadingReport && <span className="report-btn__spin" aria-hidden="true" />}
               Generate Report

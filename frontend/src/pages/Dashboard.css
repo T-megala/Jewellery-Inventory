@@ -161,6 +161,7 @@
   z-index: 1;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   justify-content: center;
   gap: 12px;
   padding: 28px 32px;
@@ -170,11 +171,13 @@
 }
 
 .dashboard-hero__rates-label {
+  margin: 0;
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.5);
+  line-height: 1.2;
 }
 
 .dashboard-rate-card {
@@ -186,6 +189,14 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: var(--radius-sm);
   min-width: 200px;
+}
+
+.dashboard-rate-card__info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
 }
 
 .dashboard-rate-card__icon {
@@ -3096,8 +3107,10 @@
   }
 
   .skeleton-hero__rates {
-    flex-direction: row;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 16px;
     border-left: none;
     border-top: 1px solid #e0d5c5;
     padding: 20px 28px;
@@ -3176,11 +3189,23 @@
   }
 
   .dashboard-hero__rates {
-    flex-direction: row;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 16px;
     border-left: none;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
     padding: 20px 28px;
+  }
+
+  .dashboard-hero__rates-label {
+    align-self: center;
+    white-space: nowrap;
+  }
+
+  .dashboard-rate-card {
+    width: 100%;
+    min-width: 0;
   }
 }
 
