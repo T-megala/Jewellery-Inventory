@@ -74,7 +74,7 @@ export const getBranches = async (req, res) => {
   if (!userId) {
     throw new ApiError(401, "Authentication required");
   }
-  console.log("userId", userId);
+
   const branches = await userBranchService.getBranchesForUser(userId);
 
   res.status(200).json({

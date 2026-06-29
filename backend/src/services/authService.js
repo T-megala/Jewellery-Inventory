@@ -2,7 +2,7 @@ import pool from "../config/database.js";
 import ApiError from "../utils/ApiError.js";
 import { createAccessToken } from "../utils/token.js";
 import { verifyPassword } from "../utils/passwordHasher.js";
-import roleService from "./roleService.js";
+import roleService, { SUPER_ADMIN_ROLE_NAME } from "./roleService.js";
 import userBranchService from "./userBranchService.js";
 import userLogService from "./userLogService.js";
 
@@ -21,6 +21,22 @@ const resolveDefaultBranchId = (internalBranches) => {
     null;
 
   return defaultBranch?.id ?? null;
+};
+
+const isSuperAdminProfile = (profile) =>
+  profile?.role?.name === SUPER_ADMIN_ROLE_NAME;
+
+const assertUserHasBranchAccess = (profile, branches) => {
+  if (isSuperAdminProfile(profile)) {
+    return;
+  }
+
+  if (!branches.length) {
+    throw new ApiError(
+      403,
+      "You do not have any branch assigned. Please contact your administrator.",
+    );
+  }
 };
 
 export const loadUserAuthProfile = async (userId, preloadedBranches = null) => {
@@ -137,9 +153,7 @@ export const login = async ({ username, password }) => {
     throw new ApiError(403, "User role is not assigned");
   }
 
-  // if (profile.branches.length === 0) {
-  //   throw new ApiError(403, "User branch is not assigned");
-  // }
+  assertUserHasBranchAccess(profile, internalBranches);
 
   await pool.execute(`UPDATE users SET last_login_at = NOW() WHERE id = ?`, [
     dbUser.id,
@@ -179,9 +193,11 @@ export const refreshAccessToken = async ({ refreshToken }) => {
     throw new ApiError(403, "User role is not assigned");
   }
 
-  if (profile.branches.length === 0) {
+  try {
+    assertUserHasBranchAccess(profile, internalBranches);
+  } catch (error) {
     await userLogService.revokeSession(session.id);
-    throw new ApiError(403, "User branch is not assigned");
+    throw error;
   }
 
   await userLogService.touchSession(session.id);
