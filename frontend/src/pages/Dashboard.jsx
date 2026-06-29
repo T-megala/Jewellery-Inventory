@@ -2147,7 +2147,7 @@ export default function Dashboard() {
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err.message || 'Failed to load inventory summary.')
+          setError(err.message || 'Unable to load dashboard. Please try again.')
           setSummary(null)
           setStocktake(EMPTY_STOCKTAKE)
           setCounterAccuracy(EMPTY_COUNTER_ACCURACY)
@@ -2412,7 +2412,6 @@ export default function Dashboard() {
         <div className="dashboard-empty">
           <h2>Could not load dashboard</h2>
           <p>{error}</p>
-          <p className="dashboard-empty__hint">Make sure the backend is running and try again.</p>
         </div>
       </div>
     )

@@ -21,7 +21,7 @@ function writeDay(data) {
   try {
     sessionStorage.setItem(storageKey(data.date), JSON.stringify(data))
   } catch {
-    throw new Error('Upload is too large to store in the browser. Backend storage will be needed for full bulk imports.')
+    throw new Error('Upload is too large. Please use a smaller file or contact support.')
   }
 }
 

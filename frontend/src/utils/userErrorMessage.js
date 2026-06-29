@@ -1,4 +1,5 @@
 const TECHNICAL_PATTERNS = [
+  /\bbackend\b/i,
   /\/api\//i,
   /https?:\/\//i,
   /localhost/i,
@@ -57,8 +58,14 @@ function isTechnicalMessage(message) {
 export function toUserErrorMessage(message, fallback = 'Something went wrong. Please try again.') {
   const text = String(message ?? '').trim();
 
+  if (!text) return fallback;
+
+  if (/\bbackend\b/i.test(text)) {
+    return fallback;
+  }
+
   if (!import.meta.env.PROD) {
-    return text || fallback;
+    return text;
   }
 
   if (!text || isTechnicalMessage(text)) {

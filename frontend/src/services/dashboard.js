@@ -106,7 +106,9 @@ export async function fetchVerificationSummary() {
 }
 
 export async function fetchDashboard() {
-  const data = await apiFetch('/dashboard');
+  const data = await apiFetch('/dashboard', {
+    fallbackMessage: 'Unable to load dashboard. Please try again.',
+  });
   const verification = data.verification ?? { ...EMPTY_VERIFICATION };
 
   return {
