@@ -196,24 +196,42 @@ const STORED_REPORT_ORDER_SQL = `
     svd.id DESC
 `;
 
+const appendScopeFilters = (filters, conditions, params, tablePrefix = "sv") => {
+  const useFullScopeOnly =
+    !filters.productName && !filters.subProductName && !filters.centerName;
+
+  if (filters.productName) {
+    conditions.push(`AND ${tablePrefix}.product_name = ?`);
+    params.push(filters.productName);
+  } else if (useFullScopeOnly) {
+    conditions.push(`AND ${tablePrefix}.product_name = ?`);
+    params.push(SCOPE_NAMES.ALL_PRODUCTS);
+  }
+
+  if (filters.subProductName) {
+    conditions.push(`AND ${tablePrefix}.sub_product_name = ?`);
+    params.push(filters.subProductName);
+  } else if (useFullScopeOnly) {
+    conditions.push(`AND ${tablePrefix}.sub_product_name = ?`);
+    params.push(SCOPE_NAMES.ALL_SUB_PRODUCTS);
+  }
+
+  if (filters.centerName) {
+    conditions.push(`AND ${tablePrefix}.center_name = ?`);
+    params.push(filters.centerName);
+  } else if (useFullScopeOnly) {
+    conditions.push(`AND ${tablePrefix}.center_name = ?`);
+    params.push(SCOPE_NAMES.ALL_CENTERS);
+  }
+};
+
 const buildHeaderFilterClause = (filters) => {
   const conditions = ["1 = 1"];
   const params = [];
   const branchFilter = buildBranchFilterClause(filters);
   const dateFilter = buildDateFilterClause(filters);
 
-  if (filters.productName) {
-    conditions.push("AND sv.product_name = ?");
-    params.push(filters.productName);
-  }
-  if (filters.subProductName) {
-    conditions.push("AND sv.sub_product_name = ?");
-    params.push(filters.subProductName);
-  }
-  if (filters.centerName) {
-    conditions.push("AND sv.center_name = ?");
-    params.push(filters.centerName);
-  }
+  appendScopeFilters(filters, conditions, params, "sv");
   if (branchFilter.clause) {
     conditions.push(branchFilter.clause);
     params.push(...branchFilter.params);
@@ -235,18 +253,9 @@ const buildStoredDetailFilterClause = (filters, { includeStatus = true } = {}) =
   const branchFilter = buildBranchFilterClause(filters);
   const dateFilter = buildDateFilterClause(filters);
 
-  if (filters.productName) {
-    conditions.push("AND svd.product_name = ?");
-    params.push(filters.productName);
-  }
-  if (filters.subProductName) {
-    conditions.push("AND svd.sub_product_name = ?");
-    params.push(filters.subProductName);
-  }
-  if (filters.centerName) {
-    conditions.push("AND svd.center_name = ?");
-    params.push(filters.centerName);
-  }
+  // Match verification session scope on sv.* — detail rows for NEW tags
+  // store scope labels in svd.* which may differ from the session filter.
+  appendScopeFilters(filters, conditions, params, "sv");
   if (includeStatus) {
     if (filters.status === "FOUND" || filters.status === "NEW") {
       conditions.push("AND svd.status = ?");
@@ -486,20 +495,33 @@ const getHeaderSummary = async (filters) => {
   const { whereClause, params } = buildHeaderFilterClause(filters);
   const [summaryRows] = await pool.execute(
     `SELECT
-       COALESCE(SUM(sv.found_count), 0) AS foundCount,
-       COALESCE(SUM(sv.missing_count), 0) AS missingCount,
-       COALESCE(SUM(sv.new_count), 0) AS newCount,
-       COALESCE(SUM(sv.found_count + sv.missing_count + sv.new_count), 0) AS totalRecords
+       COALESCE(SUM(detail_counts.found_count), 0) AS foundCount,
+       COALESCE(SUM(GREATEST(sv.total_expected - detail_counts.found_count, 0)), 0) AS missingCount,
+       COALESCE(SUM(detail_counts.new_count), 0) AS newCount
      FROM stock_verification sv
+     INNER JOIN (${LATEST_SCAN_SUBQUERY}) latest ON latest.verification_id = sv.id
+     INNER JOIN latest_stock_verification lsv ON lsv.id = latest.latest_scan_id
+     LEFT JOIN (
+       SELECT
+         latest_scan_id,
+         SUM(CASE WHEN status = 'FOUND' THEN 1 ELSE 0 END) AS found_count,
+         SUM(CASE WHEN status = 'NEW' THEN 1 ELSE 0 END) AS new_count
+       FROM stock_verification_details
+       GROUP BY latest_scan_id
+     ) detail_counts ON detail_counts.latest_scan_id = lsv.id
      WHERE ${whereClause}`,
     params,
   );
 
+  const foundCount = Number(summaryRows[0].foundCount ?? 0);
+  const missingCount = Number(summaryRows[0].missingCount ?? 0);
+  const newCount = Number(summaryRows[0].newCount ?? 0);
+
   return {
-    foundCount: Number(summaryRows[0].foundCount ?? 0),
-    missingCount: Number(summaryRows[0].missingCount ?? 0),
-    newCount: Number(summaryRows[0].newCount ?? 0),
-    totalRecords: Number(summaryRows[0].totalRecords ?? 0),
+    foundCount,
+    missingCount,
+    newCount,
+    totalRecords: foundCount + missingCount + newCount,
   };
 };
 

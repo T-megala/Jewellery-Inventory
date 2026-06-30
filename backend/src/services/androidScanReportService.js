@@ -155,7 +155,10 @@ const fetchMissingCountsByProduct = async (scanRow, activeBatchId) => {
   return mapProductCounts(rows);
 };
 
-const mapScanResponse = (scanRow) => ({
+const sumProductCounts = (rows) =>
+  rows.reduce((total, row) => total + Number(row.count ?? 0), 0);
+
+const mapScanResponse = (scanRow, counts = {}) => ({
   id: Number(scanRow.id),
   verificationId: Number(scanRow.verification_id),
   branchId: scanRow.branch_id ? Number(scanRow.branch_id) : null,
@@ -169,9 +172,9 @@ const mapScanResponse = (scanRow) => ({
   },
   totalExpected: Number(scanRow.total_expected ?? 0),
   totalScanned: Number(scanRow.total_scanned ?? 0),
-  foundCount: Number(scanRow.found_count ?? 0),
-  missingCount: Number(scanRow.missing_count ?? 0),
-  newCount: Number(scanRow.new_count ?? 0),
+  foundCount: Number(counts.foundCount ?? scanRow.found_count ?? 0),
+  missingCount: Number(counts.missingCount ?? scanRow.missing_count ?? 0),
+  newCount: Number(counts.newCount ?? scanRow.new_count ?? 0),
   createdAt: formatDateTime(scanRow.created_at),
 });
 
@@ -197,8 +200,12 @@ const getAndroidScanReport = async ({ scanId, branchId = null } = {}) => {
     fetchMissingCountsByProduct(scanRow, activeBatchId),
   ]);
 
+  const foundCount = sumProductCounts(found);
+  const newCount = sumProductCounts(newItems);
+  const missingCount = sumProductCounts(missing);
+
   return {
-    scan: mapScanResponse(scanRow),
+    scan: mapScanResponse(scanRow, { foundCount, newCount, missingCount }),
     summary: {
       found,
       new: newItems,

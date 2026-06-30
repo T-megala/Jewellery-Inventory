@@ -247,7 +247,11 @@ export async function apiFetchReport(path, params = {}) {
       pagination: json.pagination || null,
       branchId: json.branchId ?? null,
       summary: {
-        totalTags: json.pagination?.totalRecords ?? json.data?.length ?? 0,
+        totalTags:
+          json.pagination?.totalRecords
+          ?? ((json.summary?.foundCount ?? 0)
+            + (json.summary?.missingCount ?? 0)
+            + (json.summary?.newCount ?? 0)),
         totalFound: json.summary?.foundCount ?? 0,
         totalMissing: json.summary?.missingCount ?? 0,
         totalNew: json.summary?.newCount ?? 0,

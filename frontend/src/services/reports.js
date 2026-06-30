@@ -14,8 +14,37 @@ function buildReportParams(filters = {}) {
   };
 }
 
+function alignSummaryWithStatusFilter(result, status) {
+  const normalizedStatus = String(status ?? '').trim().toUpperCase();
+  if (!normalizedStatus) {
+    return result;
+  }
+
+  const total = Number(result.pagination?.totalRecords ?? 0);
+  const summary = {
+    ...result.summary,
+    totalTags: total,
+    totalFound: 0,
+    totalMissing: 0,
+    totalNew: 0,
+  };
+
+  if (normalizedStatus === 'FOUND') {
+    summary.totalFound = total;
+  } else if (normalizedStatus === 'MISSING') {
+    summary.totalMissing = total;
+  } else if (normalizedStatus === 'NEW') {
+    summary.totalNew = total;
+  }
+
+  return { ...result, summary };
+}
+
 export function fetchStockVerificationReport(filters = {}) {
-  return apiFetchReport('/stock-verification/report', buildReportParams(filters));
+  const params = buildReportParams(filters);
+  return apiFetchReport('/stock-verification/report', params).then((result) =>
+    alignSummaryWithStatusFilter(result, params.status),
+  );
 }
 
 function parseFilename(res, fallback) {

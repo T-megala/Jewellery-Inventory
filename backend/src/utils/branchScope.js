@@ -1,4 +1,5 @@
 import ApiError from "./ApiError.js";
+import branchService from "../services/branchService.js";
 import { getBranchIdsForUser } from "../services/userBranchService.js";
 import { getRequestParam } from "./requestParams.js";
 

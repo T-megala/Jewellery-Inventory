@@ -119,7 +119,13 @@ const insertDetailRecords = async (
   const [result] = await connection.execute(
     `INSERT INTO stock_verification_details
       (verification_id, latest_scan_id, tag_no, status, product_name, sub_product_name, center_name)
-     VALUES ${placeholders}`,
+     VALUES ${placeholders}
+     ON DUPLICATE KEY UPDATE
+       latest_scan_id = VALUES(latest_scan_id),
+       status = VALUES(status),
+       product_name = VALUES(product_name),
+       sub_product_name = VALUES(sub_product_name),
+       center_name = VALUES(center_name)`,
     values,
   );
 
@@ -148,20 +154,6 @@ const insertDetailRecordsBatched = async (
 
   return inserted;
 };
-
-const fetchExistingTagsForVerification = async (connection, verificationId) => {
-  const [rows] = await connection.execute(
-    `SELECT tag_no
-     FROM stock_verification_details
-     WHERE verification_id = ?`,
-    [verificationId],
-  );
-
-  return new Set(rows.map((row) => normalizeTag(row.tag_no)));
-};
-
-const filterNewDetailRecords = (records, existingTags) =>
-  records.filter((record) => !existingTags.has(record.tag));
 
 const countExpectedTags = async (scope) => {
   const sql = `SELECT COUNT(DISTINCT ${TAG_EXPR}) AS total
@@ -368,32 +360,65 @@ const refreshSessionHeaderCounts = async (
   verificationId,
   totalExpected,
 ) => {
-  const [scanResult, foundResult, newResult] = await Promise.all([
-    connection.execute(
-      `SELECT COALESCE(SUM(total_scanned), 0) AS totalScanned
-       FROM latest_stock_verification
-       WHERE verification_id = ?`,
-      [verificationId],
-    ),
-    connection.execute(
-      `SELECT COUNT(DISTINCT tag_no) AS foundCount
-       FROM stock_verification_details
-       WHERE verification_id = ?
-         AND status = 'FOUND'`,
-      [verificationId],
-    ),
-    connection.execute(
-      `SELECT COUNT(DISTINCT tag_no) AS newCount
-       FROM stock_verification_details
-       WHERE verification_id = ?
-         AND status = 'NEW'`,
-      [verificationId],
-    ),
-  ]);
+  const [[latestScan]] = await connection.execute(
+    `SELECT id, total_scanned
+     FROM latest_stock_verification
+     WHERE verification_id = ?
+     ORDER BY id DESC
+     LIMIT 1`,
+    [verificationId],
+  );
 
-  const totalScanned = Number(scanResult[0][0]?.totalScanned ?? 0);
-  const foundCount = Number(foundResult[0][0]?.foundCount ?? 0);
-  const newCount = Number(newResult[0][0]?.newCount ?? 0);
+  const latestScanId = latestScan?.id ?? null;
+  const totalScanned = Number(latestScan?.total_scanned ?? 0);
+
+  let foundCount = 0;
+  let newCount = 0;
+
+  if (latestScanId) {
+    const [[counts]] = await connection.execute(
+      `SELECT
+         COALESCE(SUM(CASE WHEN status = 'FOUND' THEN 1 ELSE 0 END), 0) AS foundCount,
+         COALESCE(SUM(CASE WHEN status = 'NEW' THEN 1 ELSE 0 END), 0) AS newCount
+       FROM stock_verification_details
+       WHERE verification_id = ?
+         AND latest_scan_id = ?`,
+      [verificationId, latestScanId],
+    );
+
+    foundCount = Number(counts?.foundCount ?? 0);
+    newCount = Number(counts?.newCount ?? 0);
+
+    const missingCount = Math.max(totalExpected - foundCount, 0);
+
+    await connection.execute(
+      `UPDATE latest_stock_verification
+       SET found_count = ?,
+           missing_count = ?,
+           new_count = ?
+       WHERE id = ?`,
+      [foundCount, missingCount, newCount, latestScanId],
+    );
+
+    await connection.execute(
+      `UPDATE stock_verification
+       SET total_scanned = ?,
+           found_count = ?,
+           missing_count = ?,
+           new_count = ?,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [totalScanned, foundCount, missingCount, newCount, verificationId],
+    );
+
+    return {
+      totalScanned,
+      foundCount,
+      missingCount,
+      newCount,
+    };
+  }
+
   const missingCount = Math.max(totalExpected - foundCount, 0);
 
   await connection.execute(
@@ -507,11 +532,6 @@ const uploadStockVerification = async ({
       newCount: scanNewCount,
     });
 
-    const existingTags = await fetchExistingTagsForVerification(
-      connection,
-      verificationId,
-    );
-
     const foundProductDetails = await fetchProductDetailsByTags(
       connection,
       found,
@@ -526,9 +546,11 @@ const uploadStockVerification = async ({
         details: foundProductDetails.get(tag) ?? null,
       })),
     });
-    const foundRecords = filterNewDetailRecords(
-      buildInventoryDetailRecords(found, foundProductDetails, scopeLabels),
-      existingTags,
+
+    const foundRecords = buildInventoryDetailRecords(
+      found,
+      foundProductDetails,
+      scopeLabels,
     );
 
     await insertDetailRecordsBatched(
@@ -539,10 +561,7 @@ const uploadStockVerification = async ({
       "FOUND",
     );
 
-    const newRecords = filterNewDetailRecords(
-      buildNewDetailRecords(newTags, scopeLabels),
-      existingTags,
-    );
+    const newRecords = buildNewDetailRecords(newTags, scopeLabels);
 
     await insertDetailRecordsBatched(
       connection,
