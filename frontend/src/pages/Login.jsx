@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
-import { login, logout } from '../services/auth.js'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { login, logout, getPostLoginPath, isCeo } from '../services/auth.js'
 import './Login.css'
 
 export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
-  const redirectTo = location.state?.from?.pathname || '/dashboard'
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -54,7 +53,21 @@ export default function Login() {
     setLoading(true)
     try {
       await login(username.trim(), password)
-      navigate(redirectTo, { replace: true })
+
+      if (isCeo()) {
+        logout()
+        setError('This account has executive access. Please use the CEO login portal.')
+        return
+      }
+
+      const from = location.state?.from?.pathname
+      let destination = getPostLoginPath()
+
+      if (from && !from.startsWith('/dashboard/ceo')) {
+        destination = from
+      }
+
+      navigate(destination, { replace: true })
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.')
     } finally {
@@ -102,6 +115,11 @@ export default function Login() {
             {error && (
               <div className="login-error" role="alert">
                 {error}
+                {error.includes('executive') && (
+                  <p className="login-error__link">
+                    <Link to="/login/ceo">Go to CEO sign in →</Link>
+                  </p>
+                )}
               </div>
             )}
 
@@ -159,6 +177,11 @@ export default function Login() {
               {loading ? 'Logging in…' : 'Login'}
             </button>
           </form>
+
+          <p className="login-switch">
+            Executive access?{' '}
+            <Link to="/login/ceo">CEO sign in</Link>
+          </p>
         </div>
       </main>
     </div>

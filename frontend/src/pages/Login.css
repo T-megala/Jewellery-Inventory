@@ -193,6 +193,20 @@
   font-size: 0.85rem;
 }
 
+.login-error__link {
+  margin: 0.5rem 0 0;
+}
+
+.login-error__link a {
+  color: #a33030;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.login-error__link a:hover {
+  text-decoration: underline;
+}
+
 .form-field {
   display: flex;
   flex-direction: column;
@@ -317,6 +331,23 @@
 .login-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.login-switch {
+  margin: 1.25rem 0 0;
+  text-align: center;
+  font-size: 0.85rem;
+  color: #7a6a55;
+}
+
+.login-switch a {
+  color: #a67c00;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.login-switch a:hover {
+  text-decoration: underline;
 }
 
 @keyframes fadeUp {

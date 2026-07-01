@@ -1,0 +1,317 @@
+.ceo-login-page {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  overflow: hidden;
+}
+
+.ceo-login-hero {
+  position: relative;
+  background:
+    linear-gradient(160deg, rgba(80, 20, 20, 0.92) 0%, rgba(120, 30, 30, 0.88) 45%, rgba(40, 12, 12, 0.95) 100%),
+    url('/images/hero-retail.jpg') center center / cover no-repeat;
+  color: #fff;
+  display: flex;
+  align-items: flex-end;
+}
+
+.ceo-login-hero__overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.1) 0%, rgba(0, 0, 0, 0.55) 100%);
+  pointer-events: none;
+}
+
+.ceo-login-hero__content {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  padding: 3rem 3.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  animation: ceoLoginFadeUp 0.7s ease-out both;
+}
+
+.ceo-login-hero__header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.ceo-login-hero__logo {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  padding: 5px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 10px;
+}
+
+.ceo-login-hero__header h1 {
+  margin: 0;
+  font-size: 1.65rem;
+  font-weight: 700;
+}
+
+.ceo-login-hero__header p {
+  margin: 0.25rem 0 0;
+  font-size: 0.82rem;
+  opacity: 0.88;
+}
+
+.ceo-login-hero__features {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 420px;
+}
+
+.ceo-login-hero__feature {
+  display: flex;
+  gap: 0.85rem;
+  align-items: flex-start;
+  padding: 0.85rem 1rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  backdrop-filter: blur(4px);
+}
+
+.ceo-login-hero__feature-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.ceo-login-hero__feature strong {
+  display: block;
+  font-size: 0.9rem;
+  margin-bottom: 0.15rem;
+}
+
+.ceo-login-hero__feature p {
+  margin: 0;
+  font-size: 0.8rem;
+  opacity: 0.82;
+  line-height: 1.45;
+}
+
+.ceo-login-hero__footer {
+  font-size: 0.72rem;
+  opacity: 0.5;
+}
+
+.ceo-login-main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem;
+  background: #eef1f5;
+}
+
+.ceo-login-card {
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 2rem 1.75rem;
+  box-shadow: 0 16px 48px rgba(15, 23, 42, 0.08);
+  animation: ceoLoginFadeUp 0.7s ease-out 0.1s both;
+}
+
+.ceo-login-card__badge {
+  display: inline-block;
+  margin-bottom: 1rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  background: #fef2f2;
+  color: #a33030;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ceo-login-card__header h2 {
+  margin: 0 0 0.4rem;
+  font-size: 1.75rem;
+  color: #0f172a;
+}
+
+.ceo-login-card__header p {
+  margin: 0 0 1.5rem;
+  font-size: 0.9rem;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.ceo-login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.ceo-login-error {
+  padding: 0.75rem 0.85rem;
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.ceo-login-error__link {
+  margin: 0.5rem 0 0;
+}
+
+.ceo-login-error__link a {
+  color: #a33030;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.ceo-login-error__link a:hover {
+  text-decoration: underline;
+}
+
+.ceo-login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.ceo-login-field label {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.ceo-login-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.ceo-login-input svg {
+  position: absolute;
+  left: 14px;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.ceo-login-input input {
+  width: 100%;
+  padding: 0.85rem 3.5rem 0.85rem 2.75rem;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 0.95rem;
+  color: #0f172a;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.ceo-login-input input:focus {
+  border-color: #a33030;
+  box-shadow: 0 0 0 4px rgba(163, 48, 48, 0.1);
+}
+
+.ceo-login-input input:disabled {
+  opacity: 0.6;
+  background: #f8fafc;
+}
+
+.ceo-login-show {
+  position: absolute;
+  right: 12px;
+  border: none;
+  background: none;
+  color: #a33030;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.ceo-login-btn {
+  margin-top: 0.35rem;
+  width: 100%;
+  padding: 0.95rem;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #8f2323 0%, #a33030 55%, #8f2323 100%);
+  color: #fff;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(163, 48, 48, 0.28);
+  transition: transform 0.15s, box-shadow 0.2s, opacity 0.2s;
+}
+
+.ceo-login-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(163, 48, 48, 0.35);
+}
+
+.ceo-login-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.ceo-login-switch {
+  margin: 1.25rem 0 0;
+  text-align: center;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.ceo-login-switch a {
+  color: #a33030;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.ceo-login-switch a:hover {
+  text-decoration: underline;
+}
+
+@keyframes ceoLoginFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 900px) {
+  .ceo-login-page {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+    overflow-y: auto;
+  }
+
+  .ceo-login-hero {
+    min-height: 220px;
+  }
+
+  .ceo-login-hero__content {
+    padding: 1.75rem 1.5rem;
+    gap: 1rem;
+  }
+
+  .ceo-login-hero__features,
+  .ceo-login-hero__footer {
+    display: none;
+  }
+
+  .ceo-login-main {
+    padding: 1.5rem;
+  }
+}

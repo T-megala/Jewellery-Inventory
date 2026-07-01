@@ -65,3 +65,8 @@ export const getDailyImports = async (req, res) => {
     data: result.data,
   });
 };
+
+export const getExecutiveDashboard = async (req, res) => {
+  const data = await dashboardService.getExecutiveDashboard();
+  sendSuccess(res, data, 'Executive dashboard fetched successfully');
+};

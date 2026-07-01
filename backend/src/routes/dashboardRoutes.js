@@ -1,5 +1,6 @@
 import express from 'express';
 import * as dashboardController from '../controllers/dashboardController.js';
+import { requireCeo } from '../middleware/requireCeo.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 
 const router = express.Router();
@@ -10,5 +11,10 @@ router.get('/dashboard/top-sold-products', asyncHandler(dashboardController.getT
 router.get('/dashboard/day-wise-sales', asyncHandler(dashboardController.getDayWiseSales));
 router.get('/dashboard/daily-imports', asyncHandler(dashboardController.getDailyImports));
 router.get('/dashboard', asyncHandler(dashboardController.getDashboard));
+router.get(
+  '/dashboard/executive',
+  requireCeo,
+  asyncHandler(dashboardController.getExecutiveDashboard),
+);
 
 export default router;

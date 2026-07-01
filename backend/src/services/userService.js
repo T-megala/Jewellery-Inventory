@@ -1,14 +1,27 @@
 import pool from '../config/database.js';
 import { hashPassword } from '../utils/passwordHasher.js';
 import ApiError from '../utils/ApiError.js';
+import { USER_ROLES } from '../constants/roles.js';
+
+const ALLOWED_ROLES = new Set(Object.values(USER_ROLES));
+
+const normalizeRole = (role) => {
+  const value = String(role ?? USER_ROLES.USER).trim().toLowerCase();
+  return ALLOWED_ROLES.has(value) ? value : USER_ROLES.USER;
+};
 
 /** Strip the password field before returning a user to callers. */
-const toSafeUser = ({ id, username, created_at }) => ({ id, username, created_at });
+const toSafeUser = ({ id, username, role, created_at }) => ({
+  id,
+  username,
+  role: role ?? USER_ROLES.USER,
+  created_at,
+});
 
 /** Get all users ordered by id ascending. */
 export const getAllUsers = async () => {
   const [rows] = await pool.execute(
-    'SELECT id, username, created_at FROM users ORDER BY id ASC',
+    'SELECT id, username, role, created_at FROM users ORDER BY id ASC',
   );
   return rows.map(toSafeUser);
 };
@@ -16,15 +29,14 @@ export const getAllUsers = async () => {
 /** Get a single user by id. Returns null if not found. */
 export const getUserById = async (id) => {
   const [rows] = await pool.execute(
-    'SELECT id, username, created_at FROM users WHERE id = ?',
+    'SELECT id, username, role, created_at FROM users WHERE id = ?',
     [id],
   );
   return rows.length ? toSafeUser(rows[0]) : null;
 };
 
 /** Create a new user. Throws 409 if username is taken. */
-export const createUser = async (username, plainPassword) => {
-  // Explicit duplicate check before hashing (gives a clear 409 before any DB write)
+export const createUser = async (username, plainPassword, role = USER_ROLES.USER) => {
   const [existing] = await pool.execute(
     'SELECT id FROM users WHERE username = ?',
     [username],
@@ -34,14 +46,15 @@ export const createUser = async (username, plainPassword) => {
   }
 
   const hashedPassword = await hashPassword(plainPassword);
+  const normalizedRole = normalizeRole(role);
 
   try {
     const [result] = await pool.execute(
-      'INSERT INTO users (username, password) VALUES (?, ?)',
-      [username, hashedPassword],
+      'INSERT INTO users (username, password, role) VALUES (?, ?, ?)',
+      [username, hashedPassword, normalizedRole],
     );
     const [rows] = await pool.execute(
-      'SELECT id, username, created_at FROM users WHERE id = ?',
+      'SELECT id, username, role, created_at FROM users WHERE id = ?',
       [result.insertId],
     );
     return toSafeUser(rows[0]);
@@ -53,7 +66,7 @@ export const createUser = async (username, plainPassword) => {
   }
 };
 
-/** Update a user's username and/or password. Throws 404 or 409 as appropriate. */
+/** Update a user's username, password, and/or role. */
 export const updateUser = async (id, fields) => {
   const setClauses = [];
   const params = [];
@@ -67,6 +80,15 @@ export const updateUser = async (id, fields) => {
     const hashedPassword = await hashPassword(fields.password);
     setClauses.push('password = ?');
     params.push(hashedPassword);
+  }
+
+  if (fields.role !== undefined) {
+    setClauses.push('role = ?');
+    params.push(normalizeRole(fields.role));
+  }
+
+  if (setClauses.length === 0) {
+    throw new ApiError(400, 'No fields to update');
   }
 
   params.push(id);
@@ -88,7 +110,7 @@ export const updateUser = async (id, fields) => {
   }
 
   const [rows] = await pool.execute(
-    'SELECT id, username, created_at FROM users WHERE id = ?',
+    'SELECT id, username, role, created_at FROM users WHERE id = ?',
     [id],
   );
   return toSafeUser(rows[0]);

@@ -1,6 +1,7 @@
 import ApiError from '../utils/ApiError.js';
 import { createAccessToken } from '../utils/token.js';
 import { verifyPassword } from '../utils/passwordHasher.js';
+import { USER_ROLES } from '../constants/roles.js';
 import pool from '../config/database.js';
 
 export const login = async (req, res) => {
@@ -11,9 +12,8 @@ export const login = async (req, res) => {
     throw new ApiError(400, 'Username and password are required');
   }
 
-  // Look up user in the database
   const [rows] = await pool.execute(
-    'SELECT id, username, password FROM users WHERE username = ?',
+    'SELECT id, username, password, role FROM users WHERE username = ?',
     [username],
   );
 
@@ -28,11 +28,13 @@ export const login = async (req, res) => {
     throw new ApiError(401, 'Invalid username or password');
   }
 
+  const role = dbUser.role ?? USER_ROLES.USER;
+
   const user = {
     id: dbUser.id,
     name: dbUser.username,
     username: dbUser.username,
-    role: 'user',
+    role,
   };
 
   res.status(200).json({

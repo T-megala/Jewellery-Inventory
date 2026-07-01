@@ -32,7 +32,7 @@ export const getUser = async (req, res) => {
 // POST /api/v1/users
 export const createUser = async (req, res) => {
   const username = normalizeUsername(req.body?.username);
-  const { password } = req.body ?? {};
+  const { password, role } = req.body ?? {};
 
   if (!username) throw new ApiError(400, 'Username is required');
   if (username.length > MAX_USERNAME_LENGTH) {
@@ -44,7 +44,7 @@ export const createUser = async (req, res) => {
     throw new ApiError(400, 'Password is too long (max 72 bytes)');
   }
 
-  const user = await userService.createUser(username, password);
+  const user = await userService.createUser(username, password, role);
   res.status(201).json({ success: true, data: user });
 };
 
@@ -52,13 +52,14 @@ export const createUser = async (req, res) => {
 export const updateUser = async (req, res) => {
   const id = parseId(req.params.id);
   const rawUsername = req.body?.username;
-  const { password } = req.body ?? {};
+  const { password, role } = req.body ?? {};
 
   const hasUsername = rawUsername !== undefined && rawUsername !== '';
   const hasPassword = password !== undefined && password !== '';
+  const hasRole = role !== undefined && role !== '';
 
-  if (!hasUsername && !hasPassword) {
-    throw new ApiError(400, 'At least one of username or password must be provided');
+  if (!hasUsername && !hasPassword && !hasRole) {
+    throw new ApiError(400, 'At least one of username, password, or role must be provided');
   }
 
   const fields = {};
@@ -83,6 +84,10 @@ export const updateUser = async (req, res) => {
       throw new ApiError(400, 'Password is too long (max 72 bytes)');
     }
     fields.password = password;
+  }
+
+  if (hasRole) {
+    fields.role = role;
   }
 
   const user = await userService.updateUser(id, fields);

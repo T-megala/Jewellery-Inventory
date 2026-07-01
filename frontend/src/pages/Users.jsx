@@ -11,7 +11,13 @@ import './Users.css'
 
 const DEFAULT_PAGE_SIZE = 10
 
-const EMPTY_FIELD_ERRORS = { username: '', password: '' }
+const ROLE_OPTIONS = [
+  { value: 'user', label: 'Store user' },
+  { value: 'ceo', label: 'CEO' },
+  { value: 'admin', label: 'Admin' },
+]
+
+const EMPTY_FIELD_ERRORS = { username: '', password: '', role: '' }
 
 function formatDate(value) {
   if (!value) return '—'
@@ -34,6 +40,7 @@ export default function Users() {
 
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [role, setRole] = useState('user')
   const [showPassword, setShowPassword] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [showForm, setShowForm] = useState(false)
@@ -144,6 +151,7 @@ export default function Users() {
   function resetForm() {
     setUsername('')
     setPassword('')
+    setRole('user')
     setShowPassword(false)
     setEditingId(null)
     setShowForm(false)
@@ -154,6 +162,7 @@ export default function Users() {
     setEditingId(null)
     setUsername('')
     setPassword('')
+    setRole('user')
     setShowPassword(false)
     setError('')
     setFieldErrors(EMPTY_FIELD_ERRORS)
@@ -165,6 +174,7 @@ export default function Users() {
     setEditingId(user.id)
     setUsername(user.username)
     setPassword('')
+    setRole(user.role || 'user')
     setShowPassword(false)
     setError('')
     setFieldErrors(EMPTY_FIELD_ERRORS)
@@ -226,7 +236,7 @@ export default function Users() {
       const isEdit = Boolean(editingId)
 
       if (isEdit) {
-        const payload = { username: trimmedUsername }
+        const payload = { username: trimmedUsername, role }
         if (password) {
           payload.password = password
         }
@@ -235,6 +245,7 @@ export default function Users() {
         await createUser({
           username: trimmedUsername,
           password,
+          role,
         })
       }
 
@@ -369,6 +380,7 @@ export default function Users() {
                 <tr>
                   <th>#</th>
                   <th>Username</th>
+                  <th>Role</th>
                   <th>Created</th>
                   <th aria-label="Actions" />
                 </tr>
@@ -376,7 +388,7 @@ export default function Users() {
               <tbody>
                 {filteredUsers.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="users-table__empty">No users found.</td>
+                    <td colSpan={5} className="users-table__empty">No users found.</td>
                   </tr>
                 )}
 
@@ -384,6 +396,7 @@ export default function Users() {
                   <tr key={user.id} className={editingId === user.id ? 'users-table__row--active' : ''}>
                     <td>{(page - 1) * pageSize + index + 1}</td>
                     <td>{user.username}</td>
+                    <td>{ROLE_OPTIONS.find((option) => option.value === user.role)?.label ?? user.role ?? 'Store user'}</td>
                     <td>{formatDate(user.createdAt)}</td>
                     <td>
                       <div className="users-table__actions">
@@ -548,6 +561,21 @@ export default function Users() {
                     Leave blank to keep the current password (min. 6 characters if changing)
                   </span>
                 )}
+              </label>
+
+              <label className="users-field">
+                <span>Role</span>
+                <select
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                  disabled={saving}
+                >
+                  {ROLE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </label>
 
               {error && (

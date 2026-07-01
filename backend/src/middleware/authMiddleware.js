@@ -15,6 +15,12 @@ export const authenticateApi = (req, res, next) => {
     return next(new ApiError(401, 'Invalid or expired authentication token'));
   }
 
-  req.user = user;
+  req.user = {
+    id: Number(user.sub),
+    sub: user.sub,
+    username: user.username,
+    name: user.name,
+    role: user.role ?? 'user',
+  };
   next();
 };

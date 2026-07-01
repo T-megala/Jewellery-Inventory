@@ -84,3 +84,25 @@ export async function fetchDailyImports({ period = 'week' } = {}) {
     })),
   };
 }
+
+export async function fetchExecutiveDashboard() {
+  const data = await apiFetch('/dashboard/executive');
+  return {
+    overall: data.overall ?? {},
+    segments: data.segments ?? [],
+    batches: data.batches ?? [],
+    topSoldProducts: (data.topSoldProducts ?? []).map((row) => ({
+      itemDescription: row.itemDescription ?? row.productName ?? row.name ?? '',
+      soldBarcodes: Number(row.soldBarcodes ?? row.soldTags ?? 0),
+      soldQty: Number(row.soldQty ?? row.soldCount ?? 0),
+    })),
+    dayWiseSales: data.dayWiseSales ?? [],
+    totalSoldQtyWeek: Number(data.totalSoldQtyWeek ?? 0),
+    verification: data.verification ?? {
+      totalFound: 0,
+      totalMissing: 0,
+      totalNew: 0,
+      totalTags: 0,
+    },
+  };
+}

@@ -24,6 +24,7 @@ const files = [
   "019_stock_verification_details_qty.sql",
   "020_stock_verification_product_summary.sql",
   "021_verification_day_utc.sql",
+  "022_add_user_role.sql",
 ];
 
 const SKIPPABLE_ERROR_CODES = new Set([

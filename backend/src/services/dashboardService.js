@@ -3,11 +3,29 @@ import ApiError from "../utils/ApiError.js";
 import { getActiveBatchId } from "./productBatchService.js";
 import dailySalesSummaryService from "./dailySalesSummaryService.js";
 
+const PRODUCT_DESCRIPTION_FILTER = `
+  item_description IS NOT NULL
+  AND TRIM(item_description) != ''
+`;
+
 const PRODUCT_BARCODE_FILTER = `
   barcode IS NOT NULL
   AND TRIM(barcode) != ''
-  AND item_description IS NOT NULL
-  AND TRIM(item_description) != ''
+  AND ${PRODUCT_DESCRIPTION_FILTER}
+`;
+
+const BATCH_PRODUCT_STATS_SUBQUERY = `
+  SELECT
+    batch_id,
+    SUM(CASE WHEN barcode IS NOT NULL AND TRIM(barcode) != '' THEN 1 ELSE 0 END) AS total_barcodes,
+    SUM(CASE WHEN barcode IS NULL OR TRIM(barcode) = '' THEN 1 ELSE 0 END) AS untagged_count,
+    COALESCE(SUM(CASE WHEN barcode IS NOT NULL AND TRIM(barcode) != '' THEN closing_bal_qty ELSE 0 END), 0) AS total_qty,
+    COUNT(DISTINCT CASE
+      WHEN barcode IS NOT NULL AND TRIM(barcode) != '' THEN item_description
+    END) AS item_descriptions
+  FROM products
+  WHERE ${PRODUCT_DESCRIPTION_FILTER.replace(/\n/g, " ")}
+  GROUP BY batch_id
 `;
 
 const formatDateTime = (value) => {
@@ -164,7 +182,7 @@ const getVerificationSummary = async () => {
     `SELECT
        sv.found_count AS foundCount,
        sv.missing_count AS missingCount,
-       sv.new_count AS newCount,
+       sv.new_count AS newCount,  
        sv.total_expected AS totalExpectedTags,
        sv.total_products AS totalProducts,
        sv.fully_verified_products AS fullyVerifiedProducts,
@@ -263,7 +281,9 @@ const TOP_SOLD_PERIOD_LIMITS = {
 };
 
 const getTopSoldProducts = async ({ period = "all" } = {}) => {
-  const normalizedPeriod = String(period ?? "all").trim().toLowerCase();
+  const normalizedPeriod = String(period ?? "all")
+    .trim()
+    .toLowerCase();
   const intervalDays = TOP_SOLD_PERIOD_LIMITS[normalizedPeriod];
 
   if (normalizedPeriod !== "all" && !intervalDays) {
@@ -489,10 +509,113 @@ const getDailyImports = async ({
   };
 };
 
+const FUTURE_SEGMENTS = [
+  {
+    key: "warehouse",
+    label: "Warehouse",
+    description: "Central stock and inbound imports",
+  },
+  {
+    key: "retail",
+    label: "Retail",
+    description: "Owned showroom operations",
+  },
+  {
+    key: "franchise",
+    label: "Franchise",
+    description: "Partner store performance",
+  },
+];
+
+/** CEO overview — company-wide metrics; segment groups ready for branch_type later. */
+const getExecutiveDashboard = async () => {
+  const [[overallRow]] = await pool.execute(
+    `SELECT
+       COUNT(DISTINCT b.id) AS totalBatches,
+       SUM(CASE WHEN b.is_active = 1 THEN 1 ELSE 0 END) AS activeBatches,
+       COALESCE(SUM(CASE WHEN b.is_active = 1 THEN stats.total_barcodes ELSE 0 END), 0) AS totalBarcodes,
+       COALESCE(SUM(CASE WHEN b.is_active = 1 THEN stats.untagged_count ELSE 0 END), 0) AS notTaggedCount,
+       COALESCE(SUM(CASE WHEN b.is_active = 1 THEN stats.total_qty ELSE 0 END), 0) AS totalQty,
+       COALESCE(SUM(CASE WHEN b.is_active = 1 THEN stats.item_descriptions ELSE 0 END), 0) AS itemDescriptions
+     FROM product_upload_batches b
+     LEFT JOIN (${BATCH_PRODUCT_STATS_SUBQUERY}) stats ON stats.batch_id = b.id`,
+  );
+
+  const [batchRows] = await pool.execute(
+    `SELECT
+       b.id,
+       b.batch_date,
+       b.uploaded_at,
+       b.uploaded_by,
+       b.is_active,
+       COALESCE(stats.total_barcodes, 0) AS totalBarcodes,
+       COALESCE(stats.untagged_count, 0) AS notTaggedCount,
+       COALESCE(stats.total_qty, 0) AS totalQty,
+       COALESCE(stats.item_descriptions, 0) AS itemDescriptions
+     FROM product_upload_batches b
+     LEFT JOIN (${BATCH_PRODUCT_STATS_SUBQUERY}) stats ON stats.batch_id = b.id
+     ORDER BY b.id DESC
+     LIMIT 20`,
+  );
+
+  const [weekSalesRows] = await pool.execute(
+    `SELECT
+       COALESCE(SUM(sold_pieces), 0) AS soldQty,
+       COALESCE(SUM(sold_tags), 0) AS soldBarcodes
+     FROM daily_sales_summary
+     WHERE counter_name = ?
+       AND batch_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)`,
+    [dailySalesSummaryService.ALL_COUNTER],
+  );
+
+  const [topSold, dayWiseSales, verification] = await Promise.all([
+    getTopSoldProducts({ period: "week" }),
+    getDayWiseSales({ period: "week" }),
+    getVerificationSummary(),
+  ]);
+
+  return {
+    overall: {
+      totalBatches: Number(overallRow?.totalBatches ?? 0),
+      activeBatches: Number(overallRow?.activeBatches ?? 0),
+      totalBarcodes: Number(overallRow?.totalBarcodes ?? 0),
+      notTaggedCount: Number(overallRow?.notTaggedCount ?? 0),
+      totalQty: Number(overallRow?.totalQty ?? 0),
+      itemDescriptions: Number(overallRow?.itemDescriptions ?? 0),
+      soldQtyWeek: Number(weekSalesRows[0]?.soldQty ?? 0),
+      soldBarcodesWeek: Number(weekSalesRows[0]?.soldBarcodes ?? 0),
+    },
+    segments: FUTURE_SEGMENTS.map((segment) => ({
+      ...segment,
+      branchCount: 0,
+      totalBarcodes: 0,
+      totalQty: 0,
+      soldQtyWeek: 0,
+      status: "coming_soon",
+    })),
+    batches: batchRows.map((row) => ({
+      id: Number(row.id),
+      batchDate: formatDate(row.batch_date),
+      uploadedAt: formatDateTime(row.uploaded_at),
+      uploadedBy: row.uploaded_by,
+      isActive: Boolean(row.is_active),
+      totalBarcodes: Number(row.totalBarcodes ?? 0),
+      notTaggedCount: Number(row.notTaggedCount ?? 0),
+      totalQty: Number(row.totalQty ?? 0),
+      itemDescriptions: Number(row.itemDescriptions ?? 0),
+    })),
+    topSoldProducts: topSold.products,
+    dayWiseSales: dayWiseSales.data,
+    totalSoldQtyWeek: dayWiseSales.totalSoldQty,
+    verification,
+  };
+};
+
 export default {
   getInventorySummary,
   getVerificationSummary,
   getDashboard,
+  getExecutiveDashboard,
   getTopSoldProducts,
   getDayWiseSales,
   getDailyImports,

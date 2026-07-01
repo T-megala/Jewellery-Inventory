@@ -54,6 +54,17 @@ export function isAuthenticated() {
   return !!getToken()
 }
 
+export const CEO_ROLE = 'ceo'
+
+export function isCeo() {
+  const user = getUser()
+  return String(user?.role ?? '').trim().toLowerCase() === CEO_ROLE
+}
+
+export function getPostLoginPath() {
+  return isCeo() ? '/dashboard/ceo' : '/dashboard'
+}
+
 export function logout() {
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(USER_KEY)
