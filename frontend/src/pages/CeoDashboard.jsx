@@ -123,6 +123,104 @@ function SegmentComingSoon({ label }) {
   )
 }
 
+const WAREHOUSE_HARDWARE = [
+  { name: 'RFID Conveyor Tunnels', online: 2, total: 2 },
+  { name: 'Desktop Tagging Readers', online: 5, total: 5 },
+  { name: 'Billing Counters (WH)', online: 1, total: 2 },
+  { name: 'Handheld Readers', online: 2, total: 2 },
+]
+
+const WAREHOUSE_SYNC = {
+  pendingRecords: 0,
+  failuresToday: 0,
+  lastCloudSyncMinutes: 2,
+}
+
+function HardwareStatusRow({ name, online, total }) {
+  const allOnline = online === total
+  const offlineCount = total - online
+  const tone = allOnline ? 'ok' : 'warn'
+
+  return (
+    <li className={`ceo-hw-row ceo-hw-row--${tone}`}>
+      <span className="ceo-hw-row__name">
+        <i className="ceo-hw-row__dot" aria-hidden="true" />
+        {name}
+      </span>
+      <span className="ceo-hw-row__status">
+        <span className={`ceo-hw-row__count ceo-hw-row__count--${tone}`}>
+          {online} / {total} online
+        </span>
+        {allOnline ? (
+          <span className="ceo-hw-row__check" aria-label="All online">✓</span>
+        ) : (
+          <span className="ceo-hw-row__badge">{offlineCount} offline</span>
+        )}
+      </span>
+    </li>
+  )
+}
+
+function WarehouseHardwareSync() {
+  const allHardwareOnline = WAREHOUSE_HARDWARE.every((item) => item.online === item.total)
+  const syncHealthy = WAREHOUSE_SYNC.pendingRecords === 0 && WAREHOUSE_SYNC.failuresToday === 0
+
+  return (
+    <>
+      <h2 className="ceo-section-title ceo-section-title--accent">Hardware &amp; Sync — Warehouse</h2>
+      <div className="ceo-hw-grid">
+        <article className="ceo-panel">
+          <div className="ceo-panel__head">
+            <h3>Hardware Status</h3>
+          </div>
+          <ul className="ceo-hw-list">
+            {WAREHOUSE_HARDWARE.map((item) => (
+              <HardwareStatusRow key={item.name} {...item} />
+            ))}
+          </ul>
+        </article>
+
+        <article className="ceo-panel">
+          <div className="ceo-panel__head">
+            <h3>Offline Sync Health</h3>
+          </div>
+          <div className="ceo-sync-metrics">
+            <div className="ceo-sync-metric">
+              <strong className="ceo-sync-metric__value ceo-sync-metric__value--ok">
+                {WAREHOUSE_SYNC.pendingRecords}
+              </strong>
+              <span className="ceo-sync-metric__label">Pending sync records</span>
+            </div>
+            <div className="ceo-sync-metric">
+              <strong className="ceo-sync-metric__value ceo-sync-metric__value--ok">
+                {WAREHOUSE_SYNC.failuresToday}
+              </strong>
+              <span className="ceo-sync-metric__label">Sync failures today</span>
+            </div>
+            <div className="ceo-sync-metric">
+              <strong className="ceo-sync-metric__value">
+                {WAREHOUSE_SYNC.lastCloudSyncMinutes} min
+              </strong>
+              <span className="ceo-sync-metric__label">Last cloud sync</span>
+            </div>
+          </div>
+          {allHardwareOnline && syncHealthy ? (
+            <p className="ceo-sync-banner ceo-sync-banner--ok">
+              <span aria-hidden="true">✓</span>
+              All warehouse stations are online and synced to cloud. No offline backlog.
+            </p>
+          ) : (
+            <p className="ceo-sync-banner ceo-sync-banner--warn">
+              <span aria-hidden="true">!</span>
+              Some stations are offline or have pending sync records. Review hardware status above.
+            </p>
+          )}
+        </article>
+      </div>
+    </>
+  )
+}
+
 function WarehouseDashboard({ data, period }) {
   const overall = data?.overall ?? {}
   const verification = data?.verification ?? {}
@@ -345,6 +443,8 @@ function WarehouseDashboard({ data, period }) {
           </div>
         </article>
       </div>
+
+      <WarehouseHardwareSync />
     </>
   )
 }
