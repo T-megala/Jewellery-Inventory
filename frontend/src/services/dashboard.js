@@ -1,7 +1,7 @@
 import { apiFetch, apiUrl, authFetch, buildQueryString, getAuthHeaders, withBranchParams } from './api.js';
 import { createUserError } from '../utils/userErrorMessage.js';
 
-const EMPTY_VERIFICATION = {
+export const EMPTY_VERIFICATION = {
   totalFound: 0,
   totalMissing: 0,
   totalNew: 0,

@@ -20,6 +20,7 @@ import {
 import {
   EMPTY_COUNTER_ACCURACY,
   EMPTY_STOCKTAKE,
+  EMPTY_VERIFICATION,
   fetchBranchComparison,
   fetchDailyImports,
   fetchDashboard,
@@ -1949,12 +1950,13 @@ function AnalyticsTile({ title, subtitle, children, wide = false }) {
   )
 }
 
-function buildMetricCards(totals, stocktake, batch) {
-  const erpTotal = Number(stocktake?.totalExpected ?? 0) > 0
-    ? stocktake.totalExpected
-    : totals.totalTags
-  const scanRate = Number(stocktake?.scanRatePercent ?? 0)
-  const discrepancies = Number(stocktake?.discrepancies ?? 0)
+function buildMetricCards(totals, stocktake, verification = EMPTY_VERIFICATION) {
+  const totalTags = Number(totals?.totalTags ?? 0)
+  const totalFound = Number(verification?.totalFound ?? 0)
+  const totalMissing = Number(verification?.totalMissing ?? 0)
+  const scanRate = totalTags > 0
+    ? Number(((totalFound / totalTags) * 100).toFixed(2))
+    : 0
 
   return [
     {
@@ -1974,25 +1976,24 @@ function buildMetricCards(totals, stocktake, batch) {
     {
       key: 'erp',
       label: 'Total items (ERP)',
-      value: formatCount(erpTotal),
-      hint: batch?.batchDate ? `EOD sync · ${formatStocktakeDate(batch.batchDate)}` : 'EOD sync',
+      value: formatCount(totalTags),
       variant: 'teal',
     },
     {
       key: 'scanned',
       label: 'Items scanned',
-      value: formatCount(stocktake?.itemsScanned ?? 0),
+      value: formatCount(totalFound),
       hint: `${formatAccuracyPercent(scanRate)}% scan rate`,
       variant: 'green',
       hintTone: scanRate > 0 ? 'success' : null,
     },
     {
       key: 'discrepancies',
-      label: 'Discrepancies',
-      value: formatCount(discrepancies),
-      hint: 'Review needed',
+      label: 'Missing items',
+      value: formatCount(totalMissing),
+      hint: 'In ERP, not found',
       variant: 'red',
-      hintTone: discrepancies > 0 ? 'danger' : null,
+      hintTone: totalMissing > 0 ? 'danger' : null,
     },
     {
       key: 'stocktakes',
@@ -2027,10 +2028,12 @@ function MetricCard({ label, value, hint, variant, hintTone }) {
     <div className={`dashboard-metric dashboard-metric--${variant}`}>
       <p className="dashboard-metric__label">{label}</p>
       <p className="dashboard-metric__value dashboard-num">{value}</p>
-      <p className={`dashboard-metric__hint${hintTone ? ` dashboard-metric__hint--${hintTone}` : ''}`}>
-        {hintTone && <MetricTrendIcon direction={hintTone === 'success' ? 'up' : 'down'} />}
-        {hint}
-      </p>
+      {hint ? (
+        <p className={`dashboard-metric__hint${hintTone ? ` dashboard-metric__hint--${hintTone}` : ''}`}>
+          {hintTone && <MetricTrendIcon direction={hintTone === 'success' ? 'up' : 'down'} />}
+          {hint}
+        </p>
+      ) : null}
     </div>
   )
 }
@@ -2094,6 +2097,7 @@ export default function Dashboard() {
   } = useBranchScope()
   const user = getUser()
   const [summary, setSummary] = useState(null)
+  const [verification, setVerification] = useState(EMPTY_VERIFICATION)
   const [stocktake, setStocktake] = useState(EMPTY_STOCKTAKE)
   const [counterAccuracy, setCounterAccuracy] = useState(EMPTY_COUNTER_ACCURACY)
   const [topSoldProducts, setTopSoldProducts] = useState([])
@@ -2142,6 +2146,12 @@ export default function Dashboard() {
 
         if (!cancelled) {
           setSummary(inventory)
+          setVerification({
+            totalFound: Number(verification?.totalFound ?? 0),
+            totalMissing: Number(verification?.totalMissing ?? 0),
+            totalNew: Number(verification?.totalNew ?? 0),
+            totalTags: Number(verification?.totalTags ?? 0),
+          })
           setStocktake(verification?.stocktake ?? EMPTY_STOCKTAKE)
           setCounterAccuracy(verification?.counterAccuracy ?? EMPTY_COUNTER_ACCURACY)
         }
@@ -2149,6 +2159,7 @@ export default function Dashboard() {
         if (!cancelled) {
           setError(err.message || 'Unable to load dashboard. Please try again.')
           setSummary(null)
+          setVerification(EMPTY_VERIFICATION)
           setStocktake(EMPTY_STOCKTAKE)
           setCounterAccuracy(EMPTY_COUNTER_ACCURACY)
         }
@@ -2344,8 +2355,7 @@ export default function Dashboard() {
     counters: 0,
   }
 
-  const batch = summary?.batch
-  const metricCards = buildMetricCards(totals, stocktake, batch)
+  const metricCards = buildMetricCards(totals, stocktake, verification)
 
   const canViewDashboard = hasPermission('dashboard.view', user)
 
