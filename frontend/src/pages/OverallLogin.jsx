@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { login, logout, isCeo } from '../services/auth.js'
-import './CeoLogin.css'
+import { login, logout, hasOverallAccess } from '../services/auth.js'
+import './OverallLogin.css'
 
-export default function CeoLogin() {
+export default function OverallLogin() {
   const navigate = useNavigate()
   const location = useLocation()
   const [username, setUsername] = useState('')
@@ -54,14 +54,14 @@ export default function CeoLogin() {
     try {
       await login(username.trim(), password)
 
-      if (!isCeo()) {
+      if (!hasOverallAccess()) {
         logout()
-        setError('This portal is for CEO accounts only. Use staff login for store access.')
+        setError('This portal is for overall dashboard accounts only. Use staff login for store access.')
         return
       }
 
       const from = location.state?.from?.pathname
-      const destination = from?.startsWith('/dashboard/ceo') ? from : '/dashboard/ceo'
+      const destination = from?.startsWith('/dashboard/overall') ? from : '/dashboard/overall'
       navigate(destination, { replace: true })
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.')
@@ -71,78 +71,78 @@ export default function CeoLogin() {
   }
 
   return (
-    <div className="ceo-login-page">
-      <aside className="ceo-login-hero">
-        <div className="ceo-login-hero__overlay" aria-hidden="true" />
-        <div className="ceo-login-hero__content">
-          <header className="ceo-login-hero__header">
-            <img src="/images/logo.png" alt="Brand Factory" className="ceo-login-hero__logo" />
+    <div className="overall-login-page">
+      <aside className="overall-login-hero">
+        <div className="overall-login-hero__overlay" aria-hidden="true" />
+        <div className="overall-login-hero__content">
+          <header className="overall-login-hero__header">
+            <img src="/images/logo.png" alt="Brand Factory" className="overall-login-hero__logo" />
             <div>
               <h1>Brand Factory</h1>
-              <p>Garment Automation — Executive Portal</p>
+              <p>Garment Automation — Overall Dashboard</p>
             </div>
           </header>
 
-          <div className="ceo-login-hero__features">
-            <div className="ceo-login-hero__feature">
-              <span className="ceo-login-hero__feature-icon" aria-hidden="true">📊</span>
+          <div className="overall-login-hero__features">
+            <div className="overall-login-hero__feature">
+              <span className="overall-login-hero__feature-icon" aria-hidden="true">📊</span>
               <div>
                 <strong>Company-wide KPIs</strong>
                 <p>Warehouse stock, sales trends, and batch performance</p>
               </div>
             </div>
-            <div className="ceo-login-hero__feature">
-              <span className="ceo-login-hero__feature-icon" aria-hidden="true">🏭</span>
+            <div className="overall-login-hero__feature">
+              <span className="overall-login-hero__feature-icon" aria-hidden="true">🏭</span>
               <div>
                 <strong>Multi-segment view</strong>
                 <p>Warehouse, retail, and franchise dashboards</p>
               </div>
             </div>
-            <div className="ceo-login-hero__feature">
-              <span className="ceo-login-hero__feature-icon" aria-hidden="true">🔒</span>
+            <div className="overall-login-hero__feature">
+              <span className="overall-login-hero__feature-icon" aria-hidden="true">🔒</span>
               <div>
                 <strong>Executive access only</strong>
-                <p>Restricted to authorised leadership accounts</p>
+                <p>Restricted to authorised overall dashboard accounts</p>
               </div>
             </div>
           </div>
 
-          <footer className="ceo-login-hero__footer">
+          <footer className="overall-login-hero__footer">
             &copy; {new Date().getFullYear()} Brand Factory
           </footer>
         </div>
       </aside>
 
-      <main className="ceo-login-main">
-        <div className="ceo-login-card">
-          <div className="ceo-login-card__badge">Executive Access</div>
+      <main className="overall-login-main">
+        <div className="overall-login-card">
+          <div className="overall-login-card__badge">Overall Dashboard</div>
 
-          <div className="ceo-login-card__header">
-            <h2>CEO Sign In</h2>
-            <p>Enter your executive credentials to access the company dashboard</p>
+          <div className="overall-login-card__header">
+            <h2>Overall Dashboard Sign In</h2>
+            <p>Enter your credentials to access the company-wide dashboard</p>
           </div>
 
-          <form ref={formRef} className="ceo-login-form" onSubmit={handleSubmit} noValidate>
+          <form ref={formRef} className="overall-login-form" onSubmit={handleSubmit} noValidate>
             {error && (
-              <div className="ceo-login-error" role="alert">
+              <div className="overall-login-error" role="alert">
                 {error}
                 {error.includes('staff login') && (
-                  <p className="ceo-login-error__link">
+                  <p className="overall-login-error__link">
                     <Link to="/login">Go to staff sign in →</Link>
                   </p>
                 )}
               </div>
             )}
 
-            <div className="ceo-login-field">
-              <label htmlFor="ceo-username">Username</label>
-              <div className="ceo-login-input">
+            <div className="overall-login-field">
+              <label htmlFor="overall-username">Username</label>
+              <div className="overall-login-input">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path d="M20 21a8 8 0 10-16 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                   <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.8" />
                 </svg>
                 <input
-                  id="ceo-username"
+                  id="overall-username"
                   type="text"
                   placeholder="Executive username"
                   value={username}
@@ -154,15 +154,15 @@ export default function CeoLogin() {
               </div>
             </div>
 
-            <div className="ceo-login-field">
-              <label htmlFor="ceo-password">Password</label>
-              <div className="ceo-login-input">
+            <div className="overall-login-field">
+              <label htmlFor="overall-password">Password</label>
+              <div className="overall-login-input">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.8" />
                   <path d="M8 11V8a4 4 0 118 0v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                 </svg>
                 <input
-                  id="ceo-password"
+                  id="overall-password"
                   ref={passwordRef}
                   type={showPassword ? 'text' : 'password'}
                   placeholder="Enter password"
@@ -174,7 +174,7 @@ export default function CeoLogin() {
                 />
                 <button
                   type="button"
-                  className="ceo-login-show"
+                  className="overall-login-show"
                   onClick={() => setShowPassword((v) => !v)}
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                   tabIndex={-1}
@@ -184,12 +184,12 @@ export default function CeoLogin() {
               </div>
             </div>
 
-            <button ref={submitRef} type="submit" className="ceo-login-btn" disabled={loading}>
-              {loading ? 'Signing in…' : 'Access Executive Dashboard'}
+            <button ref={submitRef} type="submit" className="overall-login-btn" disabled={loading}>
+              {loading ? 'Signing in…' : 'Access Overall Dashboard'}
             </button>
           </form>
 
-          <p className="ceo-login-switch">
+          <p className="overall-login-switch">
             Store staff?{' '}
             <Link to="/login">Sign in to staff portal</Link>
           </p>

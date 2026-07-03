@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { login, logout, getPostLoginPath, isCeo } from '../services/auth.js'
+import { login, logout, getPostLoginPath, hasOverallAccess } from '../services/auth.js'
 import './Login.css'
 
 export default function Login() {
@@ -54,16 +54,16 @@ export default function Login() {
     try {
       await login(username.trim(), password)
 
-      if (isCeo()) {
+      if (hasOverallAccess()) {
         logout()
-        setError('This account has executive access. Please use the CEO login portal.')
+        setError('This account has overall dashboard access. Please use the overall dashboard sign in.')
         return
       }
 
       const from = location.state?.from?.pathname
       let destination = getPostLoginPath()
 
-      if (from && !from.startsWith('/dashboard/ceo')) {
+      if (from && !from.startsWith('/dashboard/overall')) {
         destination = from
       }
 
@@ -115,9 +115,9 @@ export default function Login() {
             {error && (
               <div className="login-error" role="alert">
                 {error}
-                {error.includes('executive') && (
+                {error.includes('overall dashboard') && (
                   <p className="login-error__link">
-                    <Link to="/login/ceo">Go to CEO sign in →</Link>
+                    <Link to="/login/overall">Go to overall dashboard sign in →</Link>
                   </p>
                 )}
               </div>
@@ -179,8 +179,8 @@ export default function Login() {
           </form>
 
           <p className="login-switch">
-            Executive access?{' '}
-            <Link to="/login/ceo">CEO sign in</Link>
+            Overall dashboard access?{' '}
+            <Link to="/login/overall">Overall dashboard sign in</Link>
           </p>
         </div>
       </main>

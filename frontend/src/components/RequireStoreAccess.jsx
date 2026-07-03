@@ -1,10 +1,10 @@
 import { Navigate, Outlet } from 'react-router-dom'
-import { isCeo } from '../services/auth.js'
+import { hasOverallAccess } from '../services/auth.js'
 
-/** Store routes — CEOs are redirected to the executive dashboard. */
+/** Store routes — overall dashboard users are redirected to the overall dashboard. */
 export default function RequireStoreAccess() {
-  if (isCeo()) {
-    return <Navigate to="/dashboard/ceo" replace />
+  if (hasOverallAccess()) {
+    return <Navigate to="/dashboard/overall" replace />
   }
 
   return <Outlet />

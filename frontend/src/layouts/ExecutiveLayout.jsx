@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
-import { getUser, logout } from '../services/auth.js'
+import { getOverallDisplayName, getUser, logout } from '../services/auth.js'
 import './ExecutiveLayout.css'
 
 function formatDateTime() {
@@ -18,7 +18,7 @@ function formatDateTime() {
 export default function ExecutiveLayout() {
   const navigate = useNavigate()
   const user = getUser()
-  const displayName = user?.name || user?.username || 'CEO'
+  const displayName = getOverallDisplayName(user)
   const [now, setNow] = useState(formatDateTime())
 
   useEffect(() => {
@@ -28,39 +28,39 @@ export default function ExecutiveLayout() {
 
   function handleLogout() {
     logout()
-    navigate('/login/ceo', { replace: true })
+    navigate('/login/overall', { replace: true })
   }
 
   return (
-    <div className="ceo-shell">
-      <header className="ceo-header">
-        <div className="ceo-header__inner">
-          <div className="ceo-header__brand">
-            <img src="/images/logo.png" alt="Brand Factory" className="ceo-header__logo" />
-            <div className="ceo-header__titles">
+    <div className="overall-shell">
+      <header className="overall-header">
+        <div className="overall-header__inner">
+          <div className="overall-header__brand">
+            <img src="/images/logo.png" alt="Brand Factory" className="overall-header__logo" />
+            <div className="overall-header__titles">
               <strong>Brand Factory</strong>
-              <span>Garment Automation — CEO Dashboard</span>
+              <span>Garment Automation — Overall Dashboard</span>
             </div>
           </div>
 
-          <div className="ceo-header__meta">
-            <span className="ceo-header__live">
-              <i className="ceo-header__live-dot" aria-hidden="true" />
+          <div className="overall-header__meta">
+            <span className="overall-header__live">
+              <i className="overall-header__live-dot" aria-hidden="true" />
               All systems live
             </span>
-            <time className="ceo-header__time">{now}</time>
-            <div className="ceo-header__user">
-              <span className="ceo-header__avatar">{displayName.slice(0, 2).toUpperCase()}</span>
-              <span className="ceo-header__username">{displayName}</span>
+            <time className="overall-header__time">{now}</time>
+            <div className="overall-header__user">
+              <span className="overall-header__avatar">{displayName.slice(0, 2).toUpperCase()}</span>
+              <span className="overall-header__username">{displayName}</span>
             </div>
-            <button type="button" className="ceo-header__logout" onClick={handleLogout}>
+            <button type="button" className="overall-header__logout" onClick={handleLogout}>
               Sign out
             </button>
           </div>
         </div>
       </header>
 
-      <main className="ceo-main">
+      <main className="overall-main">
         <Outlet />
       </main>
     </div>

@@ -13,7 +13,7 @@ const DEFAULT_PAGE_SIZE = 10
 
 const ROLE_OPTIONS = [
   { value: 'user', label: 'Store user' },
-  { value: 'ceo', label: 'CEO' },
+  { value: 'ceo', label: 'Overall dashboard' },
   { value: 'admin', label: 'Admin' },
 ]
 

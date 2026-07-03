@@ -54,15 +54,26 @@ export function isAuthenticated() {
   return !!getToken()
 }
 
-export const CEO_ROLE = 'ceo'
+export const EXECUTIVE_ROLE = 'ceo'
 
-export function isCeo() {
+export function hasOverallAccess() {
   const user = getUser()
-  return String(user?.role ?? '').trim().toLowerCase() === CEO_ROLE
+  return String(user?.role ?? '').trim().toLowerCase() === EXECUTIVE_ROLE
 }
 
 export function getPostLoginPath() {
-  return isCeo() ? '/dashboard/ceo' : '/dashboard'
+  return hasOverallAccess() ? '/dashboard/overall' : '/dashboard'
+}
+
+export function getOverallDisplayName(user) {
+  const name = String(user?.name ?? '').trim()
+  if (name) return name
+
+  const username = String(user?.username ?? '').trim()
+  if (!username) return 'User'
+  if (username.toLowerCase() === EXECUTIVE_ROLE) return 'Administrator'
+
+  return username
 }
 
 export function logout() {

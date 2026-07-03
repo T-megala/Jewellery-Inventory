@@ -1,15 +1,15 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/Login.jsx'
-import CeoLogin from './pages/CeoLogin.jsx'
+import OverallLogin from './pages/OverallLogin.jsx'
 import Dashboard from './pages/Dashboard.jsx'
-import CeoDashboard from './pages/CeoDashboard.jsx'
+import OverallDashboard from './pages/OverallDashboard.jsx'
 import Import from './pages/Import.jsx'
 import Stock from './pages/Stock.jsx'
 import Reports from './pages/Reports.jsx'
 import Users from './pages/Users.jsx'
 import MainLayout from './layouts/MainLayout.jsx'
 import ExecutiveLayout from './layouts/ExecutiveLayout.jsx'
-import RequireCeoAuth from './components/RequireCeoAuth.jsx'
+import RequireOverallAuth from './components/RequireOverallAuth.jsx'
 import RequireStoreAuth from './components/RequireStoreAuth.jsx'
 import RootRedirect from './components/RootRedirect.jsx'
 import { getPostLoginPath, isAuthenticated } from './services/auth.js'
@@ -20,13 +20,15 @@ export default function App() {
       <Route path="/" element={<RootRedirect />} />
 
       <Route path="/login" element={<Login />} />
-      <Route path="/login/ceo" element={<CeoLogin />} />
+      <Route path="/login/overall" element={<OverallLogin />} />
+      <Route path="/login/ceo" element={<Navigate to="/login/overall" replace />} />
 
-      <Route element={<RequireCeoAuth />}>
+      <Route element={<RequireOverallAuth />}>
         <Route element={<ExecutiveLayout />}>
-          <Route path="/dashboard/ceo" element={<CeoDashboard />} />
+          <Route path="/dashboard/overall" element={<OverallDashboard />} />
         </Route>
       </Route>
+      <Route path="/dashboard/ceo" element={<Navigate to="/dashboard/overall" replace />} />
 
       <Route element={<RequireStoreAuth />}>
         <Route element={<MainLayout />}>

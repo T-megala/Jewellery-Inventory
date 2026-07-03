@@ -18,7 +18,7 @@ import {
   isConnectionError,
   isSessionExpiredError,
 } from '../utils/userFriendlyError.js'
-import './CeoDashboard.css'
+import './OverallDashboard.css'
 
 const SEGMENTS = [
   { key: 'warehouse', label: 'Warehouse', icon: '🏭' },
@@ -116,7 +116,7 @@ function SalesTooltip({ active, payload }) {
 
 function SegmentComingSoon({ label }) {
   return (
-    <div className="ceo-coming">
+    <div className="overall-coming">
       <h3>{label} dashboard</h3>
       <p>Segment-level KPIs and movement tracking will be available in a future release.</p>
     </div>
@@ -142,19 +142,19 @@ function HardwareStatusRow({ name, online, total }) {
   const tone = allOnline ? 'ok' : 'warn'
 
   return (
-    <li className={`ceo-hw-row ceo-hw-row--${tone}`}>
-      <span className="ceo-hw-row__name">
-        <i className="ceo-hw-row__dot" aria-hidden="true" />
+    <li className={`overall-hw-row overall-hw-row--${tone}`}>
+      <span className="overall-hw-row__name">
+        <i className="overall-hw-row__dot" aria-hidden="true" />
         {name}
       </span>
-      <span className="ceo-hw-row__status">
-        <span className={`ceo-hw-row__count ceo-hw-row__count--${tone}`}>
+      <span className="overall-hw-row__status">
+        <span className={`overall-hw-row__count overall-hw-row__count--${tone}`}>
           {online} / {total} online
         </span>
         {allOnline ? (
-          <span className="ceo-hw-row__check" aria-label="All online">✓</span>
+          <span className="overall-hw-row__check" aria-label="All online">✓</span>
         ) : (
-          <span className="ceo-hw-row__badge">{offlineCount} offline</span>
+          <span className="overall-hw-row__badge">{offlineCount} offline</span>
         )}
       </span>
     </li>
@@ -167,50 +167,50 @@ function WarehouseHardwareSync() {
 
   return (
     <>
-      <h2 className="ceo-section-title ceo-section-title--accent">Hardware &amp; Sync — Warehouse</h2>
-      <div className="ceo-hw-grid">
-        <article className="ceo-panel">
-          <div className="ceo-panel__head">
+      <h2 className="overall-section-title overall-section-title--accent">Hardware &amp; Sync — Warehouse</h2>
+      <div className="overall-hw-grid">
+        <article className="overall-panel">
+          <div className="overall-panel__head">
             <h3>Hardware Status</h3>
           </div>
-          <ul className="ceo-hw-list">
+          <ul className="overall-hw-list">
             {WAREHOUSE_HARDWARE.map((item) => (
               <HardwareStatusRow key={item.name} {...item} />
             ))}
           </ul>
         </article>
 
-        <article className="ceo-panel">
-          <div className="ceo-panel__head">
+        <article className="overall-panel">
+          <div className="overall-panel__head">
             <h3>Offline Sync Health</h3>
           </div>
-          <div className="ceo-sync-metrics">
-            <div className="ceo-sync-metric">
-              <strong className="ceo-sync-metric__value ceo-sync-metric__value--ok">
+          <div className="overall-sync-metrics">
+            <div className="overall-sync-metric">
+              <strong className="overall-sync-metric__value overall-sync-metric__value--ok">
                 {WAREHOUSE_SYNC.pendingRecords}
               </strong>
-              <span className="ceo-sync-metric__label">Pending sync records</span>
+              <span className="overall-sync-metric__label">Pending sync records</span>
             </div>
-            <div className="ceo-sync-metric">
-              <strong className="ceo-sync-metric__value ceo-sync-metric__value--ok">
+            <div className="overall-sync-metric">
+              <strong className="overall-sync-metric__value overall-sync-metric__value--ok">
                 {WAREHOUSE_SYNC.failuresToday}
               </strong>
-              <span className="ceo-sync-metric__label">Sync failures today</span>
+              <span className="overall-sync-metric__label">Sync failures today</span>
             </div>
-            <div className="ceo-sync-metric">
-              <strong className="ceo-sync-metric__value">
+            <div className="overall-sync-metric">
+              <strong className="overall-sync-metric__value">
                 {WAREHOUSE_SYNC.lastCloudSyncMinutes} min
               </strong>
-              <span className="ceo-sync-metric__label">Last cloud sync</span>
+              <span className="overall-sync-metric__label">Last cloud sync</span>
             </div>
           </div>
           {allHardwareOnline && syncHealthy ? (
-            <p className="ceo-sync-banner ceo-sync-banner--ok">
+            <p className="overall-sync-banner overall-sync-banner--ok">
               <span aria-hidden="true">✓</span>
               All warehouse stations are online and synced to cloud. No offline backlog.
             </p>
           ) : (
-            <p className="ceo-sync-banner ceo-sync-banner--warn">
+            <p className="overall-sync-banner overall-sync-banner--warn">
               <span aria-hidden="true">!</span>
               Some stations are offline or have pending sync records. Review hardware status above.
             </p>
@@ -265,38 +265,38 @@ function WarehouseDashboard({ data, period }) {
 
   return (
     <>
-      <h2 className="ceo-section-title">Total RFID Stock — Warehouse</h2>
-      <div className="ceo-kpi-grid">
-        <article className="ceo-kpi ceo-kpi--blue">
-          <p className="ceo-kpi__label">Total Stock in Warehouse</p>
-          <p className="ceo-kpi__value">{formatQty(totalStock)}</p>
-          <p className="ceo-kpi__hint">units across all categories</p>
+      <h2 className="overall-section-title overall-section-title--accent">Total RFID Stock — Warehouse</h2>
+      <div className="overall-kpi-grid">
+        <article className="overall-kpi overall-kpi--blue">
+          <p className="overall-kpi__label">Total Stock in Warehouse</p>
+          <p className="overall-kpi__value">{formatQty(totalStock)}</p>
+          <p className="overall-kpi__hint">units across all categories</p>
         </article>
-        <article className="ceo-kpi ceo-kpi--green">
-          <p className="ceo-kpi__label">Tagged &amp; Cloud Synced</p>
-          <p className="ceo-kpi__value">{formatCount(tagged)}</p>
-          <p className="ceo-kpi__hint ceo-kpi__hint--green">{tagCoverage}% tag coverage</p>
+        <article className="overall-kpi overall-kpi--green">
+          <p className="overall-kpi__label">Tagged &amp; Cloud Synced</p>
+          <p className="overall-kpi__value">{formatCount(tagged)}</p>
+          <p className="overall-kpi__hint overall-kpi__hint--green">{tagCoverage}% tag coverage</p>
         </article>
-        <article className="ceo-kpi ceo-kpi--yellow">
-          <p className="ceo-kpi__label">Pending Tagging</p>
-          <p className="ceo-kpi__value">{formatCount(pending)}</p>
-          <p className="ceo-kpi__hint ceo-kpi__hint--yellow">imported, not yet tagged</p>
+        <article className="overall-kpi overall-kpi--yellow">
+          <p className="overall-kpi__label">Pending Tagging</p>
+          <p className="overall-kpi__value">{formatCount(pending)}</p>
+          <p className="overall-kpi__hint overall-kpi__hint--yellow">imported, not yet tagged</p>
         </article>
-        <article className="ceo-kpi ceo-kpi--grey">
-          <p className="ceo-kpi__label">Tag Defect / Reject</p>
-          <p className="ceo-kpi__value">{formatCount(reject)}</p>
-          <p className="ceo-kpi__hint">
+        <article className="overall-kpi overall-kpi--grey">
+          <p className="overall-kpi__label">Tag Defect / Reject</p>
+          <p className="overall-kpi__value">{formatCount(reject)}</p>
+          <p className="overall-kpi__hint">
             {pct(reject, tagged || 1)}% reject rate — acceptable
           </p>
         </article>
       </div>
 
-      <h2 className="ceo-section-title">Movement — Outward {period === 'today' ? 'Today' : period.toUpperCase()}</h2>
-      <div className="ceo-panels">
-        <article className="ceo-panel">
-          <div className="ceo-panel__head">
+      <h2 className="overall-section-title overall-section-title--accent">Movement — Outward {period === 'today' ? 'Today' : period.toUpperCase()}</h2>
+      <div className="overall-panels">
+        <article className="overall-panel">
+          <div className="overall-panel__head">
             <h3>Daily Outward Volume — Sales (last 7 days)</h3>
-            <span className="ceo-panel__badge">All counters</span>
+            <span className="overall-panel__badge">All counters</span>
           </div>
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={barData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
@@ -315,11 +315,11 @@ function WarehouseDashboard({ data, period }) {
           </ResponsiveContainer>
         </article>
 
-        <article className="ceo-panel">
-          <div className="ceo-panel__head">
+        <article className="overall-panel">
+          <div className="overall-panel__head">
             <h3>Today&apos;s Outward Split</h3>
           </div>
-          <div className="ceo-donut-wrap">
+          <div className="overall-donut-wrap">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -340,29 +340,29 @@ function WarehouseDashboard({ data, period }) {
                 </Pie>
               </PieChart>
             </ResponsiveContainer>
-            <div className="ceo-donut-center">
+            <div className="overall-donut-center">
               <strong>{formatQty(periodSold)}</strong>
               <span>units sold</span>
             </div>
           </div>
-          <div className="ceo-donut-legend">
+          <div className="overall-donut-legend">
             <span><i style={{ background: '#22c55e' }} />Retail ({retailPct}%)</span>
             <span><i style={{ background: '#f97316' }} />Franchise ({franchisePct}%)</span>
           </div>
         </article>
       </div>
 
-      <h2 className="ceo-section-title">Movement — Inward &amp; Pending</h2>
-      <div className="ceo-bottom-grid">
-        <article className="ceo-panel">
-          <div className="ceo-panel__head">
+      <h2 className="overall-section-title overall-section-title--accent">Movement — Inward &amp; Pending</h2>
+      <div className="overall-bottom-grid">
+        <article className="overall-panel">
+          <div className="overall-panel__head">
             <h3>Inward Today (Excel Imports)</h3>
           </div>
-          <div className="ceo-table-wrap">
+          <div className="overall-table-wrap">
             {recentBatches.length === 0 ? (
-              <p className="ceo-empty">No import batches yet.</p>
+              <p className="overall-empty">No import batches yet.</p>
             ) : (
-              <table className="ceo-table">
+              <table className="overall-table">
                 <thead>
                   <tr>
                     <th>Batch</th>
@@ -378,7 +378,7 @@ function WarehouseDashboard({ data, period }) {
                       <td>{batch.batchDate}</td>
                       <td>{formatQty(batch.totalQty)}</td>
                       <td>
-                        <span className={`ceo-status ${batch.isActive ? 'ceo-status--active' : 'ceo-status--inactive'}`}>
+                        <span className={`overall-status ${batch.isActive ? 'overall-status--active' : 'overall-status--inactive'}`}>
                           {batch.isActive ? 'Active' : 'Inactive'}
                         </span>
                       </td>
@@ -390,11 +390,11 @@ function WarehouseDashboard({ data, period }) {
           </div>
         </article>
 
-        <article className="ceo-panel">
-          <div className="ceo-panel__head">
+        <article className="overall-panel">
+          <div className="overall-panel__head">
             <h3>In-Transit (Dispatched, Pending Verification)</h3>
           </div>
-          <ul className="ceo-transit-list">
+          <ul className="overall-transit-list">
             <li>
               <span>Batch #{activeBatch?.id ?? '—'} → Verification</span>
               <span>{formatCount(inTransit.found)} pcs</span>
@@ -410,40 +410,40 @@ function WarehouseDashboard({ data, period }) {
           </ul>
         </article>
 
-        <article className="ceo-panel">
-          <div className="ceo-panel__head">
+        <article className="overall-panel">
+          <div className="overall-panel__head">
             <h3>Tag Inventory</h3>
           </div>
-          <div className="ceo-tag-row">
-            <div className="ceo-tag-row__head">
+          <div className="overall-tag-row">
+            <div className="overall-tag-row__head">
               <span>Barcode Tags</span>
-              <span className="ceo-tag-ok">OK</span>
+              <span className="overall-tag-ok">OK</span>
             </div>
-            <div className="ceo-tag-row__bar">
+            <div className="overall-tag-row__bar">
               <div
-                className="ceo-tag-row__fill"
+                className="overall-tag-row__fill"
                 style={{ width: `${Math.min(inventoryCoverage, 100)}%` }}
               />
             </div>
-            <div className="ceo-tag-row__foot">
+            <div className="overall-tag-row__foot">
               <span>{formatCount(inventoryTagged)} synced</span>
               <span>{inventoryCoverage}%</span>
             </div>
           </div>
-          <div className="ceo-tag-row">
-            <div className="ceo-tag-row__head">
+          <div className="overall-tag-row">
+            <div className="overall-tag-row__head">
               <span>Pending Tags</span>
-              <span className={inventoryPending > 500 ? 'ceo-tag-warn' : 'ceo-tag-ok'}>
+              <span className={inventoryPending > 500 ? 'overall-tag-warn' : 'overall-tag-ok'}>
                 {inventoryPending > 500 ? 'LOW' : 'OK'}
               </span>
             </div>
-            <div className="ceo-tag-row__bar">
+            <div className="overall-tag-row__bar">
               <div
-                className={`ceo-tag-row__fill${inventoryPending > 500 ? ' ceo-tag-row__fill--warn' : ''}`}
+                className={`overall-tag-row__fill${inventoryPending > 500 ? ' overall-tag-row__fill--warn' : ''}`}
                 style={{ width: `${Math.min((inventoryPending / Math.max(inventoryTagged, 1)) * 100, 100)}%` }}
               />
             </div>
-            <div className="ceo-tag-row__foot">
+            <div className="overall-tag-row__foot">
               <span>{formatCount(inventoryPending)} pending</span>
             </div>
           </div>
@@ -455,7 +455,7 @@ function WarehouseDashboard({ data, period }) {
   )
 }
 
-export default function CeoDashboard() {
+export default function OverallDashboard() {
   const navigate = useNavigate()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -477,7 +477,7 @@ export default function CeoDashboard() {
         if (!cancelled) {
           if (isSessionExpiredError(err.message, err.status)) {
             logout()
-            navigate('/login/ceo', { replace: true, state: { sessionExpired: true } })
+            navigate('/login/overall', { replace: true, state: { sessionExpired: true } })
             return
           }
           setError(getUserFriendlyErrorMessage(err.message, err.status))
@@ -492,12 +492,12 @@ export default function CeoDashboard() {
   }, [navigate, activeSegment])
 
   if (loading) {
-    return <div className="ceo-loading">Loading CEO dashboard…</div>
+    return <div className="overall-loading">Loading overall dashboard…</div>
   }
 
   if (error) {
     return (
-      <div className="ceo-error">
+      <div className="overall-error">
         <h2>Unable to load dashboard</h2>
         <p>{error}</p>
         <p>
@@ -512,9 +512,9 @@ export default function CeoDashboard() {
   const activeSegmentMeta = SEGMENTS.find((s) => s.key === activeSegment)
 
   return (
-    <div className="ceo-dashboard">
-      <div className="ceo-toolbar">
-        <div className="ceo-tabs" role="tablist" aria-label="Business segments">
+    <div className="overall-dashboard">
+      <div className="overall-toolbar">
+        <div className="overall-tabs" role="tablist" aria-label="Business segments">
           {SEGMENTS.map((segment) => {
             const isActive = activeSegment === segment.key
             const isSoon = segment.key !== 'warehouse'
@@ -524,7 +524,7 @@ export default function CeoDashboard() {
                 type="button"
                 role="tab"
                 aria-selected={isActive}
-                className={`ceo-tab${isActive ? ' ceo-tab--active' : ''}${isSoon ? ' ceo-tab--soon' : ''}`}
+                className={`overall-tab${isActive ? ' overall-tab--active' : ''}${isSoon ? ' overall-tab--soon' : ''}`}
                 onClick={() => setActiveSegment(segment.key)}
               >
                 <span aria-hidden="true">{segment.icon}</span>
@@ -534,12 +534,12 @@ export default function CeoDashboard() {
           })}
         </div>
 
-        <div className="ceo-period" role="group" aria-label="Time period">
+        <div className="overall-period" role="group" aria-label="Time period">
           {PERIODS.map((item) => (
             <button
               key={item.key}
               type="button"
-              className={`ceo-period__btn${period === item.key ? ' ceo-period__btn--active' : ''}`}
+              className={`overall-period__btn${period === item.key ? ' overall-period__btn--active' : ''}`}
               onClick={() => setPeriod(item.key)}
             >
               {item.label}
