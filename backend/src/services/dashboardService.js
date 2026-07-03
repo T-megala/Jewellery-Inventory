@@ -2,6 +2,7 @@ import pool from "../config/database.js";
 import ApiError from "../utils/ApiError.js";
 import { getActiveBatchId } from "./productBatchService.js";
 import dailySalesSummaryService from "./dailySalesSummaryService.js";
+import executiveDashboardService from "./executiveDashboardService.js";
 
 const PRODUCT_DESCRIPTION_FILTER = `
   item_description IS NOT NULL
@@ -12,20 +13,6 @@ const PRODUCT_BARCODE_FILTER = `
   barcode IS NOT NULL
   AND TRIM(barcode) != ''
   AND ${PRODUCT_DESCRIPTION_FILTER}
-`;
-
-const BATCH_PRODUCT_STATS_SUBQUERY = `
-  SELECT
-    batch_id,
-    SUM(CASE WHEN barcode IS NOT NULL AND TRIM(barcode) != '' THEN 1 ELSE 0 END) AS total_barcodes,
-    SUM(CASE WHEN barcode IS NULL OR TRIM(barcode) = '' THEN 1 ELSE 0 END) AS untagged_count,
-    COALESCE(SUM(CASE WHEN barcode IS NOT NULL AND TRIM(barcode) != '' THEN closing_bal_qty ELSE 0 END), 0) AS total_qty,
-    COUNT(DISTINCT CASE
-      WHEN barcode IS NOT NULL AND TRIM(barcode) != '' THEN item_description
-    END) AS item_descriptions
-  FROM products
-  WHERE ${PRODUCT_DESCRIPTION_FILTER.replace(/\n/g, " ")}
-  GROUP BY batch_id
 `;
 
 const formatDateTime = (value) => {
@@ -509,186 +496,12 @@ const getDailyImports = async ({
   };
 };
 
-const FUTURE_SEGMENTS = [
-  {
-    key: "warehouse",
-    label: "Warehouse",
-    description: "Central stock and inbound imports",
-  },
-  {
-    key: "retail",
-    label: "Retail",
-    description: "Owned showroom operations",
-  },
-  {
-    key: "franchise",
-    label: "Franchise",
-    description: "Partner store performance",
-  },
-];
-
-const emptyTypeMetrics = () => ({
-  branchCount: 0,
-  totalImportBatches: 0,
-  activeBatchCount: 0,
-  taggedProductCount: 0,
-  untaggedProductCount: 0,
-  totalStockQty: 0,
-  productTypeCount: 0,
-  soldQtyLast7Days: 0,
-  soldTagsLast7Days: 0,
-});
-
-const emptyVerification = () => ({
-  tagCounts: { foundCount: 0, missingCount: 0, newCount: 0 },
-  productCounts: {
-    totalProducts: 0,
-    fullyVerifiedProducts: 0,
-    partiallyVerifiedProducts: 0,
-    notVerifiedProducts: 0,
-  },
-  totalExpectedTags: 0,
-  totalFoundTags: 0,
-  totalMissingTags: 0,
-  totalNewTags: 0,
-  overallVerificationPercentage: 0,
-  totalFound: 0,
-  totalMissing: 0,
-  totalNew: 0,
-  totalTags: 0,
-});
-
-/** KPI cards for the CEO overview grid (same shape for every type). */
-const buildOverviewCards = (metrics, verificationData) => [
-  { key: "totalStock", value: Number(metrics.totalStockQty ?? 0) },
-  { key: "tagged", value: Number(metrics.taggedProductCount ?? 0) },
-  { key: "pending", value: Number(metrics.untaggedProductCount ?? 0) },
-  { key: "reject", value: Number(verificationData?.totalMissing ?? 0) },
-];
-
-const VALID_SEGMENT_TYPES = FUTURE_SEGMENTS.map((segment) => segment.key);
-
-/** CEO overview — company-wide metrics; segment groups ready for branch_type later. */
-const getExecutiveDashboard = async ({ type = "warehouse" } = {}) => {
-  const requestedType = String(type ?? "warehouse").trim().toLowerCase();
-
-  if (!VALID_SEGMENT_TYPES.includes(requestedType)) {
-    throw new ApiError(
-      400,
-      `Invalid type "${type}". Valid types: ${VALID_SEGMENT_TYPES.join(", ")}`,
-    );
-  }
-
-  const [[overallRow]] = await pool.execute(
-    `SELECT
-       COUNT(DISTINCT b.id) AS totalImportBatches,
-       SUM(CASE WHEN b.is_active = 1 THEN 1 ELSE 0 END) AS activeBatchCount,
-       COALESCE(SUM(CASE WHEN b.is_active = 1 THEN stats.total_barcodes ELSE 0 END), 0) AS taggedProductCount,
-       COALESCE(SUM(CASE WHEN b.is_active = 1 THEN stats.untagged_count ELSE 0 END), 0) AS untaggedProductCount,
-       COALESCE(SUM(CASE WHEN b.is_active = 1 THEN stats.total_qty ELSE 0 END), 0) AS totalStockQty,
-       COALESCE(SUM(CASE WHEN b.is_active = 1 THEN stats.item_descriptions ELSE 0 END), 0) AS productTypeCount
-     FROM product_upload_batches b
-     LEFT JOIN (${BATCH_PRODUCT_STATS_SUBQUERY}) stats ON stats.batch_id = b.id`,
-  );
-
-  const [batchRows] = await pool.execute(
-    `SELECT
-       b.id,
-       b.batch_date,
-       b.uploaded_at,
-       b.uploaded_by,
-       b.is_active,
-       COALESCE(stats.total_barcodes, 0) AS taggedProductCount,
-       COALESCE(stats.untagged_count, 0) AS untaggedProductCount,
-       COALESCE(stats.total_qty, 0) AS totalStockQty,
-       COALESCE(stats.item_descriptions, 0) AS productTypeCount
-     FROM product_upload_batches b
-     LEFT JOIN (${BATCH_PRODUCT_STATS_SUBQUERY}) stats ON stats.batch_id = b.id
-     ORDER BY b.id DESC
-     LIMIT 20`,
-  );
-
-  const [weekSalesRows] = await pool.execute(
-    `SELECT
-       COALESCE(SUM(sold_pieces), 0) AS soldQty,
-       COALESCE(SUM(sold_tags), 0) AS soldBarcodes
-     FROM daily_sales_summary
-     WHERE counter_name = ?
-       AND batch_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)`,
-    [dailySalesSummaryService.ALL_COUNTER],
-  );
-
-  const [dayWiseSales, verification] = await Promise.all([
-    getDayWiseSales({ period: "week" }),
-    getVerificationSummary(),
-  ]);
-
-  const warehouseTotals = {
-    branchCount: 1,
-    totalImportBatches: Number(overallRow?.totalImportBatches ?? 0),
-    activeBatchCount: Number(overallRow?.activeBatchCount ?? 0),
-    taggedProductCount: Number(overallRow?.taggedProductCount ?? 0),
-    untaggedProductCount: Number(overallRow?.untaggedProductCount ?? 0),
-    totalStockQty: Number(overallRow?.totalStockQty ?? 0),
-    productTypeCount: Number(overallRow?.productTypeCount ?? 0),
-    soldQtyLast7Days: Number(weekSalesRows[0]?.soldQty ?? 0),
-    soldTagsLast7Days: Number(weekSalesRows[0]?.soldBarcodes ?? 0),
-  };
-
-  // Real metrics per business type. Warehouse is live from imports;
-  // retail/franchise have no data source yet, so they return zeros.
-  const typeMetrics = {
-    warehouse: warehouseTotals,
-  };
-
-  const isWarehouse = requestedType === "warehouse";
-  const overall = { ...emptyTypeMetrics(), ...(typeMetrics[requestedType] ?? {}) };
-  const verificationData = isWarehouse ? verification : emptyVerification();
-
-  const tagged = overall.taggedProductCount;
-  const pending = overall.untaggedProductCount;
-  const tagCoveragePct =
-    tagged > 0 ? Number(((tagged / (tagged + pending)) * 100).toFixed(1)) : 0;
-
-  return {
-    type: requestedType,
-    cards: buildOverviewCards(overall, verificationData),
-
-    // Movement — Outward daily (sales, last 7 days)
-    outwardDaily: (isWarehouse ? dayWiseSales.data : []).map((row) => ({
-      date: row.date,
-      day: row.day,
-      soldQty: Number(row.soldQty ?? 0),
-    })),
-
-    // Today's Outward Split (retail vs franchise — 0 until sources exist)
-    outwardSplit: {
-      totalSold: isWarehouse ? Number(dayWiseSales.totalSoldQty ?? 0) : 0,
-      retail: 0,
-      franchise: 0,
-    },
-
-    // Movement — Inward & Pending
-    inwardPending: {
-      batches: (isWarehouse ? batchRows : []).map((row) => ({
-        id: Number(row.id),
-        batchDate: formatDate(row.batch_date),
-        totalStockQty: Number(row.totalStockQty ?? 0),
-        isActive: Boolean(row.is_active),
-      })),
-      inTransit: {
-        found: Number(verificationData.totalFound ?? 0),
-        missing: Number(verificationData.totalMissing ?? 0),
-        new: Number(verificationData.totalNew ?? 0),
-      },
-      tagInventory: {
-        tagged,
-        pending,
-        tagCoveragePct,
-      },
-    },
-  };
-};
+const getExecutiveDashboard = async ({ type = "warehouse" } = {}) =>
+  executiveDashboardService.getExecutiveDashboard({
+    type,
+    getDayWiseSales,
+    getVerificationSummary,
+  });
 
 export default {
   getInventorySummary,
