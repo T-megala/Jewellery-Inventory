@@ -28,7 +28,7 @@ export default function ExecutiveLayout() {
 
   function handleLogout() {
     logout()
-    navigate('/login/overall', { replace: true })
+    navigate('/overalldashboard/login', { replace: true })
   }
 
   return (

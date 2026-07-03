@@ -62,7 +62,7 @@ export function hasOverallAccess() {
 }
 
 export function getPostLoginPath() {
-  return hasOverallAccess() ? '/dashboard/overall' : '/dashboard'
+  return hasOverallAccess() ? '/overalldashboard' : '/dashboard'
 }
 
 export function getOverallDisplayName(user) {

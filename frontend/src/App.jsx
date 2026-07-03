@@ -20,15 +20,17 @@ export default function App() {
       <Route path="/" element={<RootRedirect />} />
 
       <Route path="/login" element={<Login />} />
-      <Route path="/login/overall" element={<OverallLogin />} />
-      <Route path="/login/ceo" element={<Navigate to="/login/overall" replace />} />
+      <Route path="/overalldashboard/login" element={<OverallLogin />} />
+      <Route path="/login/overall" element={<Navigate to="/overalldashboard/login" replace />} />
+      <Route path="/login/ceo" element={<Navigate to="/overalldashboard/login" replace />} />
 
       <Route element={<RequireOverallAuth />}>
         <Route element={<ExecutiveLayout />}>
-          <Route path="/dashboard/overall" element={<OverallDashboard />} />
+          <Route path="/overalldashboard" element={<OverallDashboard />} />
         </Route>
       </Route>
-      <Route path="/dashboard/ceo" element={<Navigate to="/dashboard/overall" replace />} />
+      <Route path="/dashboard/overall" element={<Navigate to="/overalldashboard" replace />} />
+      <Route path="/dashboard/ceo" element={<Navigate to="/overalldashboard" replace />} />
 
       <Route element={<RequireStoreAuth />}>
         <Route element={<MainLayout />}>

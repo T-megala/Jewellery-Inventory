@@ -61,7 +61,7 @@ export default function OverallLogin() {
       }
 
       const from = location.state?.from?.pathname
-      const destination = from?.startsWith('/dashboard/overall') ? from : '/dashboard/overall'
+      const destination = from?.startsWith('/overalldashboard') ? from : '/overalldashboard'
       navigate(destination, { replace: true })
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.')

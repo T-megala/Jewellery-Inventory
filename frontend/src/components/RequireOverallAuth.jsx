@@ -6,7 +6,7 @@ export default function RequireOverallAuth() {
   const location = useLocation()
 
   if (!isAuthenticated()) {
-    return <Navigate to="/login/overall" replace state={{ from: location }} />
+    return <Navigate to="/overalldashboard/login" replace state={{ from: location }} />
   }
 
   if (!hasOverallAccess()) {

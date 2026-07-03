@@ -13,12 +13,21 @@ import {
 } from 'recharts'
 import { fetchExecutiveDashboard } from '../services/dashboard.js'
 import { logout } from '../services/auth.js'
+import RetailDashboard from './RetailDashboard.jsx'
+import FranchiseDashboard from './FranchiseDashboard.jsx'
 import {
   getUserFriendlyErrorMessage,
   isConnectionError,
   isSessionExpiredError,
 } from '../utils/userFriendlyError.js'
 import './OverallDashboard.css'
+
+const WAREHOUSE_CONFIG = {
+  stockHeading: 'Total RFID Stock — Warehouse',
+  totalStockLabel: 'Total Stock in Warehouse',
+  stockHint: 'units across all categories',
+  inwardTitle: 'Inward Today (Excel Imports)',
+}
 
 const SEGMENTS = [
   { key: 'warehouse', label: 'Warehouse', icon: '🏭' },
@@ -110,15 +119,6 @@ function SalesTooltip({ active, payload }) {
     <div className="chart-tip">
       <p className="chart-tip__title">{item?.day}</p>
       <p className="chart-tip__value">{formatQty(item?.soldQty)} units sold</p>
-    </div>
-  )
-}
-
-function SegmentComingSoon({ label }) {
-  return (
-    <div className="overall-coming">
-      <h3>{label} dashboard</h3>
-      <p>Segment-level KPIs and movement tracking will be available in a future release.</p>
     </div>
   )
 }
@@ -231,11 +231,13 @@ function WarehouseHardwareSync() {
 }
 
 function WarehouseDashboard({ data, period }) {
+  const config = WAREHOUSE_CONFIG
   const cards = data?.cards ?? {}
   const inwardPending = data?.inwardPending ?? {}
   const batches = inwardPending.batches ?? []
   const inTransit = inwardPending.inTransit ?? {}
   const tagInventory = inwardPending.tagInventory ?? {}
+  const outwardSplit = data?.outwardSplit ?? {}
 
   const totalStock = Number(cards.totalStock ?? 0)
   const tagged = Number(cards.tagged ?? 0)
@@ -251,35 +253,46 @@ function WarehouseDashboard({ data, period }) {
   const periodSold = periodRows.reduce((sum, row) => sum + Number(row.soldQty ?? 0), 0)
   const barData = buildWeekBarData(data?.outwardDaily ?? [])
 
+  const splitRetail = Number(outwardSplit.retail ?? 0)
+  const splitFranchise = Number(outwardSplit.franchise ?? 0)
+  const splitTotal = splitRetail + splitFranchise
+
   const donutData = useMemo(() => {
-    const retail = Math.round(periodSold * 0.68)
-    const franchise = Math.max(periodSold - retail, 0)
-    if (!periodSold) {
+    if (splitTotal > 0) {
       return [
-        { name: 'Retail', value: 1, color: '#22c55e' },
-        { name: 'Franchise', value: 1, color: '#f97316' },
+        { name: 'Retail', value: splitRetail, color: '#22c55e' },
+        { name: 'Franchise', value: splitFranchise, color: '#f97316' },
+      ]
+    }
+    if (periodSold > 0) {
+      const retail = Math.round(periodSold * 0.68)
+      const franchise = Math.max(periodSold - retail, 0)
+      return [
+        { name: 'Retail', value: retail, color: '#22c55e' },
+        { name: 'Franchise', value: franchise, color: '#f97316' },
       ]
     }
     return [
-      { name: 'Retail', value: retail, color: '#22c55e' },
-      { name: 'Franchise', value: franchise, color: '#f97316' },
+      { name: 'Retail', value: 0, color: '#e2e8f0' },
+      { name: 'Franchise', value: 0, color: '#cbd5e1' },
     ]
-  }, [periodSold])
+  }, [periodSold, splitFranchise, splitRetail, splitTotal])
 
-  const retailPct = periodSold ? Math.round((donutData[0].value / periodSold) * 100) : 68
-  const franchisePct = periodSold ? 100 - retailPct : 32
+  const donutTotal = splitTotal > 0 ? splitTotal : periodSold
+  const retailPct = donutTotal ? Math.round((donutData[0].value / donutTotal) * 100) : 0
+  const franchisePct = donutTotal ? 100 - retailPct : 0
 
   const recentBatches = batches.slice(0, 5)
   const activeBatch = batches.find((b) => b.isActive)
 
   return (
     <>
-      <SectionHeading>Total RFID Stock — Warehouse</SectionHeading>
+      <SectionHeading>{config.stockHeading}</SectionHeading>
       <div className="overall-kpi-grid">
         <article className="overall-kpi overall-kpi--blue">
-          <p className="overall-kpi__label">Total Stock in Warehouse</p>
+          <p className="overall-kpi__label">{config.totalStockLabel}</p>
           <p className="overall-kpi__value">{formatQty(totalStock)}</p>
-          <p className="overall-kpi__hint">units across all categories</p>
+          <p className="overall-kpi__hint">{config.stockHint}</p>
         </article>
         <article className="overall-kpi overall-kpi--green">
           <p className="overall-kpi__label">Tagged &amp; Cloud Synced</p>
@@ -350,7 +363,7 @@ function WarehouseDashboard({ data, period }) {
               </PieChart>
             </ResponsiveContainer>
             <div className="overall-donut-center">
-              <strong>{formatQty(periodSold)}</strong>
+              <strong>{formatQty(donutTotal)}</strong>
               <span>units sold</span>
             </div>
           </div>
@@ -365,23 +378,30 @@ function WarehouseDashboard({ data, period }) {
       <div className="overall-bottom-grid">
         <article className="overall-panel">
           <div className="overall-panel__head">
-            <h3>Inward Today (Excel Imports)</h3>
+            <h3>{config.inwardTitle}</h3>
           </div>
           <div className="overall-table-wrap">
-            {recentBatches.length === 0 ? (
-              <p className="overall-empty">No import batches yet.</p>
-            ) : (
-              <table className="overall-table">
-                <thead>
+            <table className="overall-table">
+              <thead>
+                <tr>
+                  <th>Batch</th>
+                  <th>Date</th>
+                  <th>Units</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentBatches.length === 0 ? (
                   <tr>
-                    <th>Batch</th>
-                    <th>Date</th>
-                    <th>Units</th>
-                    <th>Status</th>
+                    <td>—</td>
+                    <td>—</td>
+                    <td>{formatQty(0)}</td>
+                    <td>
+                      <span className="overall-status overall-status--inactive">—</span>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {recentBatches.map((batch) => (
+                ) : (
+                  recentBatches.map((batch) => (
                     <tr key={batch.id}>
                       <td>#{batch.id}</td>
                       <td>{batch.batchDate}</td>
@@ -392,10 +412,10 @@ function WarehouseDashboard({ data, period }) {
                         </span>
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </article>
 
@@ -405,7 +425,7 @@ function WarehouseDashboard({ data, period }) {
           </div>
           <ul className="overall-transit-list">
             <li>
-              <span>Batch #{activeBatch?.id ?? '—'} → Verification</span>
+              <span>Batch #{activeBatch?.id ?? 0} → Verification</span>
               <span>{formatCount(inTransit.found)} pcs</span>
             </li>
             <li>
@@ -486,7 +506,7 @@ export default function OverallDashboard() {
         if (!cancelled) {
           if (isSessionExpiredError(err.message, err.status)) {
             logout()
-            navigate('/login/overall', { replace: true, state: { sessionExpired: true } })
+            navigate('/overalldashboard/login', { replace: true, state: { sessionExpired: true } })
             return
           }
           setError(getUserFriendlyErrorMessage(err.message, err.status))
@@ -518,22 +538,19 @@ export default function OverallDashboard() {
     )
   }
 
-  const activeSegmentMeta = SEGMENTS.find((s) => s.key === activeSegment)
-
   return (
     <div className="overall-dashboard">
       <div className="overall-toolbar">
         <div className="overall-tabs" role="tablist" aria-label="Business segments">
           {SEGMENTS.map((segment) => {
             const isActive = activeSegment === segment.key
-            const isSoon = segment.key !== 'warehouse'
             return (
               <button
                 key={segment.key}
                 type="button"
                 role="tab"
                 aria-selected={isActive}
-                className={`overall-tab${isActive ? ' overall-tab--active' : ''}${isSoon ? ' overall-tab--soon' : ''}`}
+                className={`overall-tab${isActive ? ' overall-tab--active' : ''}`}
                 onClick={() => setActiveSegment(segment.key)}
               >
                 <span aria-hidden="true">{segment.icon}</span>
@@ -544,7 +561,7 @@ export default function OverallDashboard() {
         </div>
 
         <div className="overall-period" role="group" aria-label="Time period">
-          {PERIODS.map((item) => (
+          {activeSegment === 'warehouse' && PERIODS.map((item) => (
             <button
               key={item.key}
               type="button"
@@ -562,11 +579,11 @@ export default function OverallDashboard() {
       )}
 
       {activeSegment === 'retail' && (
-        <SegmentComingSoon label={activeSegmentMeta?.label ?? 'Retail'} />
+        <RetailDashboard data={data} />
       )}
 
       {activeSegment === 'franchise' && (
-        <SegmentComingSoon label={activeSegmentMeta?.label ?? 'Franchise'} />
+        <FranchiseDashboard data={data} />
       )}
     </div>
   )

@@ -125,6 +125,90 @@ function normalizeInwardPending(inwardPending = {}, fallback = {}) {
   };
 }
 
+function normalizeRetailPayload(data = {}) {
+  const byKey = Object.fromEntries(
+    (data.cards || []).map(({ key, value }) => [key, Number(value ?? 0)]),
+  );
+  const storeStock = data.storeStock ?? data.storeWideStock ?? {};
+  const movement = data.movement ?? data.retailMovement ?? {};
+  const billing = data.billingShrinkage ?? data.billing ?? {};
+  const hardwareSync = data.hardwareSync ?? data.retailHardware ?? {};
+
+  const mapStoreRow = (row, index) => ({
+    store: row.store ?? row.storeName ?? row.name ?? `Store ${index + 1}`,
+    stock: Number(row.stock ?? row.stockUnits ?? row.units ?? 0),
+    daysCover: Number(row.daysCover ?? row.days ?? 0),
+    status: row.status ?? 'healthy',
+    accuracyPct: Number(row.accuracyPct ?? row.accuracy ?? row.pct ?? 0),
+    leadTimeHours: Number(row.leadTimeHours ?? row.hours ?? row.leadTime ?? 0),
+    billsToday: Number(row.billsToday ?? row.bills ?? 0),
+    avgTimeSec: Number(row.avgTimeSec ?? row.avgTime ?? 0),
+    errorPct: Number(row.errorPct ?? row.errors ?? 0),
+    shrinkagePcs: Number(row.shrinkagePcs ?? row.shrinkage ?? row.pcs ?? 0),
+    lastSync: row.lastSync ?? row.lastSyncLabel ?? '—',
+    syncStatus: row.syncStatus ?? row.status ?? 'ok',
+  });
+
+  const accuracyRows = (storeStock.accuracy ?? storeStock.accuracyByStore ?? storeStock.stores ?? [])
+    .map(mapStoreRow);
+  const stockRows = (storeStock.onHand ?? storeStock.stockOnHand ?? storeStock.stores ?? [])
+    .map(mapStoreRow);
+  const leadTimeRows = (movement.inwardLeadTime ?? movement.leadTime ?? [])
+    .map(mapStoreRow);
+  const billingRows = (billing.performance ?? billing.stores ?? [])
+    .map(mapStoreRow);
+  const shrinkageRows = (billing.shrinkageByStore ?? billing.shrinkage ?? [])
+    .map(mapStoreRow);
+  const storeSyncRows = (hardwareSync.storeSync ?? hardwareSync.stores ?? [])
+    .map(mapStoreRow);
+
+  return {
+    summary: {
+      totalStock: Number(byKey.totalStock ?? data.totalStock ?? 0),
+      storeCount: Number(data.storeCount ?? storeStock.storeCount ?? byKey.storeCount ?? 0),
+      soldMtd: Number(byKey.soldMtd ?? byKey.soldBillMtd ?? 0),
+      soldMtdTrendPct: data.soldMtdTrendPct ?? storeStock.soldMtdTrendPct ?? null,
+      shrinkageMtd: Number(byKey.shrinkageMtd ?? byKey.shrinkage ?? 0),
+      shrinkageTrendPct: data.shrinkageTrendPct ?? null,
+      storesNeedingRestock: Number(byKey.storesNeedingRestock ?? byKey.restockCount ?? 0),
+      restockStoreLabel: data.restockStoreLabel ?? storeStock.restockStoreLabel ?? '',
+      avgStockAccuracy: Number(byKey.avgStockAccuracy ?? byKey.stockAccuracy ?? 0),
+      accuracyTarget: Number(data.accuracyTarget ?? storeStock.accuracyTarget ?? 97),
+    },
+    storeAccuracy: accuracyRows,
+    stockOnHand: stockRows,
+    accuracyAlert: storeStock.accuracyAlert ?? data.accuracyAlert ?? '',
+    inwardDaily: (movement.inwardDaily ?? data.inwardDaily ?? []).map((row) => ({
+      date: row.date,
+      day: row.day,
+      qty: Number(row.qty ?? row.inwardQty ?? row.soldQty ?? 0),
+    })),
+    inwardLeadTime: leadTimeRows,
+    billingPerformance: billingRows,
+    shrinkageByStore: shrinkageRows,
+    shrinkageMtd: Number(billing.shrinkageMtd ?? byKey.shrinkageMtd ?? 0),
+    easAlarmsToday: Number(billing.easAlarmsToday ?? billing.exitGateAlarms ?? 0),
+    categorySellThrough: (billing.categorySellThrough ?? billing.categories ?? []).map((row) => ({
+      name: row.name ?? row.category ?? '',
+      value: Number(row.value ?? row.qty ?? row.soldQty ?? 0),
+      pct: Number(row.pct ?? row.percentage ?? 0),
+    })),
+    hardware: (hardwareSync.hardware ?? hardwareSync.devices ?? []).map((row) => ({
+      name: row.name ?? '',
+      online: Number(row.online ?? 0),
+      total: Number(row.total ?? 0),
+    })),
+    sync: {
+      pendingRecords: Number(hardwareSync.sync?.pendingRecords ?? hardwareSync.pendingRecords ?? 0),
+      failuresToday: Number(hardwareSync.sync?.failuresToday ?? hardwareSync.failuresToday ?? 0),
+      avgLastSyncMinutes: Number(
+        hardwareSync.sync?.avgLastSyncMinutes ?? hardwareSync.avgLastSyncMinutes ?? 0,
+      ),
+    },
+    storeSync: storeSyncRows,
+  };
+}
+
 export async function fetchExecutiveDashboard({ type = 'warehouse' } = {}) {
   const query = buildQueryString({ type });
   const data = await apiFetch(`/dashboard/executive?${query}`);
@@ -159,6 +243,107 @@ export async function fetchExecutiveDashboard({ type = 'warehouse' } = {}) {
       day: row.day,
       soldQty: Number(row.soldQty ?? row.soldPieces ?? 0),
     })),
+    outwardSplit: {
+      totalSold: Number(data.outwardSplit?.totalSold ?? 0),
+      retail: Number(data.outwardSplit?.retail ?? 0),
+      franchise: Number(data.outwardSplit?.franchise ?? 0),
+    },
     totalSoldQtyWeek: Number(data.totalSoldQtyWeek ?? 0),
+    retail: type === 'retail' ? normalizeRetailPayload(data) : null,
+    franchise: type === 'franchise' ? normalizeFranchisePayload(data) : null,
+  };
+}
+
+function normalizeFranchisePayload(data = {}) {
+  const byKey = Object.fromEntries(
+    (data.cards || []).map(({ key, value }) => [key, Number(value ?? 0)]),
+  );
+  const partnerStock = data.partnerStock ?? data.partnerWiseStock ?? data.storeStock ?? {};
+  const movement = data.movement ?? data.franchiseMovement ?? {};
+  const billing = data.billingShrinkage ?? data.billing ?? {};
+  const hardwareSync = data.hardwareSync ?? data.franchiseHardware ?? {};
+
+  const mapPartnerRow = (row, index) => ({
+    partner: row.partner ?? row.partnerName ?? row.name ?? `Franchise ${String.fromCharCode(65 + index)}`,
+    stock: Number(row.stock ?? row.stockUnits ?? row.units ?? 0),
+    daysCover: Number(row.daysCover ?? row.days ?? 0),
+    status: row.status ?? 'healthy',
+    accuracyPct: Number(row.accuracyPct ?? row.accuracy ?? row.pct ?? 0),
+    billsToday: Number(row.billsToday ?? row.bills ?? 0),
+    avgTimeSec: Number(row.avgTimeSec ?? row.avgTime ?? 0),
+    errorPct: Number(row.errorPct ?? row.errors ?? 0),
+    shrinkagePcs: Number(row.shrinkagePcs ?? row.shrinkage ?? row.pcs ?? 0),
+    lastSync: row.lastSync ?? row.lastSyncLabel ?? '0 min ago',
+    syncStatus: row.syncStatus ?? row.status ?? 'live',
+  });
+
+  const mapDcRow = (row) => ({
+    dcId: row.dcId ?? row.id ?? '—',
+    partnerLabel: row.partnerLabel ?? row.partner ?? '—',
+    units: Number(row.units ?? row.qty ?? 0),
+    status: row.status ?? 'in_transit',
+    statusLabel: row.statusLabel ?? row.label ?? '',
+    hours: Number(row.hours ?? row.leadTimeHours ?? 0),
+  });
+
+  const accuracyRows = (partnerStock.accuracy ?? partnerStock.accuracyByPartner ?? partnerStock.partners ?? [])
+    .map(mapPartnerRow);
+  const stockRows = (partnerStock.onHand ?? partnerStock.stockOnHand ?? partnerStock.partners ?? [])
+    .map(mapPartnerRow);
+  const billingRows = (billing.performance ?? billing.partners ?? [])
+    .map(mapPartnerRow);
+  const shrinkageRows = (billing.shrinkageByPartner ?? billing.shrinkage ?? [])
+    .map(mapPartnerRow);
+  const partnerSyncRows = (hardwareSync.partnerSync ?? hardwareSync.partners ?? hardwareSync.storeSync ?? [])
+    .map(mapPartnerRow);
+
+  return {
+    summary: {
+      totalStock: Number(byKey.totalStock ?? data.totalStock ?? 0),
+      partnerCount: Number(data.partnerCount ?? partnerStock.partnerCount ?? byKey.partnerCount ?? 0),
+      soldMtd: Number(byKey.soldMtd ?? byKey.soldBillMtd ?? 0),
+      soldMtdTrendPct: data.soldMtdTrendPct ?? partnerStock.soldMtdTrendPct ?? null,
+      shrinkageMtd: Number(byKey.shrinkageMtd ?? byKey.shrinkage ?? 0),
+      shrinkageRiskPct: Number(byKey.shrinkageRiskPct ?? data.shrinkageRiskPct ?? 0),
+      pendingVerification: Number(byKey.pendingVerification ?? byKey.pending ?? 0),
+      pendingVerificationLabel: data.pendingVerificationLabel ?? partnerStock.pendingVerificationLabel ?? '',
+      avgStockAccuracy: Number(byKey.avgStockAccuracy ?? byKey.stockAccuracy ?? 0),
+      accuracyThreshold: Number(data.accuracyThreshold ?? partnerStock.accuracyThreshold ?? 95),
+    },
+    partnerAccuracy: accuracyRows,
+    stockOnHand: stockRows,
+    accuracyAlert: partnerStock.accuracyAlert ?? data.accuracyAlert ?? '',
+    stockCoverAlert: partnerStock.stockCoverAlert ?? data.stockCoverAlert ?? '',
+    inwardDaily: (movement.inwardDaily ?? data.inwardDaily ?? []).map((row) => ({
+      date: row.date,
+      day: row.day,
+      qty: Number(row.qty ?? row.inwardQty ?? 0),
+    })),
+    inTransitDCs: (movement.inTransitDCs ?? movement.inTransit ?? []).map(mapDcRow),
+    inTransitAlert: movement.inTransitAlert ?? data.inTransitAlert ?? '',
+    billingPerformance: billingRows,
+    billingAlert: billing.billingAlert ?? data.billingAlert ?? '',
+    shrinkageByPartner: shrinkageRows,
+    shrinkageMtd: Number(billing.shrinkageMtd ?? byKey.shrinkageMtd ?? 0),
+    shrinkagePct: Number(billing.shrinkagePct ?? byKey.shrinkageRiskPct ?? 0),
+    shrinkageComment: billing.shrinkageComment ?? data.shrinkageComment ?? '',
+    categorySellThrough: (billing.categorySellThrough ?? billing.categories ?? []).map((row) => ({
+      name: row.name ?? row.category ?? '',
+      value: Number(row.value ?? row.qty ?? 0),
+      pct: Number(row.pct ?? row.percentage ?? 0),
+    })),
+    hardware: (hardwareSync.hardware ?? hardwareSync.devices ?? []).map((row) => ({
+      name: row.name ?? '',
+      online: Number(row.online ?? 0),
+      total: Number(row.total ?? 0),
+    })),
+    sync: {
+      pendingRecords: Number(hardwareSync.sync?.pendingRecords ?? hardwareSync.pendingRecords ?? 0),
+      failuresToday: Number(hardwareSync.sync?.failuresToday ?? hardwareSync.failuresToday ?? 0),
+      avgLastSyncMinutes: Number(
+        hardwareSync.sync?.avgLastSyncMinutes ?? hardwareSync.avgLastSyncMinutes ?? 0,
+      ),
+    },
+    partnerSync: partnerSyncRows,
   };
 }

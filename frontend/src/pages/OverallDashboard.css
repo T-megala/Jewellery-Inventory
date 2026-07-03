@@ -538,6 +538,194 @@
   color: #1e293b;
 }
 
+.overall-kpi--red { border-top-color: #a33030; }
+.overall-kpi--orange { border-top-color: #f97316; }
+.overall-kpi__hint--danger { color: #dc2626; }
+
+.overall-retail-alert--danger {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.overall-retail-status--danger { color: #dc2626; }
+
+.overall-franchise-dc {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.overall-franchise-dc--danger { color: #dc2626; }
+.overall-franchise-dc--ok { color: #16a34a; }
+.overall-franchise-dc--warn { color: #ea580c; }
+.overall-franchise-dc--muted { color: #94a3b8; }
+
+.overall-franchise-pill {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+}
+
+.overall-franchise-pill--ok {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.overall-franchise-pill--danger {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.overall-franchise-live {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.overall-franchise-live--ok { color: #16a34a; }
+.overall-franchise-live--warn { color: #ea580c; }
+
+.overall-transit-list--franchise li {
+  align-items: center;
+}
+
+.overall-kpi-grid--5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.overall-retail-hbars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.overall-retail-hbar {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr 3.5rem;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.overall-retail-hbar__label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.overall-retail-hbar__track {
+  height: 10px;
+  background: #f1f5f9;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.overall-retail-hbar__fill {
+  height: 100%;
+  border-radius: 999px;
+  min-width: 2px;
+}
+
+.overall-retail-hbar__value {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #1e293b;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.overall-retail-alert {
+  margin: 0.85rem 0 0;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+}
+
+.overall-retail-alert--muted {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #64748b;
+}
+
+.overall-retail-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.overall-retail-status--ok { color: #16a34a; }
+.overall-retail-status--warn { color: #ea580c; }
+.overall-retail-status--muted { color: #94a3b8; }
+
+.overall-retail-billing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.overall-retail-mini-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+  margin-top: 0.85rem;
+}
+
+.overall-retail-mini-stat {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.6rem 0.7rem;
+}
+
+.overall-retail-mini-stat strong {
+  display: block;
+  font-size: 1rem;
+  color: #a33030;
+}
+
+.overall-retail-mini-stat span {
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+.overall-retail-mini-stat--warn strong {
+  color: #ea580c;
+}
+
+.overall-retail-text-warn {
+  color: #ea580c;
+  font-weight: 600;
+}
+
+.overall-retail-sync {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.overall-retail-sync--ok { color: #16a34a; }
+.overall-retail-sync--warn { color: #ea580c; }
+
+.overall-donut-wrap--compact {
+  height: 200px;
+}
+
+.overall-donut-legend--stacked {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.overall-table-wrap--spaced {
+  margin-top: 0.85rem;
+}
+
 .chart-tip {
   background: #fff;
   border: 1px solid #e2e8f0;
@@ -559,13 +747,15 @@
 }
 
 @media (max-width: 1100px) {
-  .overall-kpi-grid {
+  .overall-kpi-grid,
+  .overall-kpi-grid--5 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .overall-panels,
   .overall-bottom-grid,
-  .overall-hw-grid {
+  .overall-hw-grid,
+  .overall-retail-billing-grid {
     grid-template-columns: 1fr;
   }
 
@@ -575,7 +765,8 @@
 }
 
 @media (max-width: 600px) {
-  .overall-kpi-grid {
+  .overall-kpi-grid,
+  .overall-kpi-grid--5 {
     grid-template-columns: 1fr;
   }
 

@@ -10,7 +10,7 @@ export default function RequireStoreAuth() {
   }
 
   if (hasOverallAccess()) {
-    return <Navigate to="/dashboard/overall" replace />
+    return <Navigate to="/overalldashboard" replace />
   }
 
   return <Outlet />

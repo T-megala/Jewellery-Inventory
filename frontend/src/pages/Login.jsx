@@ -63,7 +63,7 @@ export default function Login() {
       const from = location.state?.from?.pathname
       let destination = getPostLoginPath()
 
-      if (from && !from.startsWith('/dashboard/overall')) {
+      if (from && !from.startsWith('/overalldashboard')) {
         destination = from
       }
 
@@ -117,7 +117,7 @@ export default function Login() {
                 {error}
                 {error.includes('overall dashboard') && (
                   <p className="login-error__link">
-                    <Link to="/login/overall">Go to overall dashboard sign in →</Link>
+                    <Link to="/overalldashboard/login">Go to overall dashboard sign in →</Link>
                   </p>
                 )}
               </div>
@@ -180,7 +180,7 @@ export default function Login() {
 
           <p className="login-switch">
             Overall dashboard access?{' '}
-            <Link to="/login/overall">Overall dashboard sign in</Link>
+            <Link to="/overalldashboard/login">Overall dashboard sign in</Link>
           </p>
         </div>
       </main>
