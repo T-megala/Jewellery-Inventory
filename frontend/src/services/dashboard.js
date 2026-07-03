@@ -29,6 +29,10 @@ export const EMPTY_STOCKTAKE = {
   missingCount: 0,
   newCount: 0,
   verificationDay: null,
+  activeStocktakeCount: 0,
+  scopeBranchCount: 0,
+  status: 'none',
+  latestVerificationId: null,
   history: { ...EMPTY_STOCKTAKE_HISTORY },
 };
 
@@ -88,6 +92,10 @@ function normalizeStocktake(stocktake = {}) {
     missingCount: Number(stocktake.missingCount ?? 0),
     newCount: Number(stocktake.newCount ?? 0),
     verificationDay: stocktake.verificationDay ?? null,
+    activeStocktakeCount: Number(stocktake.activeStocktakeCount ?? 0),
+    scopeBranchCount: Number(stocktake.scopeBranchCount ?? 0),
+    status: stocktake.status ?? 'none',
+    latestVerificationId: stocktake.latestVerificationId ?? null,
     scope: stocktake.scope ?? null,
     history: normalizeStocktakeHistory(stocktake.history),
   };

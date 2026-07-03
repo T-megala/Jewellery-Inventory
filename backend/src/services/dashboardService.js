@@ -113,10 +113,10 @@ const formatRelativeStocktakeTime = (value) => {
   }
 
   if (dayDiff > 1 && dayDiff < 7) {
-    return `${DAY_LABELS[date.getDay()]} ${timeLabel}`;
+    return `${DAY_LABELS[date.getDay()]}, ${date.getDate()} ${MONTHS_SHORT[date.getMonth()]} ${timeLabel}`;
   }
 
-  return formatDateTime(date);
+  return `${date.getDate()} ${MONTHS_SHORT[date.getMonth()]} ${date.getFullYear()} ${timeLabel}`;
 };
 
 const MONTHS_SHORT = [
@@ -794,6 +794,10 @@ const emptyStocktakeSummary = () => ({
   missingCount: 0,
   newCount: 0,
   verificationDay: null,
+  activeStocktakeCount: 0,
+  scopeBranchCount: 0,
+  status: "none",
+  latestVerificationId: null,
   history: emptyStocktakeHistory(),
 });
 
@@ -819,7 +823,7 @@ const getStocktakeSummary = async ({
     keyword: "AND",
   });
 
-  const [monthResult, latestRow, history] = await Promise.all([
+  const [monthResult, perBranchRows, latestRow, history] = await Promise.all([
     pool.execute(
       `SELECT COUNT(*) AS stocktakesThisMonth
        FROM (
@@ -832,6 +836,7 @@ const getStocktakeSummary = async ({
        ) scoped_stocktakes`,
       branchFilter.params,
     ),
+    getPreferredStocktakeRowsPerBranch(scope),
     getLatestStocktakeRow({ branchIds: scope }),
     getStocktakeHistory({ branchIds: scope }),
   ]);
@@ -840,6 +845,14 @@ const getStocktakeSummary = async ({
     monthResult[0][0]?.stocktakesThisMonth ?? 0,
   );
 
+  // A branch stocktake is treated as "ongoing" while it is still being scanned
+  // today; once the verification day has passed it is considered "completed".
+  const todayKey = toDateKey(new Date());
+  const activeStocktakeCount = perBranchRows.filter(
+    (row) => toDateKey(row.verification_day) === todayKey,
+  ).length;
+  const scopeBranchCount = perBranchRows.length;
+
   if (!latestRow) {
     return {
       ...emptyStocktakeSummary(),
@@ -847,6 +860,9 @@ const getStocktakeSummary = async ({
       history,
     };
   }
+
+  const status = activeStocktakeCount > 0 ? "ongoing" : "completed";
+  const latestVerificationId = Number(latestRow.id) || null;
 
   const totalExpected = Number(latestRow.total_expected ?? 0);
   const itemsScanned = Number(latestRow.total_scanned ?? 0);
@@ -874,6 +890,10 @@ const getStocktakeSummary = async ({
     missingCount,
     newCount,
     verificationDay: formatDate(latestRow.verification_day),
+    activeStocktakeCount,
+    scopeBranchCount,
+    status,
+    latestVerificationId,
     scope: {
       product: latestRow.product_name,
       subProduct: latestRow.sub_product_name,

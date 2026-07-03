@@ -20,7 +20,6 @@ import {
 import {
   EMPTY_COUNTER_ACCURACY,
   EMPTY_STOCKTAKE,
-  EMPTY_VERIFICATION,
   fetchBranchComparison,
   fetchDailyImports,
   fetchDashboard,
@@ -1950,91 +1949,178 @@ function AnalyticsTile({ title, subtitle, children, wide = false }) {
   )
 }
 
-function buildMetricCards(totals, stocktake, verification = EMPTY_VERIFICATION) {
-  const totalTags = Number(totals?.totalTags ?? 0)
-  const totalFound = Number(verification?.totalFound ?? 0)
-  const totalMissing = Number(verification?.totalMissing ?? 0)
-  const scanRate = totalTags > 0
-    ? Number(((totalFound / totalTags) * 100).toFixed(2))
-    : 0
+function buildBranchScopeLabel({ isAllBranches, sessionBranches, operationalBranchId }) {
+  if (!isAllBranches) {
+    const branch = (sessionBranches || []).find((item) => item.id === operationalBranchId)
+    return branch?.name ?? 'Selected Branch'
+  }
 
-  return [
-    {
-      key: 'categories',
-      label: 'Categories',
-      value: formatCount(totals.productGroups),
-      hint: 'Product types',
-      variant: 'gold',
-    },
-    {
-      key: 'subproducts',
-      label: 'Sub-products',
-      value: formatCount(totals.subProducts),
-      hint: 'Variants',
-      variant: 'blue',
-    },
-    {
-      key: 'erp',
-      label: 'Total items (ERP)',
-      value: formatCount(totalTags),
-      variant: 'teal',
-    },
-    {
-      key: 'scanned',
-      label: 'Items scanned',
-      value: formatCount(totalFound),
-      hint: `${formatAccuracyPercent(scanRate)}% scan rate`,
-      variant: 'green',
-      hintTone: scanRate > 0 ? 'success' : null,
-    },
-    {
-      key: 'discrepancies',
-      label: 'Missing items',
-      value: formatCount(totalMissing),
-      hint: 'In ERP, not found',
-      variant: 'red',
-      hintTone: totalMissing > 0 ? 'danger' : null,
-    },
-    {
-      key: 'stocktakes',
-      label: 'Stocktakes / month',
-      value: formatCount(stocktake?.stocktakesThisMonth ?? 0),
-      hint: stocktake?.lastStocktakeLabel
-        ? `Last: ${stocktake.lastStocktakeLabel}`
-        : 'No stocktake yet',
-      variant: 'purple',
-    },
-  ]
+  const count = (sessionBranches || []).length
+  if (count <= 0) return 'All Branches'
+  return `${count} ${count === 1 ? 'Branch' : 'Branches'}`
 }
 
-function MetricTrendIcon({ direction }) {
-  if (direction === 'up') {
+function InventoryStatIcon({ type }) {
+  if (type === 'categories') {
     return (
-      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M12 19V5M5 12l7-7 7 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <rect x="4" y="4" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+        <rect x="13" y="4" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+        <rect x="4" y="13" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+        <rect x="13" y="13" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+      </svg>
+    )
+  }
+
+  if (type === 'subproducts') {
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M4 7h16M4 12h16M4 17h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       </svg>
     )
   }
 
   return (
-    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M12 5v14M5 12l7 7 7-7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M4 7.5l8 4.5 8-4.5M12 12v9" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
     </svg>
   )
 }
 
-function MetricCard({ label, value, hint, variant, hintTone }) {
+function InventoryStatCard({ icon, label, value, hint }) {
   return (
-    <div className={`dashboard-metric dashboard-metric--${variant}`}>
-      <p className="dashboard-metric__label">{label}</p>
-      <p className="dashboard-metric__value dashboard-num">{value}</p>
-      {hint ? (
-        <p className={`dashboard-metric__hint${hintTone ? ` dashboard-metric__hint--${hintTone}` : ''}`}>
-          {hintTone && <MetricTrendIcon direction={hintTone === 'success' ? 'up' : 'down'} />}
-          {hint}
+    <article className="ov-card inv-card">
+      <div className="inv-card__top">
+        <span className="inv-card__icon" aria-hidden="true">
+          <InventoryStatIcon type={icon} />
+        </span>
+        <p className="ov-card__label">{label}</p>
+      </div>
+      <div className="ov-card__main">
+        <p className="ov-card__value dashboard-num">{value}</p>
+        {hint ? <p className="ov-card__sub">{hint}</p> : null}
+      </div>
+    </article>
+  )
+}
+
+function splitLastScan(label) {
+  if (!label) return { primary: '—', secondary: '' }
+  const match = String(label).match(/^(.*?)\s*(\d{1,2}:\d{2}\s*[AP]M)$/i)
+  if (match) {
+    const day = match[1].trim()
+    return day ? { primary: day, secondary: match[2] } : { primary: match[2], secondary: '' }
+  }
+  return { primary: String(label), secondary: '' }
+}
+
+function VerificationProgressCard({ scope, scanned, percent, status }) {
+  const hasData = status !== 'none' && scope > 0
+  const width = Math.min(Math.max(percent, 0), 100)
+
+  return (
+    <article className="ov-card verify-card">
+      <p className="ov-card__label">Verification Progress</p>
+      {!hasData ? (
+        <div className="ov-card__main">
+          <p className="verify-card__sub-muted">No products in the current verification scope.</p>
+        </div>
+      ) : (
+        <>
+          <ul className="verify-metrics">
+            <li className="verify-metrics__row">
+              <span className="verify-metrics__label">Products to Verify</span>
+              <strong className="verify-metrics__value dashboard-num">{formatCount(scope)}</strong>
+            </li>
+            <li className="verify-metrics__row">
+              <span className="verify-metrics__label">Scanned</span>
+              <strong className="verify-metrics__value dashboard-num">{formatCount(scanned)}</strong>
+            </li>
+            <li className="verify-metrics__row">
+              <span className="verify-metrics__label">Progress</span>
+              <strong className="verify-metrics__value verify-metrics__value--gold dashboard-num">
+                {formatAccuracyPercent(percent)}
+                %
+              </strong>
+            </li>
+          </ul>
+          <div className="verify-bar" aria-hidden="true">
+            <span className="verify-bar__fill" style={{ width: `${width}%` }} />
+          </div>
+        </>
+      )}
+    </article>
+  )
+}
+
+function RemainingCard({ remaining, missing, status }) {
+  const completed = status === 'completed'
+  const noData = status === 'none'
+  const metricLabel = completed ? 'Missing Items' : 'Remaining to Scan'
+  const value = completed ? missing : remaining
+  const footer = completed ? 'After stocktake' : 'Pending verification'
+
+  return (
+    <article className={`ov-card verify-card verify-card--${completed ? 'missing' : 'remaining'}`}>
+      <p className="ov-card__label">Remaining</p>
+      <div className="ov-card__main">
+        <p className="ov-card__value dashboard-num">{noData ? '—' : formatCount(value)}</p>
+        <p className="ov-card__sub">{noData ? 'Awaiting first stocktake' : metricLabel}</p>
+      </div>
+      {!noData && <p className="verify-card__foot">{footer}</p>}
+    </article>
+  )
+}
+
+function BranchesCoveredCard({ isAllBranches, scopeBranchCount, totalBranches, branchName, status }) {
+  const noData = status === 'none'
+  const value = isAllBranches
+    ? `${formatCount(scopeBranchCount)} of ${formatCount(totalBranches)}`
+    : (branchName ?? 'Selected branch')
+  const sub = isAllBranches ? 'Branches in current batch' : 'Current batch'
+
+  return (
+    <article className="ov-card verify-card">
+      <p className="ov-card__label">Branches Covered</p>
+      <div className="ov-card__main">
+        <p className={`ov-card__value dashboard-num${isAllBranches ? '' : ' ov-card__value--text'}`}>
+          {noData && isAllBranches ? '—' : value}
         </p>
-      ) : null}
-    </div>
+        <p className="ov-card__sub">{sub}</p>
+      </div>
+    </article>
+  )
+}
+
+function ActiveStocktakesCard({ activeCount, stocktakesThisMonth }) {
+  return (
+    <article className="ov-card verify-card">
+      <p className="ov-card__label">Active Stocktakes</p>
+      <div className="ov-card__main">
+        <p className="ov-card__value dashboard-num">{formatCount(activeCount)}</p>
+        <p className="ov-card__sub">
+          {formatCount(stocktakesThisMonth)}
+          {' '}
+          this month
+        </p>
+      </div>
+    </article>
+  )
+}
+
+function LastScanCard({ lastLabel }) {
+  const { primary, secondary } = splitLastScan(lastLabel)
+  const hasData = Boolean(lastLabel)
+
+  return (
+    <article className="ov-card verify-card">
+      <p className="ov-card__label">Last Scan Activity</p>
+      <div className="ov-card__main">
+        <p className={`ov-card__value${primary.length > 6 ? ' ov-card__value--text' : ''}`}>{primary}</p>
+        <p className="ov-card__sub">{hasData ? (secondary || 'Most recent scan') : 'No scans yet'}</p>
+      </div>
+    </article>
   )
 }
 
@@ -2097,7 +2183,6 @@ export default function Dashboard() {
   } = useBranchScope()
   const user = getUser()
   const [summary, setSummary] = useState(null)
-  const [verification, setVerification] = useState(EMPTY_VERIFICATION)
   const [stocktake, setStocktake] = useState(EMPTY_STOCKTAKE)
   const [counterAccuracy, setCounterAccuracy] = useState(EMPTY_COUNTER_ACCURACY)
   const [topSoldProducts, setTopSoldProducts] = useState([])
@@ -2146,12 +2231,6 @@ export default function Dashboard() {
 
         if (!cancelled) {
           setSummary(inventory)
-          setVerification({
-            totalFound: Number(verification?.totalFound ?? 0),
-            totalMissing: Number(verification?.totalMissing ?? 0),
-            totalNew: Number(verification?.totalNew ?? 0),
-            totalTags: Number(verification?.totalTags ?? 0),
-          })
           setStocktake(verification?.stocktake ?? EMPTY_STOCKTAKE)
           setCounterAccuracy(verification?.counterAccuracy ?? EMPTY_COUNTER_ACCURACY)
         }
@@ -2159,7 +2238,6 @@ export default function Dashboard() {
         if (!cancelled) {
           setError(err.message || 'Unable to load dashboard. Please try again.')
           setSummary(null)
-          setVerification(EMPTY_VERIFICATION)
           setStocktake(EMPTY_STOCKTAKE)
           setCounterAccuracy(EMPTY_COUNTER_ACCURACY)
         }
@@ -2355,22 +2433,37 @@ export default function Dashboard() {
     counters: 0,
   }
 
-  const metricCards = buildMetricCards(totals, stocktake, verification)
-
   const canViewDashboard = hasPermission('dashboard.view', user)
 
-  const metricPermissionByKey = {
-    categories: 'dashboard.inventory_overview.categories',
-    subproducts: 'dashboard.inventory_overview.sub_products',
-    erp: 'dashboard.inventory_overview.total_items_erp',
-    scanned: 'dashboard.inventory_overview.items_scanned',
-    discrepancies: 'dashboard.inventory_overview.discrepancies',
-    stocktakes: 'dashboard.inventory_overview.stocktakes_per_month',
-  }
+  const branchScopeLabel = useMemo(
+    () => buildBranchScopeLabel({ isAllBranches, sessionBranches, operationalBranchId }),
+    [isAllBranches, sessionBranches, operationalBranchId],
+  )
 
-  const visibleMetricCards = metricCards.filter((card) => (
-    !metricPermissionByKey[card.key] || hasPermission(metricPermissionByKey[card.key], user)
-  ))
+  const scopeTotal = Number(stocktake?.totalExpected ?? 0)
+  const scannedItems = Number(stocktake?.foundCount ?? 0)
+  const remainingToScan = Math.max(scopeTotal - scannedItems, 0)
+  const percentComplete = scopeTotal > 0 ? (scannedItems / scopeTotal) * 100 : 0
+  const stocktakeStatus = stocktake?.status ?? 'none'
+  const totalBranches = isAllBranches
+    ? (sessionBranches?.length ?? 0)
+    : 1
+  const singleBranchName = useMemo(() => {
+    if (isAllBranches) return null
+    const branch = (sessionBranches || []).find((item) => item.id === operationalBranchId)
+    return branch?.name ?? 'Selected Branch'
+  }, [isAllBranches, sessionBranches, operationalBranchId])
+
+  const canSeeCategories = hasPermission('dashboard.inventory_overview.categories', user)
+  const canSeeSubProducts = hasPermission('dashboard.inventory_overview.sub_products', user)
+  const canSeeErpProducts = hasPermission('dashboard.inventory_overview.total_items_erp', user)
+  // Verification permissions reused across the six operational cards
+  const canSeeVerifProgress = hasPermission('dashboard.inventory_overview.items_scanned', user)
+  const canSeeRemaining = hasPermission('dashboard.inventory_overview.discrepancies', user)
+  const canSeeStocktakeMeta = hasPermission('dashboard.inventory_overview.stocktakes_per_month', user)
+
+  const showInventoryStats = canSeeCategories || canSeeSubProducts || canSeeErpProducts
+  const showVerificationProgress = canSeeVerifProgress || canSeeRemaining || canSeeStocktakeMeta
 
   const canSeeStocktakeFindings = hasPermission('dashboard.stock_verification.last_stocktake_findings', user)
   const canSeeStocktakeHistory = hasPermission('dashboard.stock_verification.stocktake_history', user)
@@ -2475,20 +2568,96 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* Key Metrics */}
-      {visibleMetricCards.length > 0 && (
+      {/* Inventory Overview */}
+      {(showInventoryStats || showVerificationProgress) && (
         <section className="dashboard-inventory-overview">
           <div className="module-header">
             <div className="module-header__main">
               <h2>Inventory Overview</h2>
             </div>
+            <span className="overview-scope-chip">{branchScopeLabel}</span>
           </div>
 
-          <div className="dashboard-metrics">
-            {visibleMetricCards.map((card) => (
-              <MetricCard key={card.key} {...card} />
-            ))}
-          </div>
+          {showInventoryStats && (
+            <div className="overview-block">
+              <div className="overview-block__head">
+                <h3 className="overview-block__title">Inventory Statistics</h3>
+                <span className="overview-block__note">Live ERP inventory in scope</span>
+              </div>
+
+              <div className="ov-grid ov-grid--inventory">
+                {canSeeCategories && (
+                  <InventoryStatCard
+                    icon="categories"
+                    label="Categories"
+                    value={formatCount(totals.productGroups)}
+                    hint="Total product types"
+                  />
+                )}
+                {canSeeSubProducts && (
+                  <InventoryStatCard
+                    icon="subproducts"
+                    label="Sub Products"
+                    value={formatCount(totals.subProducts)}
+                    hint="Total variants"
+                  />
+                )}
+                {canSeeErpProducts && (
+                  <InventoryStatCard
+                    icon="erp"
+                    label="ERP Products"
+                    value={formatCount(totals.totalTags)}
+                    hint="Across selected branch(es)"
+                  />
+                )}
+              </div>
+            </div>
+          )}
+
+          {showVerificationProgress && (
+            <div className="overview-block">
+              <div className="overview-block__head">
+                <h3 className="overview-block__title">Active Stock Verification</h3>
+                <span className="overview-block__note">Separate operational process — not compared with ERP totals</span>
+              </div>
+
+              <div className="ov-grid ov-grid--verify">
+                {canSeeVerifProgress && (
+                  <VerificationProgressCard
+                    scope={scopeTotal}
+                    scanned={scannedItems}
+                    percent={percentComplete}
+                    status={stocktakeStatus}
+                  />
+                )}
+                {canSeeRemaining && (
+                  <RemainingCard
+                    remaining={remainingToScan}
+                    missing={Number(stocktake?.missingCount ?? 0)}
+                    status={stocktakeStatus}
+                  />
+                )}
+                {canSeeStocktakeMeta && (
+                  <BranchesCoveredCard
+                    isAllBranches={isAllBranches}
+                    scopeBranchCount={Number(stocktake?.scopeBranchCount ?? 0)}
+                    totalBranches={totalBranches}
+                    branchName={singleBranchName}
+                    status={stocktakeStatus}
+                  />
+                )}
+                {canSeeStocktakeMeta && (
+                  <ActiveStocktakesCard
+                    activeCount={Number(stocktake?.activeStocktakeCount ?? 0)}
+                    stocktakesThisMonth={Number(stocktake?.stocktakesThisMonth ?? 0)}
+                  />
+                )}
+                {canSeeStocktakeMeta && (
+                  <LastScanCard lastLabel={stocktake?.lastStocktakeLabel ?? null} />
+                )}
+              </div>
+            </div>
+          )}
         </section>
       )}
 
