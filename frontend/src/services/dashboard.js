@@ -85,38 +85,80 @@ export async function fetchDailyImports({ period = 'week' } = {}) {
   };
 }
 
+function normalizeExecutiveCards(cards, overall = {}) {
+  const byKey = Object.fromEntries(
+    (cards || []).map(({ key, value }) => [key, Number(value ?? 0)]),
+  );
+
+  return {
+    totalStock: Number(byKey.totalStock ?? overall.totalStockQty ?? overall.totalQty ?? 0),
+    tagged: Number(byKey.tagged ?? overall.taggedProductCount ?? overall.totalBarcodes ?? 0),
+    pending: Number(byKey.pending ?? overall.untaggedProductCount ?? overall.notTaggedCount ?? 0),
+    reject: Number(byKey.reject ?? overall.rejectCount ?? 0),
+  };
+}
+
+function normalizeInwardPending(inwardPending = {}, fallback = {}) {
+  const batches = inwardPending.batches ?? fallback.batches ?? [];
+  const inTransit = inwardPending.inTransit ?? fallback.verification ?? {};
+  const tagInventory = inwardPending.tagInventory ?? {};
+  const tagged = Number(tagInventory.tagged ?? fallback.cards?.tagged ?? 0);
+  const pending = Number(tagInventory.pending ?? fallback.cards?.pending ?? 0);
+
+  return {
+    batches: batches.map((batch) => ({
+      ...batch,
+      totalQty: Number(batch.totalStockQty ?? batch.totalQty ?? 0),
+    })),
+    inTransit: {
+      found: Number(inTransit.found ?? inTransit.totalFound ?? 0),
+      missing: Number(inTransit.missing ?? inTransit.totalMissing ?? 0),
+      new: Number(inTransit.new ?? inTransit.totalNew ?? 0),
+    },
+    tagInventory: {
+      tagged,
+      pending,
+      tagCoveragePct: Number(
+        tagInventory.tagCoveragePct ?? (tagged > 0 ? (tagged / (tagged + pending)) * 100 : 0),
+      ),
+    },
+  };
+}
+
 export async function fetchExecutiveDashboard({ type = 'warehouse' } = {}) {
   const query = buildQueryString({ type });
   const data = await apiFetch(`/dashboard/executive?${query}`);
   const overall = data.overall ?? {};
+  const cards = normalizeExecutiveCards(data.cards, overall);
+  const inwardPending = normalizeInwardPending(data.inwardPending, {
+    batches: data.batches,
+    verification: data.verification,
+    cards,
+  });
 
   return {
     type: data.type ?? type,
     status: data.status ?? 'active',
     label: data.label ?? type,
+    cards,
     overall: {
       ...overall,
-      totalQty: Number(overall.totalStockQty ?? overall.totalQty ?? 0),
-      totalBarcodes: Number(overall.taggedProductCount ?? overall.totalBarcodes ?? 0),
-      notTaggedCount: Number(overall.untaggedProductCount ?? overall.notTaggedCount ?? 0),
+      totalQty: cards.totalStock,
+      totalBarcodes: cards.tagged,
+      notTaggedCount: cards.pending,
     },
     segments: data.segments ?? [],
-    batches: (data.batches ?? []).map((batch) => ({
-      ...batch,
-      totalQty: Number(batch.totalStockQty ?? batch.totalQty ?? 0),
-    })),
+    inwardPending,
     topSoldProducts: (data.topSoldProducts ?? []).map((row) => ({
       itemDescription: row.itemDescription ?? row.productName ?? row.name ?? '',
       soldBarcodes: Number(row.soldBarcodes ?? row.soldTags ?? 0),
       soldQty: Number(row.soldQty ?? row.soldCount ?? 0),
     })),
-    dayWiseSales: data.dayWiseSales ?? [],
+    outwardDaily: (data.outwardDaily ?? data.dayWiseSales ?? []).map((row) => ({
+      date: row.date,
+      day: row.day,
+      soldQty: Number(row.soldQty ?? row.soldPieces ?? 0),
+    })),
     totalSoldQtyWeek: Number(data.totalSoldQtyWeek ?? 0),
-    verification: data.verification ?? {
-      totalFound: 0,
-      totalMissing: 0,
-      totalNew: 0,
-      totalTags: 0,
-    },
   };
 }

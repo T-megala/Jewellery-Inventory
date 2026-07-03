@@ -222,19 +222,25 @@ function WarehouseHardwareSync() {
 }
 
 function WarehouseDashboard({ data, period }) {
-  const overall = data?.overall ?? {}
-  const verification = data?.verification ?? {}
-  const batches = data?.batches ?? []
+  const cards = data?.cards ?? {}
+  const inwardPending = data?.inwardPending ?? {}
+  const batches = inwardPending.batches ?? []
+  const inTransit = inwardPending.inTransit ?? {}
+  const tagInventory = inwardPending.tagInventory ?? {}
 
-  const totalStock = Number(overall.totalQty ?? 0)
-  const tagged = Number(overall.totalBarcodes ?? 0)
-  const pending = Number(overall.notTaggedCount ?? 0)
-  const missing = Number(verification.totalMissing ?? 0)
+  const totalStock = Number(cards.totalStock ?? 0)
+  const tagged = Number(cards.tagged ?? 0)
+  const pending = Number(cards.pending ?? 0)
+  const reject = Number(cards.reject ?? 0)
   const tagCoverage = tagged > 0 ? pct(tagged, tagged + pending) : '0'
 
-  const periodRows = filterByPeriod(data?.dayWiseSales ?? [], period)
+  const inventoryTagged = Number(tagInventory.tagged ?? 0)
+  const inventoryPending = Number(tagInventory.pending ?? 0)
+  const inventoryCoverage = Number(tagInventory.tagCoveragePct ?? 0)
+
+  const periodRows = filterByPeriod(data?.outwardDaily ?? [], period)
   const periodSold = periodRows.reduce((sum, row) => sum + Number(row.soldQty ?? 0), 0)
-  const barData = buildWeekBarData(data?.dayWiseSales ?? [])
+  const barData = buildWeekBarData(data?.outwardDaily ?? [])
 
   const donutData = useMemo(() => {
     const retail = Math.round(periodSold * 0.68)
@@ -278,9 +284,9 @@ function WarehouseDashboard({ data, period }) {
         </article>
         <article className="ceo-kpi ceo-kpi--grey">
           <p className="ceo-kpi__label">Tag Defect / Reject</p>
-          <p className="ceo-kpi__value">{formatCount(missing)}</p>
+          <p className="ceo-kpi__value">{formatCount(reject)}</p>
           <p className="ceo-kpi__hint">
-            {pct(missing, tagged || 1)}% reject rate — acceptable
+            {pct(reject, tagged || 1)}% reject rate — acceptable
           </p>
         </article>
       </div>
@@ -391,15 +397,15 @@ function WarehouseDashboard({ data, period }) {
           <ul className="ceo-transit-list">
             <li>
               <span>Batch #{activeBatch?.id ?? '—'} → Verification</span>
-              <span>{formatCount(verification.totalFound)} pcs</span>
+              <span>{formatCount(inTransit.found)} pcs</span>
             </li>
             <li>
               <span>Missing tags</span>
-              <span>{formatCount(verification.totalMissing)} pcs</span>
+              <span>{formatCount(inTransit.missing)} pcs</span>
             </li>
             <li>
               <span>New barcodes found</span>
-              <span>{formatCount(verification.totalNew)} pcs</span>
+              <span>{formatCount(inTransit.new)} pcs</span>
             </li>
           </ul>
         </article>
@@ -416,29 +422,29 @@ function WarehouseDashboard({ data, period }) {
             <div className="ceo-tag-row__bar">
               <div
                 className="ceo-tag-row__fill"
-                style={{ width: `${Math.min(Number(tagCoverage), 100)}%` }}
+                style={{ width: `${Math.min(inventoryCoverage, 100)}%` }}
               />
             </div>
             <div className="ceo-tag-row__foot">
-              <span>{formatCount(tagged)} synced</span>
-              <span>{tagCoverage}%</span>
+              <span>{formatCount(inventoryTagged)} synced</span>
+              <span>{inventoryCoverage}%</span>
             </div>
           </div>
           <div className="ceo-tag-row">
             <div className="ceo-tag-row__head">
               <span>Pending Tags</span>
-              <span className={pending > 500 ? 'ceo-tag-warn' : 'ceo-tag-ok'}>
-                {pending > 500 ? 'LOW' : 'OK'}
+              <span className={inventoryPending > 500 ? 'ceo-tag-warn' : 'ceo-tag-ok'}>
+                {inventoryPending > 500 ? 'LOW' : 'OK'}
               </span>
             </div>
             <div className="ceo-tag-row__bar">
               <div
-                className={`ceo-tag-row__fill${pending > 500 ? ' ceo-tag-row__fill--warn' : ''}`}
-                style={{ width: `${Math.min((pending / Math.max(tagged, 1)) * 100, 100)}%` }}
+                className={`ceo-tag-row__fill${inventoryPending > 500 ? ' ceo-tag-row__fill--warn' : ''}`}
+                style={{ width: `${Math.min((inventoryPending / Math.max(inventoryTagged, 1)) * 100, 100)}%` }}
               />
             </div>
             <div className="ceo-tag-row__foot">
-              <span>{formatCount(pending)} pending</span>
+              <span>{formatCount(inventoryPending)} pending</span>
             </div>
           </div>
         </article>
