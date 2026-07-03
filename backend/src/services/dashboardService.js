@@ -960,32 +960,72 @@ const getInventorySummary = async ({
 
   const productPrefix = scope.length === 1 ? "" : "p.";
 
-  const [[totalsRows], [byProductRows], [byCounterRows], [recentRows]] =
-    await Promise.all([
-      pool.execute(
-        `SELECT
+  // For a single branch, distinct product/sub-product/counter counts are taken
+  // directly. For multiple branches we intentionally do NOT dedupe shared names
+  // across branches: we compute each branch's distinct counts and sum them, so
+  // "All branches" reflects the combined per-branch totals.
+  const totalsSql =
+    scope.length === 1
+      ? `SELECT
            COUNT(*) AS totalTags,
            SUM(
              CASE
-               WHEN ${productPrefix}tag_packet_no IS NOT NULL AND TRIM(${productPrefix}tag_packet_no) != '' THEN 1
+               WHEN tag_packet_no IS NOT NULL AND TRIM(tag_packet_no) != '' THEN 1
                ELSE 0
              END
            ) AS taggedTags,
            SUM(
              CASE
-               WHEN ${productPrefix}tag_packet_no IS NULL OR TRIM(${productPrefix}tag_packet_no) = '' THEN 1
+               WHEN tag_packet_no IS NULL OR TRIM(tag_packet_no) = '' THEN 1
                ELSE 0
              END
            ) AS untaggedTags,
-           COALESCE(SUM(${productPrefix}pieces), 0) AS totalPieces,
-           COALESCE(SUM(${productPrefix}gross_wt), 0) AS totalGrossWt,
-           COALESCE(SUM(${productPrefix}net_wt), 0) AS totalNetWt,
-           COUNT(DISTINCT ${productPrefix}product) AS productGroups,
-           COUNT(DISTINCT CONCAT(${productPrefix}product, '|', ${productPrefix}sub_product)) AS subProducts,
+           COALESCE(SUM(pieces), 0) AS totalPieces,
+           COALESCE(SUM(gross_wt), 0) AS totalGrossWt,
+           COALESCE(SUM(net_wt), 0) AS totalNetWt,
+           COUNT(DISTINCT product) AS productGroups,
+           COUNT(DISTINCT CONCAT(product, '|', sub_product)) AS subProducts,
            COUNT(DISTINCT ${counterNameExpr}) AS counters
-         ${scope.length === 1 ? baseFrom : baseFrom}`,
-        queryParams,
-      ),
+         ${baseFrom}`
+      : `SELECT
+           COALESCE(SUM(perBranch.totalTags), 0) AS totalTags,
+           COALESCE(SUM(perBranch.taggedTags), 0) AS taggedTags,
+           COALESCE(SUM(perBranch.untaggedTags), 0) AS untaggedTags,
+           COALESCE(SUM(perBranch.totalPieces), 0) AS totalPieces,
+           COALESCE(SUM(perBranch.totalGrossWt), 0) AS totalGrossWt,
+           COALESCE(SUM(perBranch.totalNetWt), 0) AS totalNetWt,
+           COALESCE(SUM(perBranch.productGroups), 0) AS productGroups,
+           COALESCE(SUM(perBranch.subProducts), 0) AS subProducts,
+           COALESCE(SUM(perBranch.counters), 0) AS counters
+         FROM (
+           SELECT
+             pub.branch_id,
+             COUNT(*) AS totalTags,
+             SUM(
+               CASE
+                 WHEN p.tag_packet_no IS NOT NULL AND TRIM(p.tag_packet_no) != '' THEN 1
+                 ELSE 0
+               END
+             ) AS taggedTags,
+             SUM(
+               CASE
+                 WHEN p.tag_packet_no IS NULL OR TRIM(p.tag_packet_no) = '' THEN 1
+                 ELSE 0
+               END
+             ) AS untaggedTags,
+             COALESCE(SUM(p.pieces), 0) AS totalPieces,
+             COALESCE(SUM(p.gross_wt), 0) AS totalGrossWt,
+             COALESCE(SUM(p.net_wt), 0) AS totalNetWt,
+             COUNT(DISTINCT p.product) AS productGroups,
+             COUNT(DISTINCT CONCAT(p.product, '|', p.sub_product)) AS subProducts,
+             COUNT(DISTINCT ${counterNameExpr}) AS counters
+           ${baseFrom}
+           GROUP BY pub.branch_id
+         ) perBranch`;
+
+  const [[totalsRows], [byProductRows], [byCounterRows], [recentRows]] =
+    await Promise.all([
+      pool.execute(totalsSql, queryParams),
       pool.execute(
         `SELECT
            ${productPrefix}product AS name,
