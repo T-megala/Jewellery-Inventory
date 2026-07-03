@@ -465,7 +465,7 @@ export default function CeoDashboard() {
       setError('')
 
       try {
-        const result = await fetchExecutiveDashboard()
+        const result = await fetchExecutiveDashboard({ type: activeSegment })
         if (!cancelled) setData(result)
       } catch (err) {
         if (!cancelled) {
@@ -483,7 +483,7 @@ export default function CeoDashboard() {
 
     load()
     return () => { cancelled = true }
-  }, [navigate])
+  }, [navigate, activeSegment])
 
   if (loading) {
     return <div className="ceo-loading">Loading CEO dashboard…</div>

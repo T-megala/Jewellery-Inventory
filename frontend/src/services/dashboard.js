@@ -85,12 +85,26 @@ export async function fetchDailyImports({ period = 'week' } = {}) {
   };
 }
 
-export async function fetchExecutiveDashboard() {
-  const data = await apiFetch('/dashboard/executive');
+export async function fetchExecutiveDashboard({ type = 'warehouse' } = {}) {
+  const query = buildQueryString({ type });
+  const data = await apiFetch(`/dashboard/executive?${query}`);
+  const overall = data.overall ?? {};
+
   return {
-    overall: data.overall ?? {},
+    type: data.type ?? type,
+    status: data.status ?? 'active',
+    label: data.label ?? type,
+    overall: {
+      ...overall,
+      totalQty: Number(overall.totalStockQty ?? overall.totalQty ?? 0),
+      totalBarcodes: Number(overall.taggedProductCount ?? overall.totalBarcodes ?? 0),
+      notTaggedCount: Number(overall.untaggedProductCount ?? overall.notTaggedCount ?? 0),
+    },
     segments: data.segments ?? [],
-    batches: data.batches ?? [],
+    batches: (data.batches ?? []).map((batch) => ({
+      ...batch,
+      totalQty: Number(batch.totalStockQty ?? batch.totalQty ?? 0),
+    })),
     topSoldProducts: (data.topSoldProducts ?? []).map((row) => ({
       itemDescription: row.itemDescription ?? row.productName ?? row.name ?? '',
       soldBarcodes: Number(row.soldBarcodes ?? row.soldTags ?? 0),
