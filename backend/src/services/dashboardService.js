@@ -558,43 +558,13 @@ const emptyVerification = () => ({
   totalTags: 0,
 });
 
-/** Display-ready KPI cards for the CEO overview grid (same shape for every type). */
-const buildOverviewCards = (metrics, verificationData) => {
-  const tagged = Number(metrics.taggedProductCount ?? 0);
-  const pending = Number(metrics.untaggedProductCount ?? 0);
-  const missing = Number(verificationData?.totalMissing ?? 0);
-  const tagCoverage =
-    tagged > 0 ? Number(((tagged / (tagged + pending)) * 100).toFixed(1)) : 0;
-  const rejectRate =
-    tagged > 0 ? Number(((missing / tagged) * 100).toFixed(1)) : 0;
-
-  return [
-    {
-      key: "totalStock",
-      label: "Total Stock",
-      value: Number(metrics.totalStockQty ?? 0),
-      hint: "units across all categories",
-    },
-    {
-      key: "tagged",
-      label: "Tagged & Cloud Synced",
-      value: tagged,
-      hint: `${tagCoverage}% tag coverage`,
-    },
-    {
-      key: "pending",
-      label: "Pending Tagging",
-      value: pending,
-      hint: "imported, not yet tagged",
-    },
-    {
-      key: "reject",
-      label: "Tag Defect / Reject",
-      value: missing,
-      hint: `${rejectRate}% reject rate`,
-    },
-  ];
-};
+/** KPI cards for the CEO overview grid (same shape for every type). */
+const buildOverviewCards = (metrics, verificationData) => [
+  { key: "totalStock", value: Number(metrics.totalStockQty ?? 0) },
+  { key: "tagged", value: Number(metrics.taggedProductCount ?? 0) },
+  { key: "pending", value: Number(metrics.untaggedProductCount ?? 0) },
+  { key: "reject", value: Number(verificationData?.totalMissing ?? 0) },
+];
 
 const VALID_SEGMENT_TYPES = FUTURE_SEGMENTS.map((segment) => segment.key);
 
@@ -648,8 +618,7 @@ const getExecutiveDashboard = async ({ type = "warehouse" } = {}) => {
     [dailySalesSummaryService.ALL_COUNTER],
   );
 
-  const [topSold, dayWiseSales, verification] = await Promise.all([
-    getTopSoldProducts({ period: "week" }),
+  const [dayWiseSales, verification] = await Promise.all([
     getDayWiseSales({ period: "week" }),
     getVerificationSummary(),
   ]);
@@ -673,32 +642,51 @@ const getExecutiveDashboard = async ({ type = "warehouse" } = {}) => {
   };
 
   const isWarehouse = requestedType === "warehouse";
-  const hasData = Boolean(typeMetrics[requestedType]);
   const overall = { ...emptyTypeMetrics(), ...(typeMetrics[requestedType] ?? {}) };
   const verificationData = isWarehouse ? verification : emptyVerification();
-  const typeMeta = FUTURE_SEGMENTS.find((s) => s.key === requestedType);
+
+  const tagged = overall.taggedProductCount;
+  const pending = overall.untaggedProductCount;
+  const tagCoveragePct =
+    tagged > 0 ? Number(((tagged / (tagged + pending)) * 100).toFixed(1)) : 0;
 
   return {
     type: requestedType,
-    label: typeMeta?.label ?? requestedType,
-    status: hasData ? "active" : "coming_soon",
     cards: buildOverviewCards(overall, verificationData),
-    overall,
-    batches: (isWarehouse ? batchRows : []).map((row) => ({
-      id: Number(row.id),
-      batchDate: formatDate(row.batch_date),
-      uploadedAt: formatDateTime(row.uploaded_at),
-      uploadedBy: row.uploaded_by,
-      isActive: Boolean(row.is_active),
-      taggedProductCount: Number(row.taggedProductCount ?? 0),
-      untaggedProductCount: Number(row.untaggedProductCount ?? 0),
-      totalStockQty: Number(row.totalStockQty ?? 0),
-      productTypeCount: Number(row.productTypeCount ?? 0),
+
+    // Movement — Outward daily (sales, last 7 days)
+    outwardDaily: (isWarehouse ? dayWiseSales.data : []).map((row) => ({
+      date: row.date,
+      day: row.day,
+      soldQty: Number(row.soldQty ?? 0),
     })),
-    topSoldProducts: isWarehouse ? topSold.products : [],
-    dayWiseSales: isWarehouse ? dayWiseSales.data : [],
-    totalSoldQtyWeek: isWarehouse ? dayWiseSales.totalSoldQty : 0,
-    verification: verificationData,
+
+    // Today's Outward Split (retail vs franchise — 0 until sources exist)
+    outwardSplit: {
+      totalSold: isWarehouse ? Number(dayWiseSales.totalSoldQty ?? 0) : 0,
+      retail: 0,
+      franchise: 0,
+    },
+
+    // Movement — Inward & Pending
+    inwardPending: {
+      batches: (isWarehouse ? batchRows : []).map((row) => ({
+        id: Number(row.id),
+        batchDate: formatDate(row.batch_date),
+        totalStockQty: Number(row.totalStockQty ?? 0),
+        isActive: Boolean(row.is_active),
+      })),
+      inTransit: {
+        found: Number(verificationData.totalFound ?? 0),
+        missing: Number(verificationData.totalMissing ?? 0),
+        new: Number(verificationData.totalNew ?? 0),
+      },
+      tagInventory: {
+        tagged,
+        pending,
+        tagCoveragePct,
+      },
+    },
   };
 };
 
