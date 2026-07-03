@@ -161,13 +161,22 @@ function HardwareStatusRow({ name, online, total }) {
   )
 }
 
+function SectionHeading({ children }) {
+  return (
+    <div className="overall-section-heading">
+      <h2 className="overall-section-title overall-section-title--accent">{children}</h2>
+      <span className="overall-section-heading__line" aria-hidden="true" />
+    </div>
+  )
+}
+
 function WarehouseHardwareSync() {
   const allHardwareOnline = WAREHOUSE_HARDWARE.every((item) => item.online === item.total)
   const syncHealthy = WAREHOUSE_SYNC.pendingRecords === 0 && WAREHOUSE_SYNC.failuresToday === 0
 
   return (
     <>
-      <h2 className="overall-section-title overall-section-title--accent">Hardware &amp; Sync — Warehouse</h2>
+      <SectionHeading>Hardware &amp; Sync — Warehouse</SectionHeading>
       <div className="overall-hw-grid">
         <article className="overall-panel">
           <div className="overall-panel__head">
@@ -265,7 +274,7 @@ function WarehouseDashboard({ data, period }) {
 
   return (
     <>
-      <h2 className="overall-section-title overall-section-title--accent">Total RFID Stock — Warehouse</h2>
+      <SectionHeading>Total RFID Stock — Warehouse</SectionHeading>
       <div className="overall-kpi-grid">
         <article className="overall-kpi overall-kpi--blue">
           <p className="overall-kpi__label">Total Stock in Warehouse</p>
@@ -291,7 +300,7 @@ function WarehouseDashboard({ data, period }) {
         </article>
       </div>
 
-      <h2 className="overall-section-title overall-section-title--accent">Movement — Outward {period === 'today' ? 'Today' : period.toUpperCase()}</h2>
+      <SectionHeading>Movement — Outward {period === 'today' ? 'Today' : period.toUpperCase()}</SectionHeading>
       <div className="overall-panels">
         <article className="overall-panel">
           <div className="overall-panel__head">
@@ -352,7 +361,7 @@ function WarehouseDashboard({ data, period }) {
         </article>
       </div>
 
-      <h2 className="overall-section-title overall-section-title--accent">Movement — Inward &amp; Pending</h2>
+      <SectionHeading>Movement — Inward &amp; Pending</SectionHeading>
       <div className="overall-bottom-grid">
         <article className="overall-panel">
           <div className="overall-panel__head">
