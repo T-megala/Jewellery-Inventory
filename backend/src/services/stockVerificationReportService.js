@@ -196,21 +196,82 @@ const STORED_REPORT_ORDER_SQL = `
     svd.id DESC
 `;
 
+const appendScopeValueFilter = (
+  values,
+  column,
+  conditions,
+  params,
+  { keyword = "AND" } = {},
+) => {
+  const list = Array.isArray(values)
+    ? values.map((value) => String(value).trim()).filter(Boolean)
+    : [];
+
+  if (list.length === 0) {
+    return;
+  }
+
+  const prefix = keyword ? `${keyword} ` : "";
+
+  if (list.length === 1) {
+    conditions.push(`${prefix}${column} = ?`);
+    params.push(list[0]);
+    return;
+  }
+
+  const placeholders = list.map(() => "?").join(", ");
+  conditions.push(`${prefix}${column} IN (${placeholders})`);
+  params.push(...list);
+};
+
+const appendDetailInventoryScopeFilters = (filters, conditions, params) => {
+  const appendExistsFilter = (values, column) => {
+    const list = Array.isArray(values)
+      ? values.map((value) => String(value).trim()).filter(Boolean)
+      : [];
+
+    if (list.length === 0) {
+      return;
+    }
+
+    const placeholders = list.map(() => "?").join(", ");
+    conditions.push(`AND EXISTS (
+      SELECT 1
+      FROM products p_inv
+      INNER JOIN product_upload_batches pub_inv
+        ON pub_inv.id = p_inv.batch_id
+       AND pub_inv.branch_id = sv.branch_id
+       AND pub_inv.is_active = 1
+      WHERE UPPER(TRIM(p_inv.tag_packet_no)) = UPPER(TRIM(svd.tag_no))
+        AND p_inv.${column} IN (${placeholders})
+    )`);
+    params.push(...list);
+  };
+
+  appendExistsFilter(filters.productNames, "product");
+  appendExistsFilter(filters.subProductNames, "sub_product");
+  appendExistsFilter(filters.centerNames, "counter_name");
+};
+
 const appendScopeFilters = (filters, conditions, params, tablePrefix = "sv") => {
-  if (filters.productName) {
-    conditions.push(`AND ${tablePrefix}.product_name = ?`);
-    params.push(filters.productName);
-  }
-
-  if (filters.subProductName) {
-    conditions.push(`AND ${tablePrefix}.sub_product_name = ?`);
-    params.push(filters.subProductName);
-  }
-
-  if (filters.centerName) {
-    conditions.push(`AND ${tablePrefix}.center_name = ?`);
-    params.push(filters.centerName);
-  }
+  appendScopeValueFilter(
+    filters.productNames,
+    `${tablePrefix}.product_name`,
+    conditions,
+    params,
+  );
+  appendScopeValueFilter(
+    filters.subProductNames,
+    `${tablePrefix}.sub_product_name`,
+    conditions,
+    params,
+  );
+  appendScopeValueFilter(
+    filters.centerNames,
+    `${tablePrefix}.center_name`,
+    conditions,
+    params,
+  );
 };
 
 const appendHeaderSessionFilters = (
@@ -256,7 +317,7 @@ const buildDetailSummaryFilterClause = (filters) => {
   ];
   const params = [];
 
-  appendHeaderSessionFilters(filters, conditions, params, "sv");
+  appendDetailInventoryScopeFilters(filters, conditions, params);
 
   const branchFilter = buildBranchFilterClause(filters, "sv");
   const dateFilter = buildDateFilterClause(filters, "sv");
@@ -281,20 +342,27 @@ const buildInventoryProductScopeClause = (filters, tablePrefix = "p") => {
   ];
   const params = [];
 
-  if (filters.productName) {
-    conditions.push(`${tablePrefix}.product = ?`);
-    params.push(filters.productName);
-  }
-
-  if (filters.subProductName) {
-    conditions.push(`${tablePrefix}.sub_product = ?`);
-    params.push(filters.subProductName);
-  }
-
-  if (filters.centerName) {
-    conditions.push(`${tablePrefix}.counter_name = ?`);
-    params.push(filters.centerName);
-  }
+  appendScopeValueFilter(
+    filters.productNames,
+    `${tablePrefix}.product`,
+    conditions,
+    params,
+    { keyword: "" },
+  );
+  appendScopeValueFilter(
+    filters.subProductNames,
+    `${tablePrefix}.sub_product`,
+    conditions,
+    params,
+    { keyword: "" },
+  );
+  appendScopeValueFilter(
+    filters.centerNames,
+    `${tablePrefix}.counter_name`,
+    conditions,
+    params,
+    { keyword: "" },
+  );
 
   return { conditions, params };
 };
@@ -479,7 +547,25 @@ const buildStoredDetailFilterClause = (filters, { includeStatus = true } = {}) =
 
   // Match verification session scope on sv.* — detail rows for NEW tags
   // store scope labels in svd.* which may differ from the session filter.
-  appendHeaderSessionFilters(filters, conditions, params, "sv");
+  appendDetailInventoryScopeFilters(filters, conditions, params);
+
+  if (filters.verificationId) {
+    conditions.push("AND sv.id = ?");
+    params.push(filters.verificationId);
+  }
+
+  const branchFilter = buildBranchFilterClause(filters, "sv");
+  const dateFilter = buildDateFilterClause(filters, "sv");
+
+  if (branchFilter.clause) {
+    conditions.push(branchFilter.clause);
+    params.push(...branchFilter.params);
+  }
+
+  if (dateFilter.clause) {
+    conditions.push(dateFilter.clause);
+    params.push(...dateFilter.params);
+  }
 
   if (includeStatus) {
     if (filters.status === "FOUND" || filters.status === "NEW") {

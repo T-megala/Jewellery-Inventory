@@ -3,7 +3,7 @@ import { resolveRequestBranchIds, resolveAndroidBranchIds } from "../utils/branc
 import stockVerificationReportService from "../services/stockVerificationReportService.js";
 import stockVerificationService from "../services/stockVerificationService.js";
 import androidScanReportService from "../services/androidScanReportService.js";
-import { getRequestParam } from "../utils/requestParams.js";
+import { getRequestParam, getRequestStringList } from "../utils/requestParams.js";
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const VALID_EXPORT_TYPES = ["excel", "pdf"];
@@ -65,10 +65,26 @@ const validateFilters = async (req, { isExport = false } = {}) => {
     throw new ApiError(400, "status must be one of FOUND, MISSING, or NEW");
   }
 
-  const productName = getRequestValue(req, "productName", "product");
-  const subProductName = getRequestValue(req, "subProductName", "subProduct");
-  const centerName = getRequestValue(
+  const productNames = getRequestStringList(
     req,
+    "productNames",
+    "products",
+    "productName",
+    "product",
+  );
+  const subProductNames = getRequestStringList(
+    req,
+    "subProductNames",
+    "subProducts",
+    "subProductName",
+    "subProduct",
+  );
+  const centerNames = getRequestStringList(
+    req,
+    "centerNames",
+    "centers",
+    "counterNames",
+    "counters",
     "centerName",
     "counterName",
     "center",
@@ -88,9 +104,9 @@ const validateFilters = async (req, { isExport = false } = {}) => {
 
   return {
     filters: {
-      productName: productName ? String(productName).trim() : null,
-      subProductName: subProductName ? String(subProductName).trim() : null,
-      centerName: centerName ? String(centerName).trim() : null,
+      productNames,
+      subProductNames,
+      centerNames,
       status,
       date,
       branchIds,
@@ -135,6 +151,12 @@ export const getStockVerificationReport = async (req, res) => {
     branchIds: filters.branchIds,
     branchId:
       filters.branchIds.length === 1 ? filters.branchIds[0] : null,
+    filters: {
+      productNames: filters.productNames,
+      subProductNames: filters.subProductNames,
+      centerNames: filters.centerNames,
+      status: filters.status,
+    },
     pagination: result.pagination,
     summary: result.summary,
     data: result.data,
