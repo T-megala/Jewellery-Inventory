@@ -318,6 +318,29 @@ const buildInventoryNotFoundCondition = (filters) => ({
   params: [filters.date],
 });
 
+const buildVerificationSessionExistsCondition = (filters) => ({
+  sql: `EXISTS (
+      SELECT 1
+      FROM stock_verification sv_day
+      WHERE sv_day.verification_day = ?
+        AND sv_day.branch_id = pub.branch_id
+    )`,
+  params: [filters.date],
+});
+
+const countVerificationSessionsForDay = async (filters) => {
+  const branchFilter = buildBranchFilterClause(filters, "sv");
+  const [rows] = await pool.execute(
+    `SELECT COUNT(*) AS sessionCount
+     FROM stock_verification sv
+     WHERE sv.verification_day = ?
+       ${branchFilter.clause}`,
+    [filters.date, ...branchFilter.params],
+  );
+
+  return Number(rows[0]?.sessionCount ?? 0);
+};
+
 const buildInventoryMissingQueryParts = (filters) => {
   const conditions = ["pub.is_active = 1"];
   const params = [];
@@ -327,6 +350,10 @@ const buildInventoryMissingQueryParts = (filters) => {
     conditions.push(branchFilter.clause.replace(/^AND\s+/, ""));
     params.push(...branchFilter.params);
   }
+
+  const sessionExists = buildVerificationSessionExistsCondition(filters);
+  conditions.push(sessionExists.sql);
+  params.push(...sessionExists.params);
 
   const productScope = buildInventoryProductScopeClause(filters, "p");
   conditions.push(...productScope.conditions);
@@ -425,6 +452,11 @@ const INVENTORY_MISSING_EXCEL_SELECT_SQL = `
 `;
 
 const getInventoryMissingCount = async (filters) => {
+  const sessionCount = await countVerificationSessionsForDay(filters);
+  if (sessionCount === 0) {
+    return 0;
+  }
+
   const { baseFrom, params } = buildInventoryMissingQueryParts(filters);
   const [rows] = await pool.execute(
     `SELECT COUNT(*) AS missingCount
@@ -904,6 +936,11 @@ const getReport = async (filters, pagination) => {
 };
 
 const getMissingRows = async (filters, pagination) => {
+  const sessionCount = await countVerificationSessionsForDay(filters);
+  if (sessionCount === 0) {
+    return [];
+  }
+
   const { baseFrom, params } = buildInventoryMissingQueryParts(filters);
 
   const [dataRows] = await pool.execute(
@@ -1125,6 +1162,17 @@ const getAllMissingReportRows = async (filters) => {
       400,
       `Export limit exceeded. Narrow filters to ${MAX_EXPORT_ROWS} records or fewer.`,
     );
+  }
+
+  if (summary.missingCount === 0) {
+    return {
+      summary: {
+        foundCount: summary.foundCount,
+        missingCount: summary.missingCount,
+        newCount: summary.newCount,
+      },
+      data: [],
+    };
   }
 
   const { baseFrom, params } = buildInventoryMissingQueryParts(filters);

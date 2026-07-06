@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fetchCenters, fetchProducts, fetchSubProducts } from '../services/products.js'
 import {
+  clearTodayVerifications,
   downloadReportExport,
   fetchStockVerificationReport,
 } from '../services/reports.js'
 import TablePagination, { DEFAULT_PAGE_SIZE } from '../components/TablePagination.jsx'
+import DeleteConfirmModal from '../components/DeleteConfirmModal.jsx'
 import { useBranchScope } from '../hooks/useBranchScope.js'
 import { getUser, hasPermission, isAuthenticated, isLogoutInProgress } from '../services/auth.js'
 import './Module.css'
@@ -165,6 +167,7 @@ export default function Reports() {
   const user = getUser()
   const canViewReports = hasPermission('stock_verification.report', user)
   const canExportReports = hasPermission('stock_verification.export', user)
+  const canClearTodayVerifications = hasPermission('stock_verification.upload', user)
   const { operationalValue, sessionBranches } = useBranchScope()
   const hasNoBranches = sessionBranches.length === 0
   const [product, setProduct] = useState('')
@@ -187,10 +190,14 @@ export default function Reports() {
   const [loadingFilters, setLoadingFilters] = useState(true)
   const [loadingReport, setLoadingReport] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [clearing, setClearing] = useState(false)
+  const [clearModalOpen, setClearModalOpen] = useState(false)
+  const [clearNotice, setClearNotice] = useState('')
   const [error, setError] = useState('')
   const [filtersNotice, setFiltersNotice] = useState('')
 
   const isBranchBlocked = hasNoBranches || /branch is not assigned/i.test(error)
+  const isTodaySelected = selectedDate === getTodayDate()
 
   const filterParams = useMemo(() => ({
     productName: product || undefined,
@@ -340,6 +347,28 @@ export default function Reports() {
     setPageSize(DEFAULT_PAGE_SIZE)
     setHasSearched(false)
     setError('')
+    setClearNotice('')
+  }
+
+  async function handleClearTodayConfirm() {
+    setClearing(true)
+    setError('')
+    setClearNotice('')
+
+    try {
+      const result = await clearTodayVerifications(selectedDate)
+      setClearModalOpen(false)
+      setRows([])
+      setSummary(null)
+      setPagination(null)
+      setPage(1)
+      setHasSearched(false)
+      setClearNotice(result.message || "Today's verifications cleared successfully")
+    } catch (err) {
+      setError(err.message || "Failed to clear today's verifications")
+    } finally {
+      setClearing(false)
+    }
   }
 
   async function handleExport(exportType, label) {
@@ -477,23 +506,46 @@ export default function Reports() {
             <p className="report-alert report-alert--info" role="status">{filtersNotice}</p>
           )}
 
+          {clearNotice && (
+            <p className="report-alert report-alert--success" role="status">{clearNotice}</p>
+          )}
+
           {error && (
             <p className="report-alert report-alert--error" role="alert">{error}</p>
           )}
 
           <div className="report-filters__actions">
+            {canClearTodayVerifications && (
+              <button
+                type="button"
+                className={`report-btn report-btn--danger${clearing ? ' report-btn--loading' : ''}`}
+                onClick={() => setClearModalOpen(true)}
+                disabled={
+                  clearing
+                  || loadingReport
+                  || exporting
+                  || loadingFilters
+                  || isBranchBlocked
+                  || !isTodaySelected
+                }
+                title={!isTodaySelected ? "Only today's verifications can be cleared" : undefined}
+              >
+                {clearing && <span className="report-btn__spin" aria-hidden="true" />}
+                Clear Today
+              </button>
+            )}
             <button
               type="button"
               className="report-btn report-btn--ghost"
               onClick={handleReset}
-              disabled={loadingReport || exporting || isBranchBlocked}
+              disabled={loadingReport || exporting || clearing || isBranchBlocked}
             >
               Reset
             </button>
             <button
               type="submit"
               className={`report-btn report-btn--primary${loadingReport ? ' report-btn--loading' : ''}`}
-              disabled={loadingReport || loadingFilters || exporting || isBranchBlocked}
+              disabled={loadingReport || loadingFilters || exporting || clearing || isBranchBlocked}
             >
               {loadingReport && <span className="report-btn__spin" aria-hidden="true" />}
               Generate Report
@@ -607,6 +659,23 @@ export default function Reports() {
           )}
         </section>
       )}
+
+      <DeleteConfirmModal
+        open={clearModalOpen}
+        title="Clear today's verifications"
+        message={(
+          <>
+            This will permanently delete all stock verification scans for today in the
+            selected branch, including found and new tag records. This action cannot be undone.
+          </>
+        )}
+        confirmLabel="Clear Today"
+        loading={clearing}
+        onConfirm={handleClearTodayConfirm}
+        onCancel={() => {
+          if (!clearing) setClearModalOpen(false)
+        }}
+      />
     </div>
   )
 }

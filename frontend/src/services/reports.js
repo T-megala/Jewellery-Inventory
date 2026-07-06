@@ -1,6 +1,7 @@
 import { DEFAULT_PAGE_SIZE } from '../components/TablePagination.jsx';
 import { createUserError } from '../utils/userErrorMessage.js';
-import { apiFetchRaw, apiFetchReport, buildQueryString, withBranchParams } from './api.js';
+import { apiFetchRaw, apiFetchReport, authFetch, buildQueryString, getAuthHeaders, withBranchParams } from './api.js';
+import { apiUrl } from '../config/apiConfig.js';
 
 function buildReportParams(filters = {}) {
   return {
@@ -38,6 +39,32 @@ function alignSummaryWithStatusFilter(result, status) {
   }
 
   return { ...result, summary };
+}
+
+export async function clearTodayVerifications(date) {
+  const query = buildQueryString(withBranchParams({ date }));
+  const path = query ? `/stock-verification/today?${query}` : '/stock-verification/today';
+
+  const res = await authFetch(apiUrl(path), {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+
+  let json;
+  try {
+    json = await res.json();
+  } catch {
+    throw createUserError(null, 'Unable to clear verifications. Please try again.');
+  }
+
+  if (!res.ok || json?.success === false) {
+    throw createUserError(
+      json?.message || json?.error,
+      'Unable to clear verifications. Please try again.',
+    );
+  }
+
+  return json;
 }
 
 export function fetchStockVerificationReport(filters = {}) {

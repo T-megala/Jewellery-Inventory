@@ -1,5 +1,6 @@
 import pool from "../config/database.js";
 import { resolveOperationalBranchId } from "../utils/branchRequest.js";
+import { buildBranchSqlFilter } from "../utils/branchScope.js";
 import { getActiveBatchId } from "../services/productBatchService.js";
 import ApiError from "../utils/ApiError.js";
 import {
@@ -600,6 +601,74 @@ const uploadStockVerification = async ({
   }
 };
 
+const getServerToday = () => {
+  const date = new Date();
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
+const clearVerificationsForDay = async ({ branchIds, date }) => {
+  const verificationDay = String(date ?? "").trim();
+
+  if (!verificationDay) {
+    throw new ApiError(400, "date is required");
+  }
+
+  if (verificationDay !== getServerToday()) {
+    throw new ApiError(400, "Only today's verifications can be cleared");
+  }
+
+  const branchFilter = buildBranchSqlFilter("sv.branch_id", branchIds);
+
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const [detailsResult] = await connection.execute(
+      `DELETE svd
+       FROM stock_verification_details svd
+       INNER JOIN stock_verification sv ON sv.id = svd.verification_id
+       WHERE sv.verification_day = ?
+         ${branchFilter.clause}`,
+      [verificationDay, ...branchFilter.params],
+    );
+
+    const [scansResult] = await connection.execute(
+      `DELETE lsv
+       FROM latest_stock_verification lsv
+       INNER JOIN stock_verification sv ON sv.id = lsv.verification_id
+       WHERE sv.verification_day = ?
+         ${branchFilter.clause}`,
+      [verificationDay, ...branchFilter.params],
+    );
+
+    const [verificationResult] = await connection.execute(
+      `DELETE sv
+       FROM stock_verification sv
+       WHERE sv.verification_day = ?
+         ${branchFilter.clause}`,
+      [verificationDay, ...branchFilter.params],
+    );
+
+    await connection.commit();
+
+    return {
+      date: verificationDay,
+      deletedVerifications: Number(verificationResult.affectedRows ?? 0),
+      deletedDetails: Number(detailsResult.affectedRows ?? 0),
+      deletedScans: Number(scansResult.affectedRows ?? 0),
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+};
+
 export default {
   uploadStockVerification,
+  clearVerificationsForDay,
+  getServerToday,
 };

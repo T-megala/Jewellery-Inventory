@@ -1,6 +1,7 @@
 import ApiError from "../utils/ApiError.js";
 import { resolveRequestBranchIds, resolveAndroidBranchIds } from "../utils/branchScope.js";
 import stockVerificationReportService from "../services/stockVerificationReportService.js";
+import stockVerificationService from "../services/stockVerificationService.js";
 import androidScanReportService from "../services/androidScanReportService.js";
 import { getRequestParam } from "../utils/requestParams.js";
 
@@ -137,6 +138,43 @@ export const getStockVerificationReport = async (req, res) => {
     pagination: result.pagination,
     summary: result.summary,
     data: result.data,
+  });
+};
+
+export const clearTodayVerifications = async (req, res) => {
+  const dateRaw = getRequestValue(req, "date");
+  const date = dateRaw
+    ? validateDate(dateRaw, "date")
+    : stockVerificationService.getServerToday();
+
+  if (date !== stockVerificationService.getServerToday()) {
+    throw new ApiError(400, "Only today's verifications can be cleared");
+  }
+
+  const branchIds = await resolveRequestBranchIds(req);
+  const result = await stockVerificationService.clearVerificationsForDay({
+    branchIds,
+    date,
+  });
+
+  const hasDeleted =
+    result.deletedVerifications > 0 ||
+    result.deletedDetails > 0 ||
+    result.deletedScans > 0;
+
+  res.status(200).json({
+    success: true,
+    message: hasDeleted
+      ? "Today's verifications cleared successfully"
+      : "No verifications found for today",
+    date: result.date,
+    branchIds,
+    branchId: branchIds.length === 1 ? branchIds[0] : null,
+    deleted: {
+      verifications: result.deletedVerifications,
+      details: result.deletedDetails,
+      scans: result.deletedScans,
+    },
   });
 };
 
