@@ -2078,11 +2078,12 @@ function BranchesCoveredCard({ isAllBranches, scopeBranchCount, totalBranches, b
   const value = isAllBranches
     ? `${formatCount(scopeBranchCount)} of ${formatCount(totalBranches)}`
     : (branchName ?? 'Selected branch')
-  const sub = isAllBranches ? 'Branches in current batch' : 'Current batch'
+  const label = isAllBranches ? 'Branch Coverage' : 'Current Branch'
+  const sub = isAllBranches ? 'Branches processed' : 'Selected branch'
 
   return (
     <article className="ov-card verify-card">
-      <p className="ov-card__label">Branches Covered</p>
+      <p className="ov-card__label">{label}</p>
       <div className="ov-card__main">
         <p className={`ov-card__value dashboard-num${isAllBranches ? '' : ' ov-card__value--text'}`}>
           {noData && isAllBranches ? '—' : value}
