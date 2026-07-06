@@ -20,21 +20,21 @@ function alignSummaryWithStatusFilter(result, status) {
     return result;
   }
 
-  const total = Number(result.pagination?.totalRecords ?? 0);
+  const totalRows = Number(result.pagination?.totalRecords ?? 0);
   const summary = {
     ...result.summary,
-    totalTags: total,
+    totalTags: totalRows,
     totalFound: 0,
     totalMissing: 0,
     totalNew: 0,
   };
 
   if (normalizedStatus === 'FOUND') {
-    summary.totalFound = total;
+    summary.totalFound = totalRows;
   } else if (normalizedStatus === 'MISSING') {
-    summary.totalMissing = total;
+    summary.totalMissing = totalRows;
   } else if (normalizedStatus === 'NEW') {
-    summary.totalNew = total;
+    summary.totalNew = totalRows;
   }
 
   return { ...result, summary };

@@ -241,21 +241,29 @@ export async function apiFetchReport(path, params = {}) {
     });
 
     const json = await parseResponse(res);
+    const rows = (json.data || []).map(normalizeReportRow);
+    const daySummary = json.summary ?? null;
 
     return {
-      rows: (json.data || []).map(normalizeReportRow),
+      rows,
       pagination: json.pagination || null,
       branchId: json.branchId ?? null,
-      summary: {
-        totalTags:
-          json.pagination?.totalRecords
-          ?? ((json.summary?.foundCount ?? 0)
-            + (json.summary?.missingCount ?? 0)
-            + (json.summary?.newCount ?? 0)),
-        totalFound: json.summary?.foundCount ?? 0,
-        totalMissing: json.summary?.missingCount ?? 0,
-        totalNew: json.summary?.newCount ?? 0,
-      },
+      summary: daySummary
+        ? {
+            totalFound: daySummary.foundCount ?? 0,
+            totalMissing: daySummary.missingCount ?? 0,
+            totalNew: daySummary.newCount ?? 0,
+            totalTags:
+              (daySummary.foundCount ?? 0)
+              + (daySummary.missingCount ?? 0)
+              + (daySummary.newCount ?? 0),
+          }
+        : {
+            totalTags: 0,
+            totalFound: 0,
+            totalMissing: 0,
+            totalNew: 0,
+          },
     };
   } catch (err) {
     throw createUserError(err?.message, 'Unable to load report. Please try again.');

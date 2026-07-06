@@ -558,32 +558,32 @@ export default function Reports() {
                     {rows.map((row, index) => {
                       const dateCell = formatReportDateCell(row.verificationDate)
                       return (
-                      <tr key={row.id}>
-                        <td className="reports-table__sno">{(page - 1) * pageSize + index + 1}</td>
-                        <td className="reports-table__date" title={dateCell.title}>
-                          <span className="reports-table__date-line">{dateCell.dateLine}</span>
-                          {dateCell.timeLine && (
-                            <span className="reports-table__date-time">{dateCell.timeLine}</span>
-                          )}
-                        </td>
-                        <td>{row.branch?.name || '—'}</td>
-                        <td className="reports-table__product" title={row.product || undefined}>
-                          {formatScopeDisplay(row.product, row.status)}
-                        </td>
-                        <td className="reports-table__subproduct" title={row.subProduct || undefined}>
-                          {formatScopeDisplay(row.subProduct, row.status)}
-                        </td>
-                        <td className="reports-table__counter" title={row.counter || undefined}>
-                          {formatScopeDisplay(row.counter, row.status)}
-                        </td>
-                        <td className="reports-table__tag" title={row.tagNo || undefined}>{row.tagNo}</td>
-                        <td className="reports-table__pieces">{formatPieces(row.pieces)}</td>
-                        <td>
-                          <span className={statusBadgeClass(row.status)}>
-                            {formatStatus(row.status)}
-                          </span>
-                        </td>
-                      </tr>
+                        <tr key={`${row.id ?? row.tagNo}-${index}`}>
+                          <td className="reports-table__sno">{(page - 1) * pageSize + index + 1}</td>
+                          <td className="reports-table__date" title={dateCell.title}>
+                            <span className="reports-table__date-line">{dateCell.dateLine}</span>
+                            {dateCell.timeLine && (
+                              <span className="reports-table__date-time">{dateCell.timeLine}</span>
+                            )}
+                          </td>
+                          <td>{row.branch?.name || '—'}</td>
+                          <td className="reports-table__product" title={row.product || undefined}>
+                            {formatScopeDisplay(row.product, row.status)}
+                          </td>
+                          <td className="reports-table__subproduct" title={row.subProduct || undefined}>
+                            {formatScopeDisplay(row.subProduct, row.status)}
+                          </td>
+                          <td className="reports-table__counter" title={row.counter || undefined}>
+                            {formatScopeDisplay(row.counter, row.status)}
+                          </td>
+                          <td className="reports-table__tag" title={row.tagNo || undefined}>{row.tagNo}</td>
+                          <td className="reports-table__pieces">{formatPieces(row.pieces)}</td>
+                          <td>
+                            <span className={statusBadgeClass(row.status)}>
+                              {formatStatus(row.status)}
+                            </span>
+                          </td>
+                        </tr>
                       )
                     })}
                   </tbody>
@@ -598,7 +598,7 @@ export default function Reports() {
                   totalPages={pagination.totalPages}
                   totalRecords={pagination.totalRecords}
                   rowCount={rows.length}
-                  onPageChange={(nextPage) => loadReport(nextPage)}
+                  onPageChange={(nextPage) => loadReport(nextPage, pageSize)}
                   onPageSizeChange={handlePageSizeChange}
                   disabled={loadingReport}
                 />
