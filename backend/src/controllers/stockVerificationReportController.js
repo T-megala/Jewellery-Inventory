@@ -53,17 +53,22 @@ const validateFilters = async (req, { isExport = false } = {}) => {
 
   const date = validateDate(dateRaw, "date");
 
-  const requestStatus = getRequestValue(req, "status");
-  const status = requestStatus
-    ? String(requestStatus).trim().toUpperCase()
-    : null;
+  const statuses = getRequestStringList(req, "statuses", "status").map((value) =>
+    String(value).trim().toUpperCase(),
+  );
+  const invalidStatuses = statuses.filter(
+    (status) => !stockVerificationReportService.VALID_STATUSES.includes(status),
+  );
 
-  if (
-    status &&
-    !stockVerificationReportService.VALID_STATUSES.includes(status)
-  ) {
-    throw new ApiError(400, "status must be one of FOUND, MISSING, or NEW");
+  if (invalidStatuses.length > 0) {
+    throw new ApiError(
+      400,
+      "status must be one or more of FOUND, MISSING, or NEW",
+    );
   }
+
+  const normalizedStatuses =
+    stockVerificationReportService.normalizeStatuses(statuses);
 
   const productNames = getRequestStringList(
     req,
@@ -107,7 +112,7 @@ const validateFilters = async (req, { isExport = false } = {}) => {
       productNames,
       subProductNames,
       centerNames,
-      status,
+      statuses: normalizedStatuses,
       date,
       branchIds,
     },
@@ -155,7 +160,8 @@ export const getStockVerificationReport = async (req, res) => {
       productNames: filters.productNames,
       subProductNames: filters.subProductNames,
       centerNames: filters.centerNames,
-      status: filters.status,
+      statuses: filters.statuses,
+      status: filters.statuses.length === 1 ? filters.statuses[0] : null,
     },
     pagination: result.pagination,
     summary: result.summary,

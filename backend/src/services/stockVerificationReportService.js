@@ -12,7 +12,54 @@ import {
 } from "../utils/verificationScope.js";
 
 const VALID_STATUSES = ["FOUND", "MISSING", "NEW"];
+const STATUS_QUERY_ORDER = ["FOUND", "NEW", "MISSING"];
 const MAX_EXPORT_ROWS = 50000;
+
+const normalizeStatuses = (statuses = []) => {
+  const normalized = [
+    ...new Set(
+      (Array.isArray(statuses) ? statuses : [])
+        .map((value) => String(value).trim().toUpperCase())
+        .filter(Boolean),
+    ),
+  ];
+
+  return STATUS_QUERY_ORDER.filter((status) => normalized.includes(status));
+};
+
+const getStatusSegments = (filters, daySummary) => {
+  const selected = normalizeStatuses(filters.statuses);
+  const allSegments = [
+    { status: "FOUND", count: Number(daySummary.foundCount ?? 0) },
+    { status: "NEW", count: Number(daySummary.newCount ?? 0) },
+    { status: "MISSING", count: Number(daySummary.missingCount ?? 0) },
+  ];
+
+  return selected.length === 0
+    ? allSegments
+    : allSegments.filter((segment) => selected.includes(segment.status));
+};
+
+const getTotalRecordsForStatuses = (daySummary, filters) =>
+  getStatusSegments(filters, daySummary).reduce(
+    (total, segment) => total + segment.count,
+    0,
+  );
+
+const includesStoredStatuses = (filters) => {
+  const selected = normalizeStatuses(filters.statuses);
+
+  return (
+    selected.length === 0 ||
+    selected.some((status) => status === "FOUND" || status === "NEW")
+  );
+};
+
+const includesMissingStatus = (filters) => {
+  const selected = normalizeStatuses(filters.statuses);
+
+  return selected.length === 0 || selected.includes("MISSING");
+};
 
 const LATEST_SCAN_SUBQUERY = `
   SELECT verification_id, MAX(id) AS latest_scan_id
@@ -556,10 +603,19 @@ const buildStoredDetailFilterClause = (filters, { includeStatus = true } = {}) =
   }
 
   if (includeStatus) {
-    if (filters.status === "FOUND" || filters.status === "NEW") {
+    const selected = normalizeStatuses(filters.statuses);
+    const storedStatuses = selected.filter(
+      (status) => status === "FOUND" || status === "NEW",
+    );
+
+    if (storedStatuses.length === 1) {
       conditions.push("AND svd.status = ?");
-      params.push(filters.status);
-    } else {
+      params.push(storedStatuses[0]);
+    } else if (storedStatuses.length > 1) {
+      const placeholders = storedStatuses.map(() => "?").join(", ");
+      conditions.push(`AND svd.status IN (${placeholders})`);
+      params.push(...storedStatuses);
+    } else if (selected.length === 0) {
       conditions.push("AND svd.status IN ('FOUND', 'NEW')");
     }
   }
@@ -593,15 +649,27 @@ const buildExportQuery = (filters) => {
 };
 
 const getStoredRecordCount = (summary, filters) => {
-  if (filters.status === "FOUND") {
-    return summary.foundCount;
+  const selected = normalizeStatuses(filters.statuses);
+  const storedStatuses =
+    selected.length > 0
+      ? selected.filter((status) => status === "FOUND" || status === "NEW")
+      : ["FOUND", "NEW"];
+
+  if (storedStatuses.length === 0) {
+    return 0;
   }
 
-  if (filters.status === "NEW") {
-    return summary.newCount;
+  let total = 0;
+
+  if (storedStatuses.includes("FOUND")) {
+    total += summary.foundCount;
   }
 
-  return summary.foundCount + summary.newCount;
+  if (storedStatuses.includes("NEW")) {
+    total += summary.newCount;
+  }
+
+  return total;
 };
 
 const mapProductRow = (row) => ({
@@ -977,28 +1045,22 @@ const getReport = async (filters, pagination) => {
 
   let totalRecords;
   let mappedRows;
+  const selectedStatuses = normalizeStatuses(filters.statuses);
 
-  if (filters.status === "MISSING") {
+  if (selectedStatuses.length === 1 && selectedStatuses[0] === "MISSING") {
     totalRecords = daySummary.missingCount;
     mappedRows = await getMissingRows(filters, pagination);
-  } else if (filters.status === "FOUND") {
-    totalRecords = daySummary.foundCount;
-    const dataRows = await getStoredDetailRows(filters, pagination);
-    const enrichedRows = await enrichRowsWithProducts(dataRows);
-    mappedRows = enrichedRows.map(mapRow);
-  } else if (filters.status === "NEW") {
-    totalRecords = daySummary.newCount;
+  } else if (
+    selectedStatuses.length === 1 &&
+    (selectedStatuses[0] === "FOUND" || selectedStatuses[0] === "NEW")
+  ) {
+    totalRecords = getStoredRecordCount(daySummary, filters);
     const dataRows = await getStoredDetailRows(filters, pagination);
     const enrichedRows = await enrichRowsWithProducts(dataRows);
     mappedRows = enrichedRows.map(mapRow);
   } else {
-    totalRecords =
-      daySummary.foundCount + daySummary.newCount + daySummary.missingCount;
-    mappedRows = await getPaginatedAllStatusRows(
-      filters,
-      pagination,
-      daySummary,
-    );
+    totalRecords = getTotalRecordsForStatuses(daySummary, filters);
+    mappedRows = await getPaginatedStatusRows(filters, pagination, daySummary);
   }
 
   return {
@@ -1043,13 +1105,9 @@ const getStoredDetailRows = async (filters, pagination) => {
  * Paginate across FOUND → NEW → MISSING without loading every missing row up front.
  * Order matches the combined export: Found first, then New, then Missing.
  */
-const getPaginatedAllStatusRows = async (filters, pagination, daySummary) => {
+const getPaginatedStatusRows = async (filters, pagination, daySummary) => {
   const { limit, offset } = pagination;
-  const segments = [
-    { status: "FOUND", count: Number(daySummary.foundCount ?? 0) },
-    { status: "NEW", count: Number(daySummary.newCount ?? 0) },
-    { status: "MISSING", count: Number(daySummary.missingCount ?? 0) },
-  ];
+  const segments = getStatusSegments(filters, daySummary);
 
   let skip = offset;
   let remaining = limit;
@@ -1082,7 +1140,7 @@ const getPaginatedAllStatusRows = async (filters, pagination, daySummary) => {
       continue;
     }
 
-    const segmentFilters = { ...filters, status: segment.status };
+    const segmentFilters = { ...filters, statuses: [segment.status] };
     const dataRows = await getStoredDetailRows(segmentFilters, segmentPagination);
     const enrichedRows = await enrichRowsWithProducts(dataRows);
     mappedRows.push(...enrichedRows.map(mapRow));
@@ -1265,23 +1323,32 @@ const getAllMissingReportRows = async (filters) => {
   };
 };
 
-const getAllCombinedReportRows = async (filters) => {
-  const summary = await getHeaderSummary(filters);
-
-  const stored = await getAllStoredReportRows(filters);
-  const missing = await getAllMissingReportRows(filters);
-
-  // Combine stored (FOUND/NEW) and dynamically generated MISSING rows
-  const combined = [...stored.data, ...missing.data];
-
-  // Sort to match stored report ordering: FOUND, NEW, then MISSING
-  combined.sort((a, b) => {
+const sortCombinedReportRows = (rows) =>
+  [...rows].sort((left, right) => {
     const order = { FOUND: 0, NEW: 1, MISSING: 2 };
-    if (order[a.status] !== order[b.status]) return order[a.status] - order[b.status];
-    if (a.verificationDate > b.verificationDate) return -1;
-    if (a.verificationDate < b.verificationDate) return 1;
-    return String(a.tagNo ?? "").localeCompare(String(b.tagNo ?? ""));
+
+    if (order[left.status] !== order[right.status]) {
+      return order[left.status] - order[right.status];
+    }
+
+    if (left.verificationDate > right.verificationDate) return -1;
+    if (left.verificationDate < right.verificationDate) return 1;
+    return String(left.tagNo ?? "").localeCompare(String(right.tagNo ?? ""));
   });
+
+const getCombinedReportRows = async (filters) => {
+  const summary = await getHeaderSummary(filters);
+  const combined = [];
+
+  if (includesStoredStatuses(filters)) {
+    const stored = await getAllStoredReportRows(filters);
+    combined.push(...stored.data);
+  }
+
+  if (includesMissingStatus(filters)) {
+    const missing = await getAllMissingReportRows(filters);
+    combined.push(...missing.data);
+  }
 
   return {
     summary: {
@@ -1289,34 +1356,42 @@ const getAllCombinedReportRows = async (filters) => {
       missingCount: summary.missingCount,
       newCount: summary.newCount,
     },
-    data: combined,
+    data: sortCombinedReportRows(combined),
   };
 };
 
+const getAllCombinedReportRows = async (filters) => getCombinedReportRows(filters);
+
 const getAllReportRows = async (filters) => {
-  if (filters.status === "MISSING") {
+  const selectedStatuses = normalizeStatuses(filters.statuses);
+
+  if (selectedStatuses.length === 1 && selectedStatuses[0] === "MISSING") {
     return getAllMissingReportRows(filters);
   }
 
-  if (filters.status === "FOUND" || filters.status === "NEW") {
+  if (
+    selectedStatuses.length === 1 &&
+    (selectedStatuses[0] === "FOUND" || selectedStatuses[0] === "NEW")
+  ) {
     return getAllStoredReportRows(filters);
   }
 
-  return getAllCombinedReportRows(filters);
+  return getCombinedReportRows(filters);
 };
 
 const getExcelExportRows = async (filters) => {
   const summary = await getHeaderSummary(filters);
+  const selectedStatuses = normalizeStatuses(filters.statuses);
+  const totalRecords = getTotalRecordsForStatuses(summary, filters);
 
-  // If explicit MISSING requested, export only missing rows
-  if (filters.status === "MISSING") {
-    if (summary.missingCount > MAX_EXPORT_ROWS) {
-      throw new ApiError(
-        400,
-        `Export limit exceeded. Narrow filters to ${MAX_EXPORT_ROWS} records or fewer.`,
-      );
-    }
+  if (totalRecords > MAX_EXPORT_ROWS) {
+    throw new ApiError(
+      400,
+      `Export limit exceeded. Narrow filters to ${MAX_EXPORT_ROWS} records or fewer.`,
+    );
+  }
 
+  if (selectedStatuses.length === 1 && selectedStatuses[0] === "MISSING") {
     const { baseFrom, params } = buildInventoryMissingQueryParts(filters);
     const [dataRows] = await pool.execute(
       `${INVENTORY_MISSING_EXCEL_SELECT_SQL}
@@ -1335,17 +1410,7 @@ const getExcelExportRows = async (filters) => {
     };
   }
 
-  // If explicit FOUND or NEW requested, export stored rows only
-  if (filters.status === "FOUND" || filters.status === "NEW") {
-    const exportableCount = getStoredRecordCount(summary, filters);
-
-    if (exportableCount > MAX_EXPORT_ROWS) {
-      throw new ApiError(
-        400,
-        `Export limit exceeded. Narrow filters to ${MAX_EXPORT_ROWS} records or fewer.`,
-      );
-    }
-
+  if (includesStoredStatuses(filters) && !includesMissingStatus(filters)) {
     const { whereClause, params } = buildStoredDetailFilterClause(filters);
 
     const [dataRows] = await pool.execute(
@@ -1368,47 +1433,36 @@ const getExcelExportRows = async (filters) => {
     };
   }
 
-  // No specific status: combine stored (FOUND/NEW) + dynamic MISSING for export
-  const totalRecords = summary.foundCount + summary.newCount + summary.missingCount;
-  if (totalRecords > MAX_EXPORT_ROWS) {
-    throw new ApiError(
-      400,
-      `Export limit exceeded. Narrow filters to ${MAX_EXPORT_ROWS} records or fewer.`,
+  const combined = [];
+
+  if (includesStoredStatuses(filters)) {
+    const { whereClause, params } = buildStoredDetailFilterClause(filters);
+
+    const [storedRows] = await pool.execute(
+      `${EXCEL_DETAIL_SELECT_SQL},
+              ${EXCEL_PRODUCT_SELECT_SQL}
+       ${DETAIL_FROM_SQL}
+       ${PRODUCT_JOIN_SQL}
+       WHERE ${whereClause}
+       ${STORED_REPORT_ORDER_SQL}`,
+      params,
     );
+
+    combined.push(...storedRows.map((row) => mapExcelRow(row)));
   }
 
-  // Stored rows (FOUND + NEW)
-  const { whereClause, params } = buildStoredDetailFilterClause(filters);
+  if (includesMissingStatus(filters)) {
+    const { baseFrom: missingBaseFrom, params: missingParams } =
+      buildInventoryMissingQueryParts(filters);
+    const [missingRows] = await pool.execute(
+      `${INVENTORY_MISSING_EXCEL_SELECT_SQL}
+       ${missingBaseFrom}
+       ORDER BY sv_meta.verification_date DESC, pub.branch_id ASC, p.tag_packet_no ASC`,
+      missingParams,
+    );
 
-  const [storedRows] = await pool.execute(
-    `${EXCEL_DETAIL_SELECT_SQL},
-            ${EXCEL_PRODUCT_SELECT_SQL}
-     ${DETAIL_FROM_SQL}
-     ${PRODUCT_JOIN_SQL}
-     WHERE ${whereClause}
-     ${STORED_REPORT_ORDER_SQL}`,
-    params,
-  );
-
-  // Missing rows (dynamic)
-  const { baseFrom: missingBaseFrom, params: missingParams } =
-    buildInventoryMissingQueryParts(filters);
-  const [missingRows] = await pool.execute(
-    `${INVENTORY_MISSING_EXCEL_SELECT_SQL}
-     ${missingBaseFrom}
-     ORDER BY sv_meta.verification_date DESC, pub.branch_id ASC, p.tag_packet_no ASC`,
-    missingParams,
-  );
-
-  const combined = [...storedRows.map((r) => mapExcelRow(r)), ...missingRows.map((r) => mapExcelRow(r))];
-
-  combined.sort((a, b) => {
-    const order = { FOUND: 0, NEW: 1, MISSING: 2 };
-    if (order[a.status] !== order[b.status]) return order[a.status] - order[b.status];
-    if (a.verificationDate > b.verificationDate) return -1;
-    if (a.verificationDate < b.verificationDate) return 1;
-    return String(a.tagNo ?? "").localeCompare(String(b.tagNo ?? ""));
-  });
+    combined.push(...missingRows.map((row) => mapExcelRow(row)));
+  }
 
   return {
     summary: {
@@ -1416,7 +1470,7 @@ const getExcelExportRows = async (filters) => {
       missingCount: summary.missingCount,
       newCount: summary.newCount,
     },
-    data: combined,
+    data: sortCombinedReportRows(combined),
   };
 };
 
@@ -1481,4 +1535,5 @@ export default {
   getReport,
   exportReport,
   VALID_STATUSES,
+  normalizeStatuses,
 };
