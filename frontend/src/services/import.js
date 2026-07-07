@@ -55,38 +55,48 @@ export async function startAsyncImport(file, { branchId } = {}) {
 
   const query = buildQueryString({ async: true, branchId });
 
-  console.info('[import] starting upload', {
-    fileName: file?.name,
-    fileSize: file?.size,
-    fileType: file?.type,
-    branchId,
-  });
+  let res;
 
-  const res = await authFetch(apiUrl(`/products/import?${query}`), {
-    method: 'POST',
-    headers: {
-      ...getAuthHeaders({ branchId }),
-    },
-    body: formData,
-  });
+  try {
+    res = await authFetch(apiUrl(`/products/import?${query}`), {
+      method: 'POST',
+      headers: {
+        ...getAuthHeaders({ branchId }),
+      },
+      body: formData,
+    });
+  } catch (err) {
+    throw createUserError(err?.message, 'Unable to upload file. Please try again.');
+  }
 
   const json = await parseJsonResponse(res);
 
   if (!res.ok || res.status !== 202) {
-    console.error('[import] upload failed', json);
+    if (import.meta.env.DEV) {
+      console.error('[import] upload failed', json);
+    }
     throw createUserError(json.message || json.error, 'Unable to start import. Please try again.');
   }
 
-  console.info('[import] upload accepted', json.data);
+  if (import.meta.env.DEV) {
+    console.info('[import] upload accepted', json.data);
+  }
   return json.data;
 }
 
 export async function getImportStatus(jobId) {
-  const res = await authFetch(apiUrl(`/products/import/status/${jobId}`), {
-    headers: {
-      ...getAuthHeaders(),
-    },
-  });
+  let res;
+
+  try {
+    res = await authFetch(apiUrl(`/products/import/status/${jobId}`), {
+      headers: {
+        ...getAuthHeaders(),
+      },
+    });
+  } catch (err) {
+    throw createUserError(err?.message, 'Unable to check import status. Please try again.');
+  }
+
   const json = await parseJsonResponse(res);
 
   if (!res.ok) {
@@ -121,27 +131,33 @@ export async function uploadStockExcel(file, { branchId, onProgress } = {}) {
 
     const status = await getImportStatus(jobId);
 
-    console.info('[import] status', {
-      jobId,
-      status: status.status,
-      phase: status.phase,
-      progress: status.progress,
-      message: status.message,
-      processed: status.processed,
-      total: status.total,
-    });
+    if (import.meta.env.DEV) {
+      console.info('[import] status', {
+        jobId,
+        status: status.status,
+        phase: status.phase,
+        progress: status.progress,
+        message: status.message,
+        processed: status.processed,
+        total: status.total,
+      });
+    }
 
     if (onProgress) {
       onProgress(status);
     }
 
     if (status.status === 'completed') {
-      console.info('[import] completed', status.result);
+      if (import.meta.env.DEV) {
+        console.info('[import] completed', status.result);
+      }
       return normalizeImportResult(status.result);
     }
 
     if (status.status === 'failed') {
-      console.error('[import] failed', status);
+      if (import.meta.env.DEV) {
+        console.error('[import] failed', status);
+      }
       throw createUserError(status.error || status.message, 'Import failed. Please try again.');
     }
   }

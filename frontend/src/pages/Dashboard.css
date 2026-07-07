@@ -1682,6 +1682,11 @@
   color: var(--color-text-muted);
 }
 
+.analytics-error {
+  color: #b42318;
+  font-weight: 500;
+}
+
 /* Donut / pie charts */
 .analytics-donut {
   display: grid;

@@ -1234,7 +1234,7 @@ function DailyImportsCard({
 
       <div className="analytics-tile__body day-sales-card__body">
         {loading && <p className="analytics-empty">Loading daily imports…</p>}
-        {!loading && error && <p className="analytics-empty">{error}</p>}
+        {!loading && error && <p className="analytics-empty analytics-error" role="alert">{error}</p>}
         {!loading && !error && period === 'week' && <DailyImportsBarChart data={data} />}
         {!loading && !error && period === 'month' && <DailyImportsCalendar data={data} />}
       </div>
@@ -1469,7 +1469,7 @@ function MultiBranchComparisonCard({ data, loading, error }) {
 
       <div className="analytics-tile__body insight-card__body">
         {loading && <p className="analytics-empty">Loading branch comparison…</p>}
-        {!loading && error && <p className="analytics-empty">{error}</p>}
+        {!loading && error && <p className="analytics-empty analytics-error" role="alert">{error}</p>}
         {!loading && !error && (
           <>
             <section className="insight-card__section">
@@ -1551,7 +1551,7 @@ function StockMovementCard({ data, loading, error }) {
 
       <div className="analytics-tile__body insight-card__body">
         {loading && <p className="analytics-empty">Loading stock movement…</p>}
-        {!loading && error && <p className="analytics-empty">{error}</p>}
+        {!loading && error && <p className="analytics-empty analytics-error" role="alert">{error}</p>}
         {!loading && !error && (
           <>
             <section className="insight-card__section">
@@ -1704,7 +1704,7 @@ function DayWiseSalesCard({
 
       <div className="analytics-tile__body day-sales-card__body">
         {loading && <p className="analytics-empty">Loading day-wise sales…</p>}
-        {!loading && error && <p className="analytics-empty">{error}</p>}
+        {!loading && error && <p className="analytics-empty analytics-error" role="alert">{error}</p>}
         {!loading && !error && period === 'week' && <DayWiseSalesLineChart data={data} />}
         {!loading && !error && period === 'month' && <DayWiseSalesHeatmap data={data} />}
       </div>
@@ -1898,7 +1898,7 @@ function SmartAlertsCard({ data, loading, error }) {
 
       <div className="analytics-tile__body smart-alerts-card__body">
         {loading && <p className="analytics-empty">Loading smart alerts…</p>}
-        {!loading && error && <p className="analytics-empty">{error}</p>}
+        {!loading && error && <p className="analytics-empty analytics-error" role="alert">{error}</p>}
         {!loading && !error && !alerts.length && (
           <p className="analytics-empty smart-alerts-card__empty">
             No active alerts — stock verification looks healthy.
@@ -2188,6 +2188,7 @@ export default function Dashboard() {
   const [counterAccuracy, setCounterAccuracy] = useState(EMPTY_COUNTER_ACCURACY)
   const [topSoldProducts, setTopSoldProducts] = useState([])
   const [topSoldNotice, setTopSoldNotice] = useState('')
+  const [topSoldError, setTopSoldError] = useState('')
   const [loading, setLoading] = useState(true)
   const [topSoldLoading, setTopSoldLoading] = useState(true)
   const [salesPeriod, setSalesPeriod] = useState('week')
@@ -2257,6 +2258,7 @@ export default function Dashboard() {
     async function loadTopSold() {
       setTopSoldLoading(true)
       setTopSoldNotice('')
+      setTopSoldError('')
 
       try {
         const products = await fetchTopSoldProducts()
@@ -2269,7 +2271,7 @@ export default function Dashboard() {
       } catch (err) {
         if (!cancelled) {
           setTopSoldProducts([])
-          setTopSoldNotice(err.message || 'Top sold products are not available yet.')
+          setTopSoldError(err.message || 'Top sold products are not available yet.')
         }
       } finally {
         if (!cancelled) setTopSoldLoading(false)
@@ -2779,7 +2781,10 @@ export default function Dashboard() {
             {canSeeTopSoldProducts && (
               <AnalyticsTile title="Top Sold Products" subtitle="Overall sold pieces across all stock import batches" wide>
                 {topSoldLoading && <p className="analytics-empty">Loading sold products…</p>}
-                {!topSoldLoading && topSoldNotice && !topSoldBarData.length && (
+                {!topSoldLoading && topSoldError && (
+                  <p className="analytics-empty analytics-error" role="alert">{topSoldError}</p>
+                )}
+                {!topSoldLoading && !topSoldError && topSoldNotice && !topSoldBarData.length && (
                   <p className="analytics-empty">{topSoldNotice}</p>
                 )}
                 {!topSoldLoading && topSoldBarData.length > 0 && (

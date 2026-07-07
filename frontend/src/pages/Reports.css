@@ -165,8 +165,175 @@
 
 .report-field select:disabled {
   background: #f5f0ea;
-  color: #a89888;
+  color: #9a8b7a;
   cursor: not-allowed;
+}
+
+.report-multi-select {
+  position: relative;
+  width: 100%;
+}
+
+.report-multi-select__control {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 11px 14px;
+  border: 1px solid #e8dfd3;
+  border-radius: 10px;
+  background: #fdfbf8;
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.report-multi-select__control:hover:not(:disabled) {
+  border-color: rgba(184, 134, 11, 0.35);
+  background: #fff;
+}
+
+.report-multi-select__control:focus {
+  outline: none;
+  border-color: rgba(184, 134, 11, 0.55);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(184, 134, 11, 0.12);
+}
+
+.report-multi-select__control:disabled {
+  background: #f5f0ea;
+  color: #9a8b7a;
+  cursor: not-allowed;
+}
+
+.report-multi-select--open .report-multi-select__control {
+  border-color: rgba(184, 134, 11, 0.55);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(184, 134, 11, 0.12);
+}
+
+.report-multi-select__value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-multi-select__chevron {
+  flex-shrink: 0;
+  color: #9a8b7a;
+  font-size: 0.75rem;
+}
+
+.report-multi-select__panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  background: #fff;
+  border: 1px solid #e8dfd3;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(40, 28, 8, 0.12);
+  overflow: hidden;
+}
+
+.report-multi-select__search {
+  padding: 10px 10px 0;
+}
+
+.report-multi-select__search input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid #e8dfd3;
+  border-radius: 8px;
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+}
+
+.report-multi-select__search input:focus {
+  outline: none;
+  border-color: rgba(184, 134, 11, 0.55);
+  box-shadow: 0 0 0 3px rgba(184, 134, 11, 0.12);
+}
+
+.report-multi-select__actions {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.report-multi-select__action {
+  border: none;
+  background: transparent;
+  color: var(--color-primary-dark);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.report-multi-select__action:disabled {
+  color: #c4b8a8;
+  cursor: not-allowed;
+}
+
+.report-multi-select__list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.report-multi-select__option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.report-multi-select__option:hover {
+  background: #faf6f0;
+}
+
+.report-multi-select__option--selected {
+  background: rgba(184, 134, 11, 0.08);
+}
+
+.report-multi-select__option input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--color-primary);
+}
+
+.report-multi-select__empty {
+  padding: 12px;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.report-multi-select__section-label {
+  padding: 8px 12px 6px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  background: #fff;
+}
+
+.report-multi-select__divider {
+  height: 1px;
+  margin: 4px 12px;
+  background: #ece4d8;
 }
 
 .report-field input[type='date'] {

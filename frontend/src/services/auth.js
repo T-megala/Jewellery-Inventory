@@ -1,5 +1,5 @@
 import { apiUrl, authFetch } from './api.js'
-import { createUserError, toUserErrorMessage } from '../utils/userErrorMessage.js'
+import { createUserError, NETWORK_ERROR_FALLBACK } from '../utils/userErrorMessage.js'
 import { decodeJwtPayload } from '../utils/jwt.js'
 
 const TOKEN_KEY = 'auth_token'
@@ -196,11 +196,17 @@ function applyAuthSession(token, user, refreshToken) {
 export async function login(username, password) {
   const body = { username, password }
 
-  const res = await fetch(apiUrl('/auth/login'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+  let res
+
+  try {
+    res = await fetch(apiUrl('/auth/login'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  } catch (err) {
+    throw createUserError(err?.message, NETWORK_ERROR_FALLBACK)
+  }
 
   let json
   try {
@@ -307,11 +313,17 @@ export async function refreshAccessToken() {
 
   refreshPromise = (async () => {
     try {
-      const res = await fetch(apiUrl('/auth/refresh'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken }),
-      })
+      let res
+
+      try {
+        res = await fetch(apiUrl('/auth/refresh'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        })
+      } catch (err) {
+        throw createUserError(err?.message, NETWORK_ERROR_FALLBACK)
+      }
 
       let json
       try {

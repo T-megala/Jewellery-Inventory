@@ -1,18 +1,71 @@
 import { DEFAULT_PAGE_SIZE } from '../components/TablePagination.jsx';
 import { createUserError } from '../utils/userErrorMessage.js';
-import { apiFetchRaw, apiFetchReport, authFetch, buildQueryString, getAuthHeaders, withBranchParams } from './api.js';
+import {
+  apiFetchRaw,
+  apiFetchReport,
+  authFetch,
+  buildQueryString,
+  getAuthHeaders,
+  withBranchParams,
+} from './api.js';
 import { apiUrl } from '../config/apiConfig.js';
 
-function buildReportParams(filters = {}) {
+function normalizeNameArray(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean);
+  }
+  if (value) {
+    return [String(value).trim()].filter(Boolean);
+  }
+  return [];
+}
+
+export function buildReportFilters(filters = {}) {
+  const productNames = normalizeNameArray(filters.productNames ?? filters.productName);
+  const subProductNames = normalizeNameArray(filters.subProductNames ?? filters.subProductName);
+  const centerNames = normalizeNameArray(filters.centerNames ?? filters.centerName);
+
   return {
+    productNames,
+    subProductNames,
+    centerNames,
+    status: filters.status ? String(filters.status).trim().toUpperCase() : null,
+    date: filters.date || null,
     page: filters.page ?? 1,
     limit: filters.limit ?? DEFAULT_PAGE_SIZE,
-    productName: filters.productName,
-    subProductName: filters.subProductName,
-    centerName: filters.centerName,
-    status: filters.status,
-    date: filters.date,
+    export_type: filters.export_type,
   };
+}
+
+export function buildReportRequestBody(filters = {}) {
+  const {
+    productNames,
+    subProductNames,
+    centerNames,
+    status,
+    date,
+    page,
+    limit,
+    export_type: exportType,
+  } = buildReportFilters(filters);
+
+  const body = withBranchParams({
+    date,
+    page,
+    limit,
+    productNames,
+    subProductNames,
+    centerNames,
+  });
+
+  if (status) {
+    body.status = status;
+  }
+  if (exportType) {
+    body.export_type = exportType;
+  }
+
+  return body;
 }
 
 function alignSummaryWithStatusFilter(result, status) {
@@ -68,9 +121,11 @@ export async function clearTodayVerifications(date) {
 }
 
 export function fetchStockVerificationReport(filters = {}) {
-  const params = buildReportParams(filters);
-  return apiFetchReport('/stock-verification/report', params).then((result) =>
-    alignSummaryWithStatusFilter(result, params.status),
+  const reportFilters = buildReportFilters(filters);
+  const body = buildReportRequestBody(filters);
+
+  return apiFetchReport('/stock-verification/report', {}, { body }).then((result) =>
+    alignSummaryWithStatusFilter(result, reportFilters.status),
   );
 }
 
@@ -81,14 +136,24 @@ function parseFilename(res, fallback) {
 }
 
 export async function downloadReportExport(filters = {}, exportType) {
-  const query = buildQueryString(withBranchParams({
-    ...buildReportParams(filters),
+  const body = buildReportRequestBody({
+    ...filters,
     page: undefined,
     limit: undefined,
     export_type: exportType,
-  }));
+  });
 
-  const res = await apiFetchRaw(`/stock-verification/report?${query}`);
+  let res;
+
+  try {
+    res = await apiFetchRaw('/stock-verification/report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    throw createUserError(err?.message, 'Export failed. Please try again.');
+  }
 
   if (!res.ok) {
     let message = 'Export failed';

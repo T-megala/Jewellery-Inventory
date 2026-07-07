@@ -1,5 +1,5 @@
 import { API_BASE, apiUrl } from '../config/apiConfig.js';
-import { createUserError } from '../utils/userErrorMessage.js';
+import { createUserError, NETWORK_ERROR_FALLBACK } from '../utils/userErrorMessage.js';
 import {
   getOperationalBranchId,
   getRefreshToken,
@@ -122,14 +122,14 @@ function buildJsonHeaders(path, options = {}) {
 async function handleUnauthorizedRetry(url, options, retried) {
   if (retried || !getRefreshToken()) {
     redirectToLogin()
-    throw new Error('Session expired. Please log in again.')
+    throw createUserError(null, 'Session expired. Please log in again.')
   }
 
   try {
     await refreshAccessToken()
   } catch {
     redirectToLogin()
-    throw new Error('Session expired. Please log in again.')
+    throw createUserError(null, 'Session expired. Please log in again.')
   }
 
   const retryHeaders = { ...options.headers };
@@ -150,10 +150,16 @@ async function handleUnauthorizedRetry(url, options, retried) {
  * Authenticated fetch — sends access token; on 401, refreshes tokens and retries once.
  */
 export async function authFetch(url, options = {}, retried = false) {
-  const res = await fetch(url, {
-    ...options,
-    headers: options.headers,
-  });
+  let res;
+
+  try {
+    res = await fetch(url, {
+      ...options,
+      headers: options.headers,
+    });
+  } catch (err) {
+    throw createUserError(err?.message, NETWORK_ERROR_FALLBACK);
+  }
 
   if (res.status === 401 && getToken()) {
     return handleUnauthorizedRetry(url, options, retried);
@@ -228,17 +234,28 @@ export async function apiFetchPaged(path, options = {}) {
   }
 }
 
-export async function apiFetchReport(path, params = {}) {
+export async function apiFetchReport(path, params = {}, options = {}) {
   const scopeBranch = resolveScopeBranch(path);
-  const query = buildQueryString(scopeBranch ? withBranchParams(params) : params);
-  const url = query ? `${path}?${query}` : path;
+  const useBody = options.body !== undefined;
+  const basePath = scopeBranch ? withBranchPath(path) : path;
+
+  let url = basePath;
+  const fetchOptions = {
+    scopeBranch,
+    headers: buildJsonHeaders(path),
+  };
+
+  if (useBody) {
+    fetchOptions.method = 'POST';
+    fetchOptions.body = JSON.stringify(options.body);
+  } else {
+    const query = options.query ?? buildQueryString(scopeBranch ? withBranchParams(params) : params);
+    url = query ? `${path}?${query}` : basePath;
+    fetchOptions.method = 'GET';
+  }
 
   try {
-    const res = await authFetch(apiUrl(url), {
-      method: 'GET',
-      scopeBranch,
-      headers: buildJsonHeaders(path),
-    });
+    const res = await authFetch(apiUrl(url), fetchOptions);
 
     const json = await parseResponse(res);
     const rows = (json.data || []).map(normalizeReportRow);

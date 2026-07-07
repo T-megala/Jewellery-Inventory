@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { fetchCenters, fetchProducts, fetchSubProducts } from '../services/products.js'
+import {
+  fetchCentersForSelection,
+  fetchProducts,
+  fetchSubProductsForProducts,
+} from '../services/products.js'
+import ReportMultiSelect from '../components/ReportMultiSelect.jsx'
 import {
   clearTodayVerifications,
   downloadReportExport,
@@ -163,6 +168,11 @@ function getTodayDate() {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
+function pruneSelection(selectedNames, options) {
+  const available = new Set((options || []).map((item) => item.name))
+  return (selectedNames || []).filter((name) => available.has(name))
+}
+
 export default function Reports() {
   const user = getUser()
   const canViewReports = hasPermission('stock_verification.report', user)
@@ -170,10 +180,10 @@ export default function Reports() {
   const canClearTodayVerifications = hasPermission('stock_verification.upload', user)
   const { operationalValue, sessionBranches } = useBranchScope()
   const hasNoBranches = sessionBranches.length === 0
-  const [product, setProduct] = useState('')
-  const [subProduct, setSubProduct] = useState('')
-  const [counter, setCounter] = useState('')
-  const [status, setStatus] = useState('')
+  const [selectedProducts, setSelectedProducts] = useState([])
+  const [selectedSubProducts, setSelectedSubProducts] = useState([])
+  const [selectedCounters, setSelectedCounters] = useState([])
+  const [selectedStatuses, setSelectedStatuses] = useState([])
   const [selectedDate, setSelectedDate] = useState(getTodayDate())
 
   const [products, setProducts] = useState([])
@@ -188,6 +198,8 @@ export default function Reports() {
   const [hasSearched, setHasSearched] = useState(false)
 
   const [loadingFilters, setLoadingFilters] = useState(true)
+  const [loadingSubProducts, setLoadingSubProducts] = useState(false)
+  const [loadingCounters, setLoadingCounters] = useState(false)
   const [loadingReport, setLoadingReport] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [clearing, setClearing] = useState(false)
@@ -195,17 +207,42 @@ export default function Reports() {
   const [clearNotice, setClearNotice] = useState('')
   const [error, setError] = useState('')
   const [filtersNotice, setFiltersNotice] = useState('')
+  const [lastGeneratedKey, setLastGeneratedKey] = useState('')
+  const [rawRows, setRawRows] = useState([])
 
   const isBranchBlocked = hasNoBranches || /branch is not assigned/i.test(error)
   const isTodaySelected = selectedDate === getTodayDate()
+  const filtersLocked = loadingFilters || loadingReport || exporting || clearing
+
+  const statusValues = useMemo(() => {
+    const normalized = (selectedStatuses || [])
+      .map((value) => String(value).trim().toUpperCase())
+      .filter(Boolean)
+    // Ignore the "All Statuses" option (empty value)
+    return normalized.filter((value) => value !== 'ALL STATUSES')
+  }, [selectedStatuses])
+
+  const isMultiStatus = statusValues.length > 1
+  const statusForApi = statusValues.length === 1 ? statusValues[0] : undefined
 
   const filterParams = useMemo(() => ({
-    productName: product || undefined,
-    subProductName: subProduct || undefined,
-    centerName: counter || undefined,
-    status: status || undefined,
+    productNames: selectedProducts,
+    subProductNames: selectedSubProducts,
+    centerNames: selectedCounters,
+    status: statusForApi,
     date: selectedDate || undefined,
-  }), [product, subProduct, counter, status, selectedDate])
+  }), [selectedProducts, selectedSubProducts, selectedCounters, statusForApi, selectedDate])
+
+  const currentFiltersKey = useMemo(() => JSON.stringify({
+    productNames: [...(filterParams.productNames || [])].sort(),
+    subProductNames: [...(filterParams.subProductNames || [])].sort(),
+    centerNames: [...(filterParams.centerNames || [])].sort(),
+    status: statusValues.slice().sort(),
+    date: filterParams.date || '',
+    branch: operationalValue || '',
+  }), [filterParams, operationalValue, statusValues])
+
+  const canGenerate = !hasSearched || currentFiltersKey !== lastGeneratedKey
 
   useEffect(() => {
     if (!canViewReports) return undefined
@@ -249,62 +286,101 @@ export default function Reports() {
   }, [operationalValue])
 
   useEffect(() => {
-    if (!product) {
+    if (!selectedProducts.length) {
       setSubProducts([])
-      setSubProduct('')
+      setSelectedSubProducts([])
       setCounters([])
-      setCounter('')
+      setSelectedCounters([])
       return undefined
     }
 
     let cancelled = false
 
     async function loadSubProducts() {
+      setLoadingSubProducts(true)
       try {
-        const data = await fetchSubProducts(product)
+        const data = await fetchSubProductsForProducts(selectedProducts)
         if (!cancelled) {
           setSubProducts(data)
-          setSubProduct('')
-          setCounters([])
-          setCounter('')
+          setSelectedSubProducts((prev) => pruneSelection(prev, data))
         }
       } catch (err) {
         if (!cancelled) setError(err.message || 'Failed to load sub products')
+      } finally {
+        if (!cancelled) setLoadingSubProducts(false)
       }
     }
 
     loadSubProducts()
     return () => { cancelled = true }
-  }, [product])
+  }, [selectedProducts])
 
   useEffect(() => {
-    if (!product || !subProduct) {
+    if (!selectedProducts.length) {
       setCounters([])
-      setCounter('')
+      setSelectedCounters([])
+      return undefined
+    }
+
+    const subProductNames = selectedSubProducts.length
+      ? selectedSubProducts
+      : subProducts.map((item) => item.name)
+
+    if (!subProductNames.length) {
+      setCounters([])
+      setSelectedCounters([])
       return undefined
     }
 
     let cancelled = false
 
     async function loadCounters() {
+      setLoadingCounters(true)
       try {
-        const data = await fetchCenters(product, subProduct)
+        const data = await fetchCentersForSelection(selectedProducts, subProductNames)
         if (!cancelled) {
           setCounters(data)
-          setCounter('')
+          setSelectedCounters((prev) => pruneSelection(prev, data))
         }
       } catch (err) {
         if (!cancelled) setError(err.message || 'Failed to load counters')
+      } finally {
+        if (!cancelled) setLoadingCounters(false)
       }
     }
 
     loadCounters()
     return () => { cancelled = true }
-  }, [product, subProduct])
+  }, [selectedProducts, selectedSubProducts, subProducts])
+
+  function clearReportResults() {
+    setRawRows([])
+    setRows([])
+    setSummary(null)
+    setPagination(null)
+    setPage(1)
+  }
+
+  function buildSummaryFromRows(sourceRows) {
+    const totals = { totalFound: 0, totalMissing: 0, totalNew: 0, totalTags: 0 }
+    sourceRows.forEach((row) => {
+      if (row.status === 'FOUND') totals.totalFound += 1
+      else if (row.status === 'MISSING') totals.totalMissing += 1
+      else if (row.status === 'NEW') totals.totalNew += 1
+    })
+    totals.totalTags = totals.totalFound + totals.totalMissing + totals.totalNew
+    return totals
+  }
 
   async function loadReport(nextPage = 1, limit = pageSize) {
     setLoadingReport(true)
     setError('')
+    setClearNotice('')
+
+    // Prevent stale results being shown if the request fails.
+    if (nextPage === 1) {
+      clearReportResults()
+    }
 
     try {
       const result = await fetchStockVerificationReport({
@@ -312,13 +388,29 @@ export default function Reports() {
         page: nextPage,
         limit,
       })
-      setRows(result.rows)
-      setSummary(result.summary)
-      setPagination(result.pagination)
+
+      // Backend supports only one status filter. If multiple statuses are selected,
+      // we fetch without status and filter the returned page locally.
+      setRawRows(result.rows || [])
+      if (isMultiStatus) {
+        const filtered = (result.rows || []).filter((row) => statusValues.includes(row.status))
+        setRows(filtered)
+        setSummary(buildSummaryFromRows(filtered))
+        setPagination(null)
+      } else {
+        setRows(result.rows)
+        setSummary(result.summary)
+        setPagination(result.pagination)
+      }
       setPage(nextPage)
       setHasSearched(true)
+      if (nextPage === 1) {
+        setLastGeneratedKey(currentFiltersKey)
+      }
     } catch (err) {
       setError(err.message || 'Failed to load report')
+      clearReportResults()
+      setHasSearched(true)
     } finally {
       setLoadingReport(false)
     }
@@ -335,12 +427,13 @@ export default function Reports() {
   }
 
   function handleReset() {
-    setProduct('')
-    setSubProduct('')
-    setCounter('')
-    setStatus('')
+    setSelectedProducts([])
+    setSelectedSubProducts([])
+    setSelectedCounters([])
+    setSelectedStatuses([])
     setSelectedDate(getTodayDate())
     setRows([])
+    setRawRows([])
     setSummary(null)
     setPagination(null)
     setPage(1)
@@ -348,6 +441,7 @@ export default function Reports() {
     setHasSearched(false)
     setError('')
     setClearNotice('')
+    setLastGeneratedKey('')
   }
 
   async function handleClearTodayConfirm() {
@@ -373,6 +467,7 @@ export default function Reports() {
 
   async function handleExport(exportType, label) {
     if (!hasSearched || rows.length === 0) return
+    if (isMultiStatus) return
 
     setExporting(true)
     setError('')
@@ -442,62 +537,65 @@ export default function Reports() {
                 value={selectedDate}
                 max={getTodayDate()}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                disabled={loadingFilters}
+                disabled={filtersLocked}
               />
             </label>
 
-            <label className="report-field">
+            <div className="report-field">
               <span>Product</span>
-              <select
-                value={product}
-                onChange={(e) => setProduct(e.target.value)}
-                disabled={loadingFilters}
-              >
-                <option value="">All Products</option>
-                {products.map((item) => (
-                  <option key={item.id} value={item.name}>{item.name}</option>
-                ))}
-              </select>
-            </label>
+              <ReportMultiSelect
+                options={products}
+                selectedNames={selectedProducts}
+                onChange={setSelectedProducts}
+                disabled={filtersLocked}
+                emptyLabel="All Products"
+                itemLabel="products"
+                searchPlaceholder="Search products…"
+              />
+            </div>
 
-            <label className="report-field">
+            <div className="report-field">
               <span>Sub Product</span>
-              <select
-                value={subProduct}
-                onChange={(e) => setSubProduct(e.target.value)}
-                disabled={!product}
-              >
-                <option value="">All Sub Products</option>
-                {subProducts.map((item) => (
-                  <option key={item.id} value={item.name}>{item.name}</option>
-                ))}
-              </select>
-            </label>
+              <ReportMultiSelect
+                options={subProducts}
+                selectedNames={selectedSubProducts}
+                onChange={setSelectedSubProducts}
+                disabled={filtersLocked || loadingSubProducts || !selectedProducts.length}
+                emptyLabel="All Sub Products"
+                itemLabel="sub products"
+                searchPlaceholder="Search sub products…"
+              />
+            </div>
 
-            <label className="report-field">
+            <div className="report-field">
               <span>Counter</span>
-              <select
-                value={counter}
-                onChange={(e) => setCounter(e.target.value)}
-                disabled={!product || !subProduct}
-              >
-                <option value="">All Counters</option>
-                {counters.map((item) => (
-                  <option key={item.id} value={item.name}>{item.name}</option>
-                ))}
-              </select>
-            </label>
+              <ReportMultiSelect
+                options={counters}
+                selectedNames={selectedCounters}
+                onChange={setSelectedCounters}
+                disabled={
+                  filtersLocked
+                  || loadingSubProducts
+                  || loadingCounters
+                  || !selectedProducts.length
+                }
+                emptyLabel="All Counters"
+                itemLabel="counters"
+                searchPlaceholder="Search counters…"
+              />
+            </div>
 
             <label className="report-field">
               <span>Status</span>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-              >
-                {STATUS_OPTIONS.map((item) => (
-                  <option key={item.value || 'all'} value={item.value}>{item.label}</option>
-                ))}
-              </select>
+              <ReportMultiSelect
+                options={STATUS_OPTIONS.filter((item) => item.value).map((item) => ({ name: item.label, id: item.value }))}
+                selectedNames={selectedStatuses}
+                onChange={setSelectedStatuses}
+                disabled={filtersLocked}
+                emptyLabel="All Statuses"
+                itemLabel="statuses"
+                searchPlaceholder="Search statuses…"
+              />
             </label>
 
           </div>
@@ -545,7 +643,14 @@ export default function Reports() {
             <button
               type="submit"
               className={`report-btn report-btn--primary${loadingReport ? ' report-btn--loading' : ''}`}
-              disabled={loadingReport || loadingFilters || exporting || clearing || isBranchBlocked}
+              disabled={
+                loadingReport
+                || loadingFilters
+                || exporting
+                || clearing
+                || isBranchBlocked
+                || !canGenerate
+              }
             >
               {loadingReport && <span className="report-btn__spin" aria-hidden="true" />}
               Generate Report
@@ -564,8 +669,14 @@ export default function Reports() {
                   type="button"
                   className={`report-btn report-btn--export${exporting ? ' report-btn--loading' : ''}`}
                   onClick={handleExportExcel}
-                  disabled={exporting || loadingReport || rows.length === 0}
-                  title={rows.length === 0 ? 'No data to export' : undefined}
+                  disabled={exporting || loadingReport || rows.length === 0 || isMultiStatus}
+                  title={
+                    isMultiStatus
+                      ? 'Excel export supports only a single status filter'
+                      : rows.length === 0
+                        ? 'No data to export'
+                        : undefined
+                  }
                 >
                   {exporting && <span className="report-btn__spin report-btn__spin--export" aria-hidden="true" />}
                   Excel
@@ -576,6 +687,10 @@ export default function Reports() {
 
           {loadingReport ? (
             <ReportLoader />
+          ) : error ? (
+            <p className="report-empty" role="alert">
+              {error || 'Unable to load report data. Please try again.'}
+            </p>
           ) : rows.length === 0 ? (
             <p className="report-empty">No records found for the selected filters.</p>
           ) : (
