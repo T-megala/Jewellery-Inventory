@@ -133,7 +133,6 @@ const DETAIL_FROM_SQL = `
   FROM stock_verification_details svd
   INNER JOIN stock_verification sv ON sv.id = svd.verification_id
   LEFT JOIN branches b ON b.id = sv.branch_id
-  ${LATEST_SCAN_JOIN_SQL}
 `;
 
 const PRODUCT_JOIN_SQL = `
@@ -311,10 +310,7 @@ const buildHeaderFilterClause = (filters) => {
 };
 
 const buildDetailSummaryFilterClause = (filters) => {
-  const conditions = [
-    "svd.verification_id = sv.id",
-    "AND svd.latest_scan_id = lsv.id",
-  ];
+  const conditions = ["1 = 1"];
   const params = [];
 
   appendDetailInventoryScopeFilters(filters, conditions, params);
@@ -373,11 +369,6 @@ const buildInventoryNotFoundCondition = (filters) => ({
         SELECT 1
         FROM stock_verification_details svd_found
         INNER JOIN stock_verification sv_found ON sv_found.id = svd_found.verification_id
-        INNER JOIN (${LATEST_SCAN_SUBQUERY}) latest_found
-          ON latest_found.verification_id = sv_found.id
-        INNER JOIN latest_stock_verification lsv_found
-          ON lsv_found.id = latest_found.latest_scan_id
-         AND svd_found.latest_scan_id = lsv_found.id
         WHERE sv_found.branch_id = pub.branch_id
           AND sv_found.verification_day = ?
           AND svd_found.status = 'FOUND'
@@ -539,10 +530,7 @@ const getInventoryMissingCount = async (filters) => {
 };
 
 const buildStoredDetailFilterClause = (filters, { includeStatus = true } = {}) => {
-  const conditions = [
-    "svd.verification_id = sv.id",
-    "AND svd.latest_scan_id = lsv.id",
-  ];
+  const conditions = ["1 = 1"];
   const params = [];
 
   // Match verification session scope on sv.* — detail rows for NEW tags
@@ -802,7 +790,6 @@ const getHeaderSummary = async (filters) => {
        COALESCE(SUM(CASE WHEN svd.status = 'NEW' THEN 1 ELSE 0 END), 0) AS newCount
      FROM stock_verification_details svd
      INNER JOIN stock_verification sv ON sv.id = svd.verification_id
-     ${LATEST_SCAN_JOIN_SQL}
      WHERE ${whereClause}`,
     params,
   );
@@ -1149,7 +1136,6 @@ const getCombinedRows = async (filters, pagination) => {
       FROM stock_verification_details svd
       INNER JOIN stock_verification sv ON sv.id = svd.verification_id
       LEFT JOIN branches b ON b.id = sv.branch_id
-      ${LATEST_SCAN_JOIN_SQL}
       LEFT JOIN products p ON p.batch_id = ${ACTIVE_BATCH_FOR_BRANCH_SQL}
         AND p.tag_packet_no = svd.tag_no
       WHERE svd.status = 'FOUND' AND ${detailWhereClause}
@@ -1188,7 +1174,6 @@ const getCombinedRows = async (filters, pagination) => {
       FROM stock_verification_details svd
       INNER JOIN stock_verification sv ON sv.id = svd.verification_id
       LEFT JOIN branches b ON b.id = sv.branch_id
-      ${LATEST_SCAN_JOIN_SQL}
       LEFT JOIN products p ON p.batch_id = ${ACTIVE_BATCH_FOR_BRANCH_SQL}
         AND p.tag_packet_no = svd.tag_no
       WHERE svd.status = 'NEW' AND ${detailWhereClause}
