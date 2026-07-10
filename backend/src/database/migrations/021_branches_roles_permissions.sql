@@ -6,12 +6,9 @@ CREATE TABLE IF NOT EXISTS branches (
   address VARCHAR(500) NULL,
   city VARCHAR(100) NULL,
   phone VARCHAR(30) NULL,
-  is_main TINYINT(1) NOT NULL DEFAULT 0,
-  is_active TINYINT(1) NOT NULL DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_branches_name (name),
-  INDEX idx_branches_active (is_active)
+  UNIQUE KEY uk_branches_name (name)
 );
 
 CREATE TABLE IF NOT EXISTS roles (
@@ -45,18 +42,16 @@ CREATE TABLE IF NOT EXISTS role_permissions (
     FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE
 );
 
-ALTER TABLE users
-  ADD COLUMN role_id INT NULL,
-  ADD COLUMN branch_id INT NULL,
-  ADD COLUMN full_name VARCHAR(150) NULL,
-  ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1,
-  ADD COLUMN last_login_at DATETIME NULL;
+ALTER TABLE users ADD COLUMN role_id INT NULL;
+
+ALTER TABLE users ADD COLUMN full_name VARCHAR(150) NULL;
+
+ALTER TABLE users ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1;
+
+ALTER TABLE users ADD COLUMN last_login_at DATETIME NULL;
 
 ALTER TABLE users
   ADD CONSTRAINT fk_users_role FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL;
-
-ALTER TABLE users
-  ADD CONSTRAINT fk_users_branch FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE SET NULL;
 
 ALTER TABLE product_upload_batches
   ADD COLUMN branch_id INT NULL,
@@ -72,8 +67,8 @@ ALTER TABLE stock_verification
 ALTER TABLE stock_verification
   ADD CONSTRAINT fk_sv_branch FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE SET NULL;
 
-INSERT INTO branches (name, is_main, is_active)
-SELECT 'Mylapore', 1, 1
+INSERT INTO branches (name)
+SELECT 'Mylapore'
 WHERE NOT EXISTS (SELECT 1 FROM branches WHERE name = 'Mylapore');
 
 INSERT INTO roles (name, description, is_system, is_active)
@@ -106,7 +101,6 @@ FROM (
   UNION ALL SELECT 'users.manage', 'users', 'manage', 'Create and update users'
   UNION ALL SELECT 'branches.view', 'branches', 'view', 'View branches'
   UNION ALL SELECT 'branches.manage', 'branches', 'manage', 'Manage branches'
-  UNION ALL SELECT 'branches.view_all', 'branches', 'view_all', 'View all branches data'
   UNION ALL SELECT 'roles.view', 'roles', 'view', 'View roles'
   UNION ALL SELECT 'roles.manage', 'roles', 'manage', 'Manage roles and permissions'
 ) seed
@@ -169,22 +163,20 @@ WHERE r.name = 'Viewer'
     SELECT 1 FROM role_permissions rp WHERE rp.role_id = r.id AND rp.permission_id = p.id
   );
 
-UPDATE product_upload_batches b
-INNER JOIN branches br ON br.is_main = 1
-SET b.branch_id = br.id
-WHERE b.branch_id IS NULL;
+UPDATE product_upload_batches
+SET branch_id = (SELECT MIN(id) FROM branches)
+WHERE branch_id IS NULL
+  AND EXISTS (SELECT 1 FROM branches);
 
-UPDATE stock_verification sv
-INNER JOIN branches br ON br.is_main = 1
-SET sv.branch_id = br.id
-WHERE sv.branch_id IS NULL;
+UPDATE stock_verification
+SET branch_id = (SELECT MIN(id) FROM branches)
+WHERE branch_id IS NULL
+  AND EXISTS (SELECT 1 FROM branches);
 
 UPDATE users u
 INNER JOIN (
   SELECT id FROM users ORDER BY id ASC LIMIT 1
 ) first_user ON first_user.id = u.id
 INNER JOIN roles r ON r.name = 'Super Admin'
-INNER JOIN branches b ON b.is_main = 1
-SET u.role_id = r.id,
-    u.branch_id = b.id
+SET u.role_id = r.id
 WHERE u.role_id IS NULL;

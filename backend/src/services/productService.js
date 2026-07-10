@@ -1,5 +1,8 @@
 import pool from "../config/database.js";
-import { getActiveBatchIdsForBranches } from "./productBatchService.js";
+import {
+  getActiveBatchId,
+  getActiveBatchIdsForBranches,
+} from "./productBatchService.js";
 import inventoryDropdownService from "./inventoryDropdownService.js";
 import { batchAllProductsWhere } from "../utils/productQueryHelper.js";
 import { formatCalendarDate } from "../utils/productBatchHelper.js";
