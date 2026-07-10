@@ -35,6 +35,9 @@ const files = [
   "031_remove_branches_view_all.sql",
   "032_db_integrity_cleanup.sql",
   "033_schema_collation_and_indexes.sql",
+  "034_product_erp_normalized_tables.sql",
+  "035_erp_product_codes.sql",
+  "036_print_details_indexes.sql",
 ];
 
 const SKIPPABLE_ERROR_CODES = new Set([

@@ -52,14 +52,27 @@ export const getCenters = async (req, res) => {
 export const getPrintDetails = async (req, res) => {
   const tagNo = getRequestParam(req, "tagNo", "tagPacketNo", "tag");
   const branchIds = await resolveDropdownBranchIds(req);
-  const { items } = await productService.getPrintDetails({
+  const page = getRequestParam(req, "page");
+  const limit = getRequestParam(req, "limit");
+  const extended = ["1", "true", "yes"].includes(
+    String(getRequestParam(req, "extended", "full") ?? "").trim().toLowerCase(),
+  );
+  const { items, pagination } = await productService.getPrintDetails({
     tagNo: tagNo || null,
     branchIds,
+    page,
+    limit,
+    extended,
   });
 
   if (tagNo && items.length === 0) {
     throw new ApiError(404, "Product not found for the given tag number");
   }
 
-  sendSuccess(res, tagNo ? items[0] : items);
+  res.status(200).json({
+    success: true,
+    message: "Print details fetched successfully",
+    data: tagNo ? items[0] : items,
+    ...(pagination ? { pagination } : {}),
+  });
 };

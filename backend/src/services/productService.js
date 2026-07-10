@@ -1,7 +1,9 @@
 import pool from "../config/database.js";
-import { getActiveBatchId } from "./productBatchService.js";
+import { getActiveBatchIdsForBranches } from "./productBatchService.js";
 import inventoryDropdownService from "./inventoryDropdownService.js";
 import { batchAllProductsWhere } from "../utils/productQueryHelper.js";
+import { formatCalendarDate } from "../utils/productBatchHelper.js";
+import erpProductCodeService from "./erpProductCodeService.js";
 import {
   activeBranchProductsJoin,
   activeBranchProductsWhere,
@@ -17,12 +19,7 @@ const formatDateTime = (value) => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 };
 
-const formatDate = (value) => {
-  if (!value) return null;
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
-  return date.toISOString().slice(0, 10);
-};
+const formatDate = (value) => formatCalendarDate(value);
 
 const mapProductRow = (row) => ({
   id: row.id,
@@ -174,81 +171,199 @@ export const getSubProducts = (product, branchIds = []) =>
 export const getCenters = (product, subProduct, branchIds = []) =>
   inventoryDropdownService.getCenters(product, subProduct, { branchIds });
 
-const mapPrintDetailRow = (row) => ({
-  productName: row.product,
-  subProductName: row.sub_product ?? null,
-  tagNo: row.tag_packet_no,
-  grossWt: row.gross_wt != null ? Number(row.gross_wt) : null,
-  netWt: row.net_wt != null ? Number(row.net_wt) : null,
-  weightGram: row.weight_gram != null ? Number(row.weight_gram) : null,
-  weightCarat: row.weight_carat != null ? Number(row.weight_carat) : null,
-  pieces: row.pieces != null ? Number(row.pieces) : null,
-  counterName: row.counter_name ?? null,
-});
+const toNumber = (value) => (value != null && value !== "" ? Number(value) : null);
+
+const mapPrintDetailRow = (row, { branchName = null, productNameToProCode = null } = {}) => {
+  const grossWt = toNumber(row.gross_wt);
+  const netWt = toNumber(row.net_wt);
+  const tagNo = row.tag_packet_no ?? null;
+  const productName = row.product ?? null;
+  const resolvedProCode = row.erp_pro_code != null
+    ? Number(row.erp_pro_code)
+    : (productName && productNameToProCode
+      ? productNameToProCode.get(String(productName).trim().toUpperCase()) ?? null
+      : null);
+
+  return {
+    productName,
+    subProductName: row.sub_product ?? null,
+    tagNo,
+    grossWt,
+    netWt,
+    weightGram: toNumber(row.weight_gram),
+    weightCarat: toNumber(row.weight_carat),
+    pieces: toNumber(row.pieces),
+    counterName: row.counter_name ?? null,
+    proCode: resolvedProCode,
+    purity: row.purity ?? null,
+    metal: row.metal ?? null,
+    grossWeight: grossWt,
+    netWeight: netWt,
+    wastagePercentage: toNumber(row.wastage_percentage),
+    makingCharge: toNumber(row.making_charge),
+    goldRate: toNumber(row.gold_rate),
+    amount: toNumber(row.selling_price),
+    branchName: branchName ?? row.branch_name ?? null,
+    qrCode: row.qr_code ?? tagNo,
+  };
+};
+
+const PRINT_DETAILS_EXTENSION_JOINS = `
+  LEFT JOIN product_master pm ON pm.product_id = p.id
+  LEFT JOIN product_pricing pp ON pp.product_id = p.id
+  LEFT JOIN product_tag_details ptd ON ptd.product_id = p.id
+`;
+
+const PRINT_DETAILS_BASE_SELECT = `
+  p.product,
+  p.sub_product,
+  p.tag_packet_no,
+  p.gross_wt,
+  p.net_wt,
+  p.weight_gram,
+  p.weight_carat,
+  p.pieces,
+  p.counter_name
+`;
+
+const PRINT_DETAILS_EXTENDED_SELECT = `
+  ${PRINT_DETAILS_BASE_SELECT},
+  pm.erp_pro_code,
+  pm.purity,
+  pm.metal,
+  pp.wastage_percentage,
+  pp.making_charge,
+  pp.gold_rate,
+  pp.selling_price,
+  ptd.qr_code
+`;
 
 const TAGGED_PRODUCT_FILTER = `
   p.tag_packet_no IS NOT NULL
-  AND TRIM(p.tag_packet_no) != ''
+  AND p.tag_packet_no <> ''
 `;
 
-const getPrintDetails = async ({ tagNo = null, branchIds = [] } = {}) => {
+const loadBranchNames = async (branchIds) => {
+  if (!branchIds.length) {
+    return new Map();
+  }
+
+  const placeholders = branchIds.map(() => "?").join(", ");
+  const [rows] = await pool.query(
+    `SELECT id, name FROM branches WHERE id IN (${placeholders})`,
+    branchIds,
+  );
+
+  return new Map(rows.map((row) => [Number(row.id), row.name]));
+};
+
+const getPrintDetails = async ({
+  tagNo = null,
+  branchIds = [],
+  page = null,
+  limit = null,
+  extended = false,
+} = {}) => {
   const scope = normalizeBranchIds({ branchIds });
 
   if (scope.length === 0) {
-    return { items: [] };
+    return { items: [], pagination: null };
   }
 
-  const branchFilter = buildBranchSqlFilter("pub.branch_id", scope);
+  const batchIds = await getActiveBatchIdsForBranches(scope);
+  if (batchIds.length === 0) {
+    return { items: [], pagination: null };
+  }
+
+  const branchName = scope.length === 1
+    ? (await loadBranchNames(scope)).get(scope[0]) ?? null
+    : null;
+
+  const batchPlaceholders = batchIds.map(() => "?").join(", ");
   const normalizedTag = String(tagNo ?? "").trim();
+  const includeExtended = Boolean(extended) || Boolean(normalizedTag);
+
+  let productNameToProCode = null;
+  if (includeExtended) {
+    productNameToProCode = await erpProductCodeService.buildProductNameToCodeMap();
+  }
+
+  const mapOptions = { branchName, productNameToProCode };
 
   if (normalizedTag) {
+    const tagParams = [...batchIds, normalizedTag, normalizedTag.toUpperCase()];
     const [rows] = await pool.execute(
       `SELECT
-         p.product,
-         p.sub_product,
-         p.tag_packet_no,
-         p.gross_wt,
-         p.net_wt,
-         p.weight_gram,
-         p.weight_carat,
-         p.pieces,
-         p.counter_name
-       ${activeBranchProductsJoin("pub")}
-       WHERE ${activeBranchProductsWhere}
+         ${PRINT_DETAILS_EXTENDED_SELECT}
+       FROM products p
+       ${PRINT_DETAILS_EXTENSION_JOINS}
+       WHERE p.batch_id IN (${batchPlaceholders})
          AND ${TAGGED_PRODUCT_FILTER}
-         AND UPPER(TRIM(p.tag_packet_no)) = ?
-         ${branchFilter.clause}
+         AND (p.tag_packet_no = ? OR UPPER(TRIM(p.tag_packet_no)) = ?)
        ORDER BY p.id DESC
        LIMIT 1`,
-      [normalizedTag.toUpperCase(), ...branchFilter.params],
+      tagParams,
     );
 
     return {
-      items: rows.length ? [mapPrintDetailRow(rows[0])] : [],
+      items: rows.length ? [mapPrintDetailRow(rows[0], mapOptions)] : [],
+      pagination: null,
     };
   }
 
+  const parsedLimit = Number(limit);
+  const parsedPage = Number(page);
+  const usePagination = Number.isInteger(parsedLimit) && parsedLimit > 0
+    && Number.isInteger(parsedPage) && parsedPage > 0;
+  const safeLimit = usePagination ? Math.min(parsedLimit, 10000) : null;
+  const offset = usePagination ? (parsedPage - 1) * safeLimit : 0;
+
+  let totalRecords = null;
+  if (usePagination) {
+    const [[countRow]] = await pool.execute(
+      `SELECT COUNT(*) AS total
+       FROM products p
+       WHERE p.batch_id IN (${batchPlaceholders})
+         AND ${TAGGED_PRODUCT_FILTER}`,
+      batchIds,
+    );
+    totalRecords = Number(countRow.total ?? 0);
+  }
+
+  const listParams = [...batchIds];
+  let limitClause = "";
+
+  if (usePagination) {
+    limitClause = "LIMIT ? OFFSET ?";
+    listParams.push(safeLimit, offset);
+  }
+
+  const selectClause = includeExtended
+    ? PRINT_DETAILS_EXTENDED_SELECT
+    : PRINT_DETAILS_BASE_SELECT;
+  const joinClause = includeExtended ? PRINT_DETAILS_EXTENSION_JOINS : "";
+
   const [rows] = await pool.execute(
     `SELECT
-       p.product,
-       p.sub_product,
-       p.tag_packet_no,
-       p.gross_wt,
-       p.net_wt,
-       p.weight_gram,
-       p.weight_carat,
-       p.pieces,
-       p.counter_name
-     ${activeBranchProductsJoin("pub")}
-     WHERE ${activeBranchProductsWhere}
+       ${selectClause}
+     FROM products p
+     ${joinClause}
+     WHERE p.batch_id IN (${batchPlaceholders})
        AND ${TAGGED_PRODUCT_FILTER}
-       ${branchFilter.clause}
-     ORDER BY p.product ASC, p.tag_packet_no ASC`,
-    branchFilter.params,
+     ${limitClause}`,
+    listParams,
   );
 
   return {
-    items: rows.map(mapPrintDetailRow),
+    items: rows.map((row) => mapPrintDetailRow(row, mapOptions)),
+    pagination: usePagination
+      ? {
+          page: parsedPage,
+          limit: safeLimit,
+          totalRecords,
+          totalPages: Math.ceil(totalRecords / safeLimit),
+        }
+      : null,
   };
 };
 

@@ -30,4 +30,5 @@ export const BRANCH_SCOPE_EXEMPT_PATHS = [
   "/users",
   "/auth",
   "/dashboard/branch-comparison",
+  "/product-codes",
 ];

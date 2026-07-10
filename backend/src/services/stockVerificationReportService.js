@@ -10,6 +10,7 @@ import {
   SCOPE_NAMES,
   formatNewScopeDisplayValue,
 } from "../utils/verificationScope.js";
+import { formatCalendarDate } from "../utils/productBatchHelper.js";
 
 const VALID_STATUSES = ["FOUND", "MISSING", "NEW"];
 const STATUS_QUERY_ORDER = ["FOUND", "NEW", "MISSING"];
@@ -139,12 +140,7 @@ const formatDateTime = (value) => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 };
 
-const formatDate = (value) => {
-  if (!value) return null;
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
-  return date.toISOString().slice(0, 10);
-};
+const formatDate = (value) => formatCalendarDate(value);
 
 const toNumber = (value) =>
   value === null || value === undefined ? null : Number(value);

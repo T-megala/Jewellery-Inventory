@@ -2,9 +2,20 @@ const errorHandler = (err, req, res, next) => {
   if (err.code === "LIMIT_FILE_SIZE") {
     return res.status(400).json({
       success: false,
-      message: "File size exceeds the 20MB limit",
+      message: "File size exceeds the upload limit",
       data: null,
     });
+  }
+
+  if (err.message === "Request aborted" || err.code === "ECONNABORTED") {
+    if (!res.headersSent) {
+      return res.status(499).json({
+        success: false,
+        message: "Upload was cancelled before it finished",
+        data: null,
+      });
+    }
+    return undefined;
   }
 
   // Body-parser JSON syntax errors (empty or malformed JSON body)

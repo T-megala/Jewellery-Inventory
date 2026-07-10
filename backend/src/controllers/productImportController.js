@@ -1,6 +1,7 @@
 import ApiError from '../utils/ApiError.js';
 import productImportService from '../services/productImportService.js';
 import { getRequestParam } from '../utils/requestParams.js';
+import { IMPORT_MODES } from '../config/productImportColumnMapping.js';
 
 const isTruthyParam = (value) => {
   if (!value) {
@@ -29,6 +30,34 @@ const isAsyncImport = (req) => {
 
 import { resolveRequestBranchId } from '../utils/branchRequest.js';
 
+const parseCustomMappings = (rawValue) => {
+  if (!rawValue) {
+    return null;
+  }
+
+  try {
+    const parsed = typeof rawValue === 'string' ? JSON.parse(rawValue) : rawValue;
+
+    if (!Array.isArray(parsed)) {
+      throw new Error('mappings must be a JSON array');
+    }
+
+    return parsed;
+  } catch (error) {
+    throw new ApiError(400, `Invalid mappings JSON: ${error.message}`);
+  }
+};
+
+const resolveImportMode = (req) => {
+  const value = getRequestParam(req, 'importMode', 'import_mode', 'mode');
+
+  if (!value) {
+    return IMPORT_MODES.INSERT;
+  }
+
+  return String(value).trim().toLowerCase();
+};
+
 export const importProducts = async (req, res) => {
   if (!req.file) {
     throw new ApiError(400, 'Excel file is required. Use form field name "file"');
@@ -38,6 +67,10 @@ export const importProducts = async (req, res) => {
     ? String(req.body.uploadedBy).trim()
     : null;
   const branchId = await resolveRequestBranchId(req);
+  const importMode = resolveImportMode(req);
+  const mappings = parseCustomMappings(
+    req.body?.mappings ?? getRequestParam(req, 'mappings'),
+  );
 
   if (isAsyncImport(req)) {
     console.info('[product-import] upload received', {
@@ -46,6 +79,7 @@ export const importProducts = async (req, res) => {
       mimeType: req.file.mimetype,
       uploadedBy,
       branchId,
+      importMode,
     });
 
     const job = productImportService.startAsyncImport(
@@ -55,6 +89,8 @@ export const importProducts = async (req, res) => {
         fileName: req.file.originalname,
         fileSize: req.file.size,
         branchId,
+        importMode,
+        mappings,
       },
     );
 
@@ -72,7 +108,7 @@ export const importProducts = async (req, res) => {
   const result = await productImportService.importProductsFromExcel(
     req.file.buffer,
     uploadedBy,
-    { branchId },
+    { branchId, importMode, mappings },
   );
 
   res.status(200).json({

@@ -15,6 +15,7 @@ import { errorHandler } from "./src/middleware/errorHandler.js";
 import androidReportsRoutes from "./src/routes/androidReportsRoutes.js";
 import androidProductRoutes from "./src/routes/androidProductRoutes.js";
 import dropdownRoutes from "./src/routes/dropdownRoutes.js";
+import erpProductCodeRoutes from "./src/routes/erpProductCodeRoutes.js";
 
 const app = express();
 
@@ -59,6 +60,7 @@ app.use("/api/v1", optionalAuthenticateApi);
 app.use("/api/v1", androidProductRoutes);
 app.use("/api/v1", dropdownRoutes);
 app.use("/api/v1", authenticateApi);
+app.use("/api/v1", erpProductCodeRoutes);
 app.use("/api/v1", resolveBranchScope);
 app.use("/api/v1", productRoutes);
 app.use("/api/v1", branchRoutes);

@@ -147,6 +147,86 @@ async function handleUnauthorizedRetry(url, options, retried) {
 }
 
 /**
+ * Multipart upload with byte-level progress (fetch does not expose upload progress).
+ * Resolves with a fetch-like { ok, status, json() } object.
+ */
+export function uploadFormDataWithProgress(url, formData, options = {}) {
+  const { headers = {}, onProgress, retried = false } = options;
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+
+    Object.entries(headers).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        xhr.setRequestHeader(key, value);
+      }
+    });
+
+    if (onProgress) {
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && event.total > 0) {
+          const percent = Math.round((event.loaded / event.total) * 100);
+          onProgress({
+            loaded: event.loaded,
+            total: event.total,
+            percent,
+          });
+          return;
+        }
+
+        onProgress({
+          loaded: event.loaded,
+          total: 0,
+          percent: 0,
+        });
+      };
+    }
+
+    xhr.onload = () => {
+      if (xhr.status === 401 && getToken() && !retried && getRefreshToken()) {
+        refreshAccessToken()
+          .then(() => {
+            const retryHeaders = { ...headers };
+            delete retryHeaders.Authorization;
+
+            return uploadFormDataWithProgress(url, formData, {
+              headers: {
+                ...retryHeaders,
+                ...getAuthHeaders(),
+              },
+              onProgress,
+              retried: true,
+            });
+          })
+          .then(resolve)
+          .catch(() => {
+            redirectToLogin();
+            reject(createUserError(null, 'Session expired. Please log in again.'));
+          });
+        return;
+      }
+
+      resolve({
+        ok: xhr.status >= 200 && xhr.status < 300,
+        status: xhr.status,
+        json: async () => JSON.parse(xhr.responseText),
+      });
+    };
+
+    xhr.onerror = () => {
+      reject(createUserError(null, NETWORK_ERROR_FALLBACK));
+    };
+
+    xhr.onabort = () => {
+      reject(createUserError('Upload cancelled', 'Upload cancelled.'));
+    };
+
+    xhr.send(formData);
+  });
+}
+
+/**
  * Authenticated fetch — sends access token; on 401, refreshes tokens and retries once.
  */
 export async function authFetch(url, options = {}, retried = false) {
