@@ -261,8 +261,9 @@ const drawPdfHeaderBand = (doc, summary, totalRows, dbTime) => {
   });
 
   doc.font("Helvetica").fontSize(8.5);
+  const totalCount = summary.totalStockCount ?? totalRows;
   doc.text(
-    `Found: ${summary.foundCount}   New: ${summary.newCount}   Missing: ${summary.missingCount}   Total: ${totalRows}`,
+    `Found: ${summary.foundCount}   New: ${summary.newCount}   Missing: ${summary.missingCount}   Total: ${totalCount}`,
     left + 16,
     top + 40,
     { width: width - 32 },

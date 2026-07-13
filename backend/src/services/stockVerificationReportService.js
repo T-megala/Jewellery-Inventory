@@ -47,6 +47,13 @@ const getTotalRecordsForStatuses = (daySummary, filters) =>
     0,
   );
 
+const buildReportSummary = (daySummary) => ({
+  foundCount: daySummary.foundCount,
+  missingCount: daySummary.missingCount,
+  newCount: daySummary.newCount,
+  totalStockCount: daySummary.foundCount + daySummary.missingCount,
+});
+
 const includesStoredStatuses = (filters) => {
   const selected = normalizeStatuses(filters.statuses);
 
@@ -175,7 +182,12 @@ const buildDateFilterClause = (filters, tablePrefix = "sv") => ({
 const DETAIL_FROM_SQL = `
   FROM stock_verification_details svd
   INNER JOIN stock_verification sv ON sv.id = svd.verification_id
+  LEFT JOIN latest_stock_verification lsv ON lsv.id = svd.latest_scan_id
   LEFT JOIN branches b ON b.id = sv.branch_id
+`;
+
+const TAG_VERIFICATION_DATE_SQL = `
+  COALESCE(lsv.verification_date, svd.created_at, sv.verification_date)
 `;
 
 const PRODUCT_JOIN_SQL = `
@@ -219,14 +231,14 @@ const EXCEL_PRODUCT_SELECT_SQL = `
 
 
 const DETAIL_SELECT_SQL = `
-  SELECT svd.id, svd.verification_id, sv.verification_date,
+  SELECT svd.id, svd.verification_id, ${TAG_VERIFICATION_DATE_SQL} AS verification_date,
          sv.branch_id, b.name AS branch_name,
          svd.product_name, svd.sub_product_name, svd.center_name,
          svd.tag_no, svd.status, svd.created_at
 `;
 
 const EXCEL_DETAIL_SELECT_SQL = `
-  SELECT sv.verification_date,
+  SELECT ${TAG_VERIFICATION_DATE_SQL} AS verification_date,
          svd.product_name, svd.sub_product_name, svd.center_name,
          svd.tag_no, svd.status
 `;
@@ -234,7 +246,7 @@ const EXCEL_DETAIL_SELECT_SQL = `
 const STORED_REPORT_ORDER_SQL = `
   ORDER BY
     FIELD(svd.status, 'FOUND', 'NEW'),
-    sv.verification_date DESC,
+    ${TAG_VERIFICATION_DATE_SQL} DESC,
     svd.id DESC
 `;
 
@@ -1033,11 +1045,7 @@ const buildPaginationMeta = (page, limit, totalRecords) => ({
 const getReport = async (filters, pagination) => {
   const { page, limit } = pagination;
   const daySummary = await getHeaderSummary(filters);
-  const summary = {
-    foundCount: daySummary.foundCount,
-    missingCount: daySummary.missingCount,
-    newCount: daySummary.newCount,
-  };
+  const summary = buildReportSummary(daySummary);
 
   let totalRecords;
   let mappedRows;
@@ -1162,7 +1170,7 @@ const getCombinedRows = async (filters, pagination) => {
       SELECT
         svd.id,
         svd.verification_id,
-        sv.verification_date,
+        ${TAG_VERIFICATION_DATE_SQL} AS verification_date,
         sv.branch_id,
         b.name AS branch_name,
         svd.product_name,
@@ -1189,6 +1197,7 @@ const getCombinedRows = async (filters, pagination) => {
         p.created_at AS product_created_at
       FROM stock_verification_details svd
       INNER JOIN stock_verification sv ON sv.id = svd.verification_id
+      LEFT JOIN latest_stock_verification lsv ON lsv.id = svd.latest_scan_id
       LEFT JOIN branches b ON b.id = sv.branch_id
       LEFT JOIN products p ON p.batch_id = ${ACTIVE_BATCH_FOR_BRANCH_SQL}
         AND p.tag_packet_no = svd.tag_no
@@ -1200,7 +1209,7 @@ const getCombinedRows = async (filters, pagination) => {
       SELECT
         svd.id,
         svd.verification_id,
-        sv.verification_date,
+        ${TAG_VERIFICATION_DATE_SQL} AS verification_date,
         sv.branch_id,
         b.name AS branch_name,
         svd.product_name,
@@ -1227,6 +1236,7 @@ const getCombinedRows = async (filters, pagination) => {
         p.created_at AS product_created_at
       FROM stock_verification_details svd
       INNER JOIN stock_verification sv ON sv.id = svd.verification_id
+      LEFT JOIN latest_stock_verification lsv ON lsv.id = svd.latest_scan_id
       LEFT JOIN branches b ON b.id = sv.branch_id
       LEFT JOIN products p ON p.batch_id = ${ACTIVE_BATCH_FOR_BRANCH_SQL}
         AND p.tag_packet_no = svd.tag_no
@@ -1270,11 +1280,7 @@ const getAllStoredReportRows = async (filters) => {
   );
 
   return {
-    summary: {
-      foundCount: summary.foundCount,
-      missingCount: summary.missingCount,
-      newCount: summary.newCount,
-    },
+    summary: buildReportSummary(summary),
     data: dataRows.map(mapRow),
   };
 };
@@ -1291,11 +1297,7 @@ const getAllMissingReportRows = async (filters) => {
 
   if (summary.missingCount === 0) {
     return {
-      summary: {
-        foundCount: summary.foundCount,
-        missingCount: summary.missingCount,
-        newCount: summary.newCount,
-      },
+      summary: buildReportSummary(summary),
       data: [],
     };
   }
@@ -1310,11 +1312,7 @@ const getAllMissingReportRows = async (filters) => {
   );
 
   return {
-    summary: {
-      foundCount: summary.foundCount,
-      missingCount: summary.missingCount,
-      newCount: summary.newCount,
-    },
+    summary: buildReportSummary(summary),
     data: dataRows.map(mapRow),
   };
 };
@@ -1347,11 +1345,7 @@ const getCombinedReportRows = async (filters) => {
   }
 
   return {
-    summary: {
-      foundCount: summary.foundCount,
-      missingCount: summary.missingCount,
-      newCount: summary.newCount,
-    },
+    summary: buildReportSummary(summary),
     data: sortCombinedReportRows(combined),
   };
 };
@@ -1397,11 +1391,7 @@ const getExcelExportRows = async (filters) => {
     );
 
     return {
-      summary: {
-        foundCount: summary.foundCount,
-        missingCount: summary.missingCount,
-        newCount: summary.newCount,
-      },
+      summary: buildReportSummary(summary),
       data: dataRows.map((row) => mapExcelRow(row)),
     };
   }
@@ -1420,11 +1410,7 @@ const getExcelExportRows = async (filters) => {
     );
 
     return {
-      summary: {
-        foundCount: summary.foundCount,
-        missingCount: summary.missingCount,
-        newCount: summary.newCount,
-      },
+      summary: buildReportSummary(summary),
       data: dataRows.map(mapExcelRow),
     };
   }
@@ -1461,11 +1447,7 @@ const getExcelExportRows = async (filters) => {
   }
 
   return {
-    summary: {
-      foundCount: summary.foundCount,
-      missingCount: summary.missingCount,
-      newCount: summary.newCount,
-    },
+    summary: buildReportSummary(summary),
     data: sortCombinedReportRows(combined),
   };
 };
