@@ -15,12 +15,17 @@ import {
 import {
   buildTaggedRowKey,
   enrichRecordFromProductCodes,
+  flattenToLegacyProductRow,
+  sanitizePrintRatePricing,
 } from '../utils/productImportMapper.js';
 import {
   appendImportError,
+  appendImportSkip,
+  buildImportSkipEntry,
   countRowTypes,
   createDuplicateTracker,
   createImportSummary,
+  SKIP_REASONS,
   validateProductRecord,
 } from '../utils/productImportValidator.js';
 import {
@@ -28,6 +33,9 @@ import {
   bulkUpsertNormalizedDetails,
 } from './productNormalizedRepository.js';
 import erpProductCodeService from './erpProductCodeService.js';
+import { createFileLogger } from '../utils/fileLogger.js';
+
+const importLogger = createFileLogger('product-import');
 
 const BATCH_SIZE = Math.max(
   500,
@@ -38,12 +46,50 @@ const DEFER_POST_PROCESSING =
   process.env.IMPORT_DEFER_POST_PROCESSING !== 'false';
 
 const logImport = (message, meta = undefined) => {
-  if (meta === undefined) {
-    console.info(`[product-import] ${message}`);
+  importLogger.info(message, meta);
+};
+
+const logSkippedRows = (phase, { skipped, skippedRows }) => {
+  if (!skipped) {
     return;
   }
 
-  console.info(`[product-import] ${message}`, meta);
+  logImport(`${phase}: ${skipped} row(s) skipped`, {
+    skipped,
+    skippedRows,
+  });
+
+  for (const entry of skippedRows) {
+    logImport(`skipped row ${entry.row}: ${entry.message}`, {
+      row: entry.row,
+      reason: entry.reason,
+      product: entry.product,
+      subProduct: entry.subProduct,
+      tranNo: entry.tranNo,
+      tag: entry.tag,
+      barcode: entry.barcode,
+    });
+  }
+};
+
+const describeUpdateModeSkip = (tagKey, barcode) => {
+  if (!tagKey && !barcode) {
+    return {
+      reason: SKIP_REASONS.NO_MATCH_IDENTIFIER,
+      message:
+        'Update mode requires an existing tag or barcode to match; this row has neither',
+    };
+  }
+
+  const identifiers = [
+    tagKey ? `tag "${tagKey}"` : null,
+    barcode ? `barcode "${barcode}"` : null,
+  ].filter(Boolean);
+
+  return {
+    reason: SKIP_REASONS.NOT_FOUND_IN_BATCH,
+    message: `No product with ${identifiers.join(' or ')} found in the active batch`,
+  };
 };
 
 const PRODUCT_INSERT_COLUMNS = [
@@ -189,11 +235,21 @@ const processParsedRows = (parsedRows, productCodeLookup = null) => {
   for (const { record, rowNumber } of parsedRows) {
     enrichRecordFromProductCodes(record, productCodeLookup);
     syncTagDetails(record);
+    sanitizePrintRatePricing(record);
 
     const validation = validateProductRecord(record, rowNumber);
 
     if (validation.skip) {
-      summary.skipped += 1;
+      appendImportSkip(
+        summary,
+        buildImportSkipEntry({
+          rowNumber,
+          reason: validation.reason,
+          message: validation.message,
+          legacy: flattenToLegacyProductRow(record),
+          record,
+        }),
+      );
       continue;
     }
 
@@ -322,7 +378,17 @@ const classifyRowsForMode = async (
     }
 
     if (importMode === IMPORT_MODES.UPDATE) {
-      summary.skipped += 1;
+      const { reason, message } = describeUpdateModeSkip(tagKey, barcode);
+      appendImportSkip(
+        summary,
+        buildImportSkipEntry({
+          rowNumber: row.rowNumber,
+          reason,
+          message,
+          legacy: row.legacy,
+          record: row.record,
+        }),
+      );
       continue;
     }
 
@@ -439,7 +505,7 @@ const schedulePostProcessing = (
   const run = () =>
     refreshDailySalesSummary(batchId, pool, { previousBatchId }).catch(
       (error) => {
-        console.error('[product-import] daily sales summary refresh failed', {
+        importLogger.error('daily sales summary refresh failed', {
           batchId,
           previousBatchId,
           error: error.message,
@@ -514,6 +580,14 @@ const importProductsFromExcel = async (
     await erpProductCodeService.buildLookupMap(),
   );
   const totalRowsInFile = parsed.totalRowsInFile;
+  const skippedAfterValidation = validationSummary.skipped;
+
+  if (skippedAfterValidation > 0) {
+    logSkippedRows('validation', {
+      skipped: skippedAfterValidation,
+      skippedRows: validationSummary.skippedRows,
+    });
+  }
 
   logImport('excel parse completed', {
     durationMs: Date.now() - parseStartedAt,
@@ -522,6 +596,7 @@ const importProductsFromExcel = async (
     validRows: validRows.length,
     mappedFieldCount: parsed.mappedFieldCount,
     skipped: validationSummary.skipped,
+    skippedRows: validationSummary.skippedRows,
     failed: validationSummary.failedRecords,
     duplicates: validationSummary.duplicateRecords,
   });
@@ -532,6 +607,7 @@ const importProductsFromExcel = async (
       totalRecords: validationSummary.totalRecords,
       totalRowsInFile,
       skipped: validationSummary.skipped,
+      skippedRows: validationSummary.skippedRows,
       importedRecords: 0,
       updatedRecords: 0,
       duplicateRecords: validationSummary.duplicateRecords,
@@ -579,6 +655,14 @@ const importProductsFromExcel = async (
       mode,
       validationSummary,
     );
+
+    const classificationSkips = validationSummary.skipped - skippedAfterValidation;
+    if (classificationSkips > 0) {
+      logSkippedRows('update classification', {
+        skipped: classificationSkips,
+        skippedRows: validationSummary.skippedRows.slice(skippedAfterValidation),
+      });
+    }
 
     reportProgress({
       phase: 'inserting',
@@ -676,6 +760,7 @@ const importProductsFromExcel = async (
       totalRecords: validationSummary.totalRecords,
       totalRowsInFile,
       skipped: validationSummary.skipped,
+      skippedRows: validationSummary.skippedRows,
       importedRecords: inserted,
       updatedRecords: updated,
       duplicateRecords: validationSummary.duplicateRecords,
@@ -693,7 +778,7 @@ const importProductsFromExcel = async (
   } catch (error) {
     await disableBulkSession(connection).catch(() => {});
     await connection.rollback();
-    console.error('Product import failed:', error);
+    importLogger.error('Product import failed', { error: error.message, stack: error.stack });
     throw error;
   } finally {
     connection.release();
@@ -754,7 +839,7 @@ const startAsyncImport = (buffer, uploadedBy = null, meta = {}) => {
     } catch (error) {
       const failureMessage = error?.message || 'Import failed';
 
-      console.error('[product-import] async import failed', {
+      importLogger.error('async import failed', {
         jobId: job.id,
         error: failureMessage,
         stack: error?.stack,

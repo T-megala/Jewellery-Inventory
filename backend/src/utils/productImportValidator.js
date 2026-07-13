@@ -11,6 +11,42 @@ import {
 } from './productImportMapper.js';
 
 const MAX_ERROR_DETAILS = 200;
+const MAX_SKIP_DETAILS = 200;
+
+export const SKIP_REASONS = {
+  GROUP_HEADER: 'group_header',
+  INVALID_ROW: 'invalid_row',
+  NO_MATCH_IDENTIFIER: 'no_match_identifier',
+  NOT_FOUND_IN_BATCH: 'not_found_in_batch',
+};
+
+const buildRowContext = (legacy, record = null) => ({
+  product: String(legacy?.product ?? '').trim() || null,
+  subProduct: String(legacy?.sub_product ?? '').trim() || null,
+  tranNo: String(legacy?.tran_no ?? '').trim() || null,
+  tag: String(legacy?.tag_packet_no ?? '').trim() || null,
+  barcode: String(record?.[PRODUCT_IMPORT_TABLES.TAG]?.barcode ?? '').trim() || null,
+});
+
+const describeInvalidRowSkip = (legacy) => {
+  const product = String(legacy.product ?? '').trim();
+  const tranNo = String(legacy.tran_no ?? '').trim();
+
+  if (!product) {
+    return 'Row is empty or missing product name';
+  }
+
+  if (tranNo && !/^\d+$/.test(tranNo)) {
+    return `Invalid transaction number "${tranNo}" (must be numeric)`;
+  }
+
+  return 'Row does not contain importable product data';
+};
+
+const describeGroupHeaderSkip = (legacy) => {
+  const product = String(legacy.product ?? '').trim();
+  return `Category or section header row "${product}" (no transaction or tag number)`;
+};
 
 const isNegativeNumber = (value) =>
   value !== null && value !== undefined && Number(value) < 0;
@@ -38,11 +74,23 @@ export const validateProductRecord = (record, rowNumber) => {
   const errors = [];
 
   if (isGroupHeaderRow(legacy)) {
-    return { valid: false, skip: true, reason: 'group_header', errors: [] };
+    return {
+      valid: false,
+      skip: true,
+      reason: SKIP_REASONS.GROUP_HEADER,
+      message: describeGroupHeaderSkip(legacy),
+      errors: [],
+    };
   }
 
   if (!isDataRowCandidate(legacy)) {
-    return { valid: false, skip: true, reason: 'invalid_row', errors: [] };
+    return {
+      valid: false,
+      skip: true,
+      reason: SKIP_REASONS.INVALID_ROW,
+      message: describeInvalidRowSkip(legacy),
+      errors: [],
+    };
   }
 
   if (!String(legacy.product ?? '').trim()) {
@@ -93,8 +141,20 @@ export const validateProductRecord = (record, rowNumber) => {
     }
   }
 
+  const printRateFields = [
+    'sale_value',
+    'rate',
+    'rate_id',
+    'per_pcs_value',
+    'per_gram_value',
+  ];
+
   const pricing = record[PRODUCT_IMPORT_TABLES.PRICING] ?? {};
   for (const [field, value] of Object.entries(pricing)) {
+    if (printRateFields.includes(field)) {
+      continue;
+    }
+
     if (typeof value === 'number' && !Number.isFinite(value)) {
       errors.push({ row: rowNumber, field, message: `Invalid numeric value for ${field}` });
     }
@@ -178,9 +238,31 @@ export const createImportSummary = () => ({
   duplicateRecords: 0,
   failedRecords: 0,
   skipped: 0,
+  skippedRows: [],
   taggedRows: 0,
   untaggedRows: 0,
   errors: [],
+});
+
+export const appendImportSkip = (summary, entry) => {
+  summary.skipped += 1;
+
+  if (summary.skippedRows.length < MAX_SKIP_DETAILS) {
+    summary.skippedRows.push(entry);
+  }
+};
+
+export const buildImportSkipEntry = ({
+  rowNumber,
+  reason,
+  message,
+  legacy = null,
+  record = null,
+}) => ({
+  row: rowNumber,
+  reason,
+  message,
+  ...buildRowContext(legacy ?? {}, record),
 });
 
 export const appendImportError = (summary, error) => {
@@ -199,4 +281,4 @@ export const countRowTypes = (legacyRow) => {
   return 'untagged';
 };
 
-export { DUPLICATE_TRACKING_FIELDS, MAX_ERROR_DETAILS };
+export { DUPLICATE_TRACKING_FIELDS, MAX_ERROR_DETAILS, MAX_SKIP_DETAILS };

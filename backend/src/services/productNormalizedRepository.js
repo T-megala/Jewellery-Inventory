@@ -18,6 +18,7 @@ const TABLE_COLUMNS = {
     'purchase_cost', 'selling_price', 'gst_percentage', 'gst_amount',
     'less_weight', 'thread_weight', 'supplier_deduction_weight', 'stone_weight',
     'diamond_weight', 'other_metal_weight', 'diamond_pieces',
+    'sale_value', 'rate', 'rate_id', 'per_pcs_value', 'per_gram_value', 'max_mc',
   ],
   [PRODUCT_IMPORT_TABLES.TAG]: [
     'tag_no', 'barcode', 'rfid', 'qr_code',

@@ -46,7 +46,7 @@ export const DEFAULT_PRODUCT_IMPORT_MAPPINGS = [
   // ── Weight (legacy products + extended pricing) ──
   { headers: ['GrossWt', 'Gross Wt', 'GrossWeight', 'Gross Weight', 'gross_weight', 'gross weight', 'Weight', 'weight', 'Tag Weight', 'Tag Wt', 'tag_weight', 'tag wt', 'GrsWt', 'Grs Wt', 'grs_wt', 'grs wt'], table: PRODUCT_IMPORT_TABLES.PRODUCTS, field: 'gross_wt', type: 'decimal' },
   { headers: ['NetWt', 'Net Wt', 'NetWeight', 'Net Weight', 'net_weight', 'net weight', 'Pure Weight', 'pure_weight', 'pure weight', 'Metal Weight', 'Metal Wt', 'metal_weight', 'metal wt'], table: PRODUCT_IMPORT_TABLES.PRODUCTS, field: 'net_wt', type: 'decimal' },
-  { headers: ['LessWeight', 'Less Wt', 'Less Weight'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'less_weight', type: 'decimal' },
+  { headers: ['LessWeight', 'Less Wt', 'Less Weight', 'LessWt', 'less_wt', 'less wt'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'less_weight', type: 'decimal' },
   { headers: ['ThreadWeight', 'Thread Wt', 'Thread Weight'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'thread_weight', type: 'decimal' },
   { headers: ['SupplierDeductionWeight', 'Supplier Deduction Weight', 'SupplierDeductionWt'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'supplier_deduction_weight', type: 'decimal' },
   { headers: ['StoneWeight', 'Stone Wt', 'Stone Weight', 'stone_weight', 'stone weight'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'stone_weight', type: 'decimal' },
@@ -62,18 +62,24 @@ export const DEFAULT_PRODUCT_IMPORT_MAPPINGS = [
   { headers: ['DiamondPieces', 'Diamond Pieces'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'diamond_pieces', type: 'integer' },
 
   // ── Pricing ──
-  { headers: ['GoldRate', 'Gold Rate', 'G.Rate', 'G Rate', 'g_rate', 'g rate'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'gold_rate', type: 'decimal' },
-  { headers: ['MakingCharge', 'Making Charge', 'Making Charges', 'making_charges', 'making charges'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'making_charge', type: 'decimal' },
+  { headers: ['GoldRate', 'Gold Rate', 'G.Rate', 'G Rate', 'GRate', 'g_rate', 'g rate', 'grate'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'gold_rate', type: 'decimal' },
+  { headers: ['MakingCharge', 'Making Charge', 'Making Charges', 'making_charges', 'making charges', 'MC', 'M.C.', 'M/C', 'mc'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'making_charge', type: 'decimal' },
+  { headers: ['MaxMC', 'Max MC', 'Max Mc', 'max_mc', 'max mc', 'MaxMakingCharge', 'Max Making Charge'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'max_mc', type: 'decimal' },
   { headers: ['MakingChargeType', 'Making Charge Type', 'making_charge_type', 'making charge type'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'making_charge_type', type: 'string' },
-  { headers: ['WastagePercentage', 'Wastage Percentage', 'WastagePercent', 'Wastage %', 'wastage_pct', 'wastage pct', 'wastage_percent'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'wastage_percentage', type: 'decimal' },
+  { headers: ['WastagePercentage', 'Wastage Percentage', 'WastagePercent', 'Wastage %', 'wastage_pct', 'wastage pct', 'wastage_percent', 'MinWasperGrm', 'Min Was per Grm', 'MinWasPerGrm', 'Min Wastage Per Grm', 'min_was_per_grm', 'min was per grm'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'wastage_percentage', type: 'decimal' },
   { headers: ['WastageAmount', 'Wastage Amount'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'wastage_amount', type: 'decimal' },
   { headers: ['StoneAmount', 'Stone Amount'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'stone_amount', type: 'decimal' },
   { headers: ['DiamondAmount', 'Diamond Amount'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'diamond_amount', type: 'decimal' },
   { headers: ['LabourCharge', 'Labour Charge', 'LaborCharge', 'Labor Charge'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'labour_charge', type: 'decimal' },
   { headers: ['PurchaseCost', 'Purchase Cost', 'CostPrice', 'Cost Price', 'purchase_rate', 'purchase rate', 'purchase_cost', 'Cost', 'cost'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'purchase_cost', type: 'decimal' },
-  { headers: ['SellingPrice', 'Selling Price', 'SalePrice', 'Sale Price', 'MRP', 'selling_price', 'selling price', 'Price', 'price', 'Net Value', 'net_value', 'net value', 'Total Value', 'total_value', 'total value'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'selling_price', type: 'decimal' },
+  { headers: ['SellingPrice', 'Selling Price', 'SalePrice', 'Sale Price', 'MRP', 'selling_price', 'selling price', 'Price', 'price', 'Amount', 'Amt', 'TotalAmount', 'Total Amount', 'NetAmt', 'Net Amt', 'Net Value', 'net_value', 'net value', 'Total Value', 'total_value', 'total value'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'selling_price', type: 'decimal' },
   { headers: ['GSTPercentage', 'GST Percentage', 'GSTPercent', 'GST %', 'Tax %', 'tax %', 'tax_pct', 'TaxPct'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'gst_percentage', type: 'decimal' },
   { headers: ['GSTAmount', 'GST Amount'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'gst_amount', type: 'decimal' },
+  { headers: ['SaleValue', 'Sale Value', 'sale_value', 'sale value'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'sale_value', type: 'decimal' },
+  { headers: ['Rate'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'rate', type: 'decimal' },
+  { headers: ['RateId', 'Rate ID', 'Rate Id', 'rate_id', 'rate id'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'rate_id', type: 'decimal' },
+  { headers: ['PerPcsValue', 'Per Pcs Value', 'PerPcs Value', 'per_pcs_value', 'per pcs value'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'per_pcs_value', type: 'decimal' },
+  { headers: ['PerGramValue', 'Per Gram Value', 'PerGram Value', 'per_gram_value', 'per gram value'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'per_gram_value', type: 'decimal' },
 
   // ── Inventory ──
   { headers: ['Company'], table: PRODUCT_IMPORT_TABLES.INVENTORY, field: 'company', type: 'string' },

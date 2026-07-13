@@ -54,15 +54,12 @@ export const getPrintDetails = async (req, res) => {
   const branchIds = await resolveDropdownBranchIds(req);
   const page = getRequestParam(req, "page");
   const limit = getRequestParam(req, "limit");
-  const extended = ["1", "true", "yes"].includes(
-    String(getRequestParam(req, "extended", "full") ?? "").trim().toLowerCase(),
-  );
   const { items, pagination } = await productService.getPrintDetails({
     tagNo: tagNo || null,
     branchIds,
     page,
     limit,
-    extended,
+    extended: true,
   });
 
   if (tagNo && items.length === 0) {

@@ -176,9 +176,43 @@ export const getCenters = (product, subProduct, branchIds = []) =>
 
 const toNumber = (value) => (value != null && value !== "" ? Number(value) : null);
 
+const preserveDecimal = (value, scale = null) => {
+  if (value == null || value === "") {
+    return null;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed || Number.isNaN(Number(trimmed))) {
+      return null;
+    }
+
+    return trimmed;
+  }
+
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    return null;
+  }
+
+  return scale == null ? String(value) : num.toFixed(scale);
+};
+
+const WEIGHT_DECIMAL_SCALE = 3;
+const MONEY_DECIMAL_SCALE = 2;
+
+const formatPercentage = (value) => {
+  const preserved = preserveDecimal(value, WEIGHT_DECIMAL_SCALE);
+  if (preserved == null) {
+    return null;
+  }
+
+  return `${preserved}%`;
+};
+
 const mapPrintDetailRow = (row, { branchName = null, productNameToProCode = null } = {}) => {
-  const grossWt = toNumber(row.gross_wt);
-  const netWt = toNumber(row.net_wt);
+  const grossWt = preserveDecimal(row.gross_wt, WEIGHT_DECIMAL_SCALE);
+  const netWt = preserveDecimal(row.net_wt, WEIGHT_DECIMAL_SCALE);
   const tagNo = row.tag_packet_no ?? null;
   const productName = row.product ?? null;
   const resolvedProCode = row.erp_pro_code != null
@@ -193,8 +227,8 @@ const mapPrintDetailRow = (row, { branchName = null, productNameToProCode = null
     tagNo,
     grossWt,
     netWt,
-    weightGram: toNumber(row.weight_gram),
-    weightCarat: toNumber(row.weight_carat),
+    weightGram: preserveDecimal(row.weight_gram, WEIGHT_DECIMAL_SCALE),
+    weightCarat: preserveDecimal(row.weight_carat, WEIGHT_DECIMAL_SCALE),
     pieces: toNumber(row.pieces),
     counterName: row.counter_name ?? null,
     proCode: resolvedProCode,
@@ -202,18 +236,28 @@ const mapPrintDetailRow = (row, { branchName = null, productNameToProCode = null
     metal: row.metal ?? null,
     grossWeight: grossWt,
     netWeight: netWt,
-    wastagePercentage: toNumber(row.wastage_percentage),
-    makingCharge: toNumber(row.making_charge),
-    goldRate: toNumber(row.gold_rate),
-    amount: toNumber(row.selling_price),
+    lessWt: preserveDecimal(row.less_weight, WEIGHT_DECIMAL_SCALE),
+    wastagePercentage: formatPercentage(row.wastage_percentage),
+    makingCharge: preserveDecimal(row.making_charge, MONEY_DECIMAL_SCALE),
+    maxMC: preserveDecimal(row.max_mc, MONEY_DECIMAL_SCALE),
+    goldRate: preserveDecimal(row.gold_rate, MONEY_DECIMAL_SCALE),
+    amount: preserveDecimal(row.selling_price, MONEY_DECIMAL_SCALE),
+    saleValue: preserveDecimal(row.sale_value, MONEY_DECIMAL_SCALE),
+    rate: preserveDecimal(row.rate, MONEY_DECIMAL_SCALE),
+    rateId: preserveDecimal(row.rate_id, MONEY_DECIMAL_SCALE),
+    perPcsValue: preserveDecimal(row.per_pcs_value, MONEY_DECIMAL_SCALE),
+    perGramValue: preserveDecimal(row.per_gram_value, MONEY_DECIMAL_SCALE),
     branchName: branchName ?? row.branch_name ?? null,
     qrCode: row.qr_code ?? tagNo,
   };
 };
 
+const PRINT_DETAILS_PRICING_JOIN = `
+  LEFT JOIN product_pricing pp ON pp.product_id = p.id
+`;
+
 const PRINT_DETAILS_EXTENSION_JOINS = `
   LEFT JOIN product_master pm ON pm.product_id = p.id
-  LEFT JOIN product_pricing pp ON pp.product_id = p.id
   LEFT JOIN product_tag_details ptd ON ptd.product_id = p.id
 `;
 
@@ -226,7 +270,12 @@ const PRINT_DETAILS_BASE_SELECT = `
   p.weight_gram,
   p.weight_carat,
   p.pieces,
-  p.counter_name
+  p.counter_name,
+  pp.sale_value,
+  pp.rate,
+  pp.rate_id,
+  pp.per_pcs_value,
+  pp.per_gram_value
 `;
 
 const PRINT_DETAILS_EXTENDED_SELECT = `
@@ -236,6 +285,8 @@ const PRINT_DETAILS_EXTENDED_SELECT = `
   pm.metal,
   pp.wastage_percentage,
   pp.making_charge,
+  pp.max_mc,
+  pp.less_weight,
   pp.gold_rate,
   pp.selling_price,
   ptd.qr_code
@@ -299,6 +350,7 @@ const getPrintDetails = async ({
       `SELECT
          ${PRINT_DETAILS_EXTENDED_SELECT}
        FROM products p
+       ${PRINT_DETAILS_PRICING_JOIN}
        ${PRINT_DETAILS_EXTENSION_JOINS}
        WHERE p.batch_id IN (${batchPlaceholders})
          AND ${TAGGED_PRODUCT_FILTER}
@@ -344,7 +396,9 @@ const getPrintDetails = async ({
   const selectClause = includeExtended
     ? PRINT_DETAILS_EXTENDED_SELECT
     : PRINT_DETAILS_BASE_SELECT;
-  const joinClause = includeExtended ? PRINT_DETAILS_EXTENSION_JOINS : "";
+  const joinClause = includeExtended
+    ? `${PRINT_DETAILS_PRICING_JOIN}${PRINT_DETAILS_EXTENSION_JOINS}`
+    : PRINT_DETAILS_PRICING_JOIN;
 
   const [rows] = await pool.execute(
     `SELECT

@@ -2,6 +2,9 @@ import ApiError from '../utils/ApiError.js';
 import productImportService from '../services/productImportService.js';
 import { getRequestParam } from '../utils/requestParams.js';
 import { IMPORT_MODES } from '../config/productImportColumnMapping.js';
+import { createFileLogger } from '../utils/fileLogger.js';
+
+const importLogger = createFileLogger('product-import');
 
 const isTruthyParam = (value) => {
   if (!value) {
@@ -73,7 +76,7 @@ export const importProducts = async (req, res) => {
   );
 
   if (isAsyncImport(req)) {
-    console.info('[product-import] upload received', {
+    importLogger.info('upload received', {
       fileName: req.file.originalname,
       fileSize: req.file.size,
       mimeType: req.file.mimetype,

@@ -89,6 +89,39 @@ const toNumber = (value, integer = false) => {
   return integer ? Math.trunc(num) : Math.round(num * 1000) / 1000;
 };
 
+export const normalizePrintRateValue = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    return null;
+  }
+
+  return Math.round(num * 100) / 100;
+};
+
+const PRINT_RATE_PRICING_FIELDS = [
+  'sale_value',
+  'rate',
+  'rate_id',
+  'per_pcs_value',
+  'per_gram_value',
+];
+
+export const sanitizePrintRatePricing = (record) => {
+  const pricing = record.product_pricing ?? {};
+
+  for (const field of PRINT_RATE_PRICING_FIELDS) {
+    if (field in pricing) {
+      pricing[field] = normalizePrintRateValue(pricing[field]);
+    }
+  }
+
+  record.product_pricing = pricing;
+};
+
 const EXCEL_SERIAL_MAX = 1_000_000;
 const EXCEL_UNIX_EPOCH_SERIAL = 25_569;
 
