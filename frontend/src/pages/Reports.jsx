@@ -25,7 +25,7 @@ const STATUS_OPTIONS = [
 ]
 
 const STAT_CARDS = [
-  { key: 'total', label: 'Total Tags', field: 'totalTags', variant: 'total' },
+  { key: 'total', label: 'Total Stock', field: 'totalStockCount', variant: 'total' },
   { key: 'found', label: 'Found', field: 'totalFound', variant: 'found' },
   { key: 'missing', label: 'Missing', field: 'totalMissing', variant: 'missing' },
   { key: 'new', label: 'New', field: 'totalNew', variant: 'new' },
@@ -208,7 +208,6 @@ export default function Reports() {
   const [error, setError] = useState('')
   const [filtersNotice, setFiltersNotice] = useState('')
   const [lastGeneratedKey, setLastGeneratedKey] = useState('')
-  const [rawRows, setRawRows] = useState([])
 
   const isBranchBlocked = hasNoBranches || /branch is not assigned/i.test(error)
   const isTodaySelected = selectedDate === getTodayDate()
@@ -222,16 +221,13 @@ export default function Reports() {
     return normalized.filter((value) => value !== 'ALL STATUSES')
   }, [selectedStatuses])
 
-  const isMultiStatus = statusValues.length > 1
-  const statusForApi = statusValues.length === 1 ? statusValues[0] : undefined
-
   const filterParams = useMemo(() => ({
     productNames: selectedProducts,
     subProductNames: selectedSubProducts,
     centerNames: selectedCounters,
-    status: statusForApi,
+    statuses: statusValues,
     date: selectedDate || undefined,
-  }), [selectedProducts, selectedSubProducts, selectedCounters, statusForApi, selectedDate])
+  }), [selectedProducts, selectedSubProducts, selectedCounters, statusValues, selectedDate])
 
   const currentFiltersKey = useMemo(() => JSON.stringify({
     productNames: [...(filterParams.productNames || [])].sort(),
@@ -354,22 +350,10 @@ export default function Reports() {
   }, [selectedProducts, selectedSubProducts, subProducts])
 
   function clearReportResults() {
-    setRawRows([])
     setRows([])
     setSummary(null)
     setPagination(null)
     setPage(1)
-  }
-
-  function buildSummaryFromRows(sourceRows) {
-    const totals = { totalFound: 0, totalMissing: 0, totalNew: 0, totalTags: 0 }
-    sourceRows.forEach((row) => {
-      if (row.status === 'FOUND') totals.totalFound += 1
-      else if (row.status === 'MISSING') totals.totalMissing += 1
-      else if (row.status === 'NEW') totals.totalNew += 1
-    })
-    totals.totalTags = totals.totalFound + totals.totalMissing + totals.totalNew
-    return totals
   }
 
   async function loadReport(nextPage = 1, limit = pageSize) {
@@ -389,19 +373,9 @@ export default function Reports() {
         limit,
       })
 
-      // Backend supports only one status filter. If multiple statuses are selected,
-      // we fetch without status and filter the returned page locally.
-      setRawRows(result.rows || [])
-      if (isMultiStatus) {
-        const filtered = (result.rows || []).filter((row) => statusValues.includes(row.status))
-        setRows(filtered)
-        setSummary(buildSummaryFromRows(filtered))
-        setPagination(null)
-      } else {
-        setRows(result.rows)
-        setSummary(result.summary)
-        setPagination(result.pagination)
-      }
+      setRows(result.rows)
+      setSummary(result.summary)
+      setPagination(result.pagination)
       setPage(nextPage)
       setHasSearched(true)
       if (nextPage === 1) {
@@ -433,7 +407,6 @@ export default function Reports() {
     setSelectedStatuses([])
     setSelectedDate(getTodayDate())
     setRows([])
-    setRawRows([])
     setSummary(null)
     setPagination(null)
     setPage(1)
@@ -467,7 +440,6 @@ export default function Reports() {
 
   async function handleExport(exportType, label) {
     if (!hasSearched || rows.length === 0) return
-    if (isMultiStatus) return
 
     setExporting(true)
     setError('')
@@ -669,11 +641,9 @@ export default function Reports() {
                   type="button"
                   className={`report-btn report-btn--export${exporting ? ' report-btn--loading' : ''}`}
                   onClick={handleExportExcel}
-                  disabled={exporting || loadingReport || rows.length === 0 || isMultiStatus}
+                  disabled={exporting || loadingReport || rows.length === 0}
                   title={
-                    isMultiStatus
-                      ? 'Excel export supports only a single status filter'
-                      : rows.length === 0
+                    rows.length === 0
                         ? 'No data to export'
                         : undefined
                   }

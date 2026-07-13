@@ -20,16 +20,24 @@ function normalizeNameArray(value) {
   return [];
 }
 
+function normalizeStatusArray(value) {
+  return normalizeNameArray(value)
+    .map((item) => item.toUpperCase())
+    .filter(Boolean);
+}
+
 export function buildReportFilters(filters = {}) {
   const productNames = normalizeNameArray(filters.productNames ?? filters.productName);
   const subProductNames = normalizeNameArray(filters.subProductNames ?? filters.subProductName);
   const centerNames = normalizeNameArray(filters.centerNames ?? filters.centerName);
+  const statuses = normalizeStatusArray(filters.statuses ?? filters.status);
 
   return {
     productNames,
     subProductNames,
     centerNames,
-    status: filters.status ? String(filters.status).trim().toUpperCase() : null,
+    statuses,
+    status: statuses.length === 1 ? statuses[0] : null,
     date: filters.date || null,
     page: filters.page ?? 1,
     limit: filters.limit ?? DEFAULT_PAGE_SIZE,
@@ -42,7 +50,7 @@ export function buildReportRequestBody(filters = {}) {
     productNames,
     subProductNames,
     centerNames,
-    status,
+    statuses,
     date,
     page,
     limit,
@@ -58,8 +66,8 @@ export function buildReportRequestBody(filters = {}) {
     centerNames,
   });
 
-  if (status) {
-    body.status = status;
+  if (statuses.length) {
+    body.statuses = statuses;
   }
   if (exportType) {
     body.export_type = exportType;
@@ -77,7 +85,6 @@ function alignSummaryWithStatusFilter(result, status) {
   const totalRows = Number(result.pagination?.totalRecords ?? 0);
   const summary = {
     ...result.summary,
-    totalTags: totalRows,
     totalFound: 0,
     totalMissing: 0,
     totalNew: 0,

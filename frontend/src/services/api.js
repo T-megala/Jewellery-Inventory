@@ -347,16 +347,13 @@ export async function apiFetchReport(path, params = {}, options = {}) {
       branchId: json.branchId ?? null,
       summary: daySummary
         ? {
+            totalStockCount: daySummary.totalStockCount ?? 0,
             totalFound: daySummary.foundCount ?? 0,
             totalMissing: daySummary.missingCount ?? 0,
             totalNew: daySummary.newCount ?? 0,
-            totalTags:
-              (daySummary.foundCount ?? 0)
-              + (daySummary.missingCount ?? 0)
-              + (daySummary.newCount ?? 0),
           }
         : {
-            totalTags: 0,
+            totalStockCount: 0,
             totalFound: 0,
             totalMissing: 0,
             totalNew: 0,
