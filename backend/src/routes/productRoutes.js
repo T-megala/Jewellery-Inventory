@@ -7,6 +7,10 @@ import { asyncHandler } from "../middleware/errorHandler.js";
 const router = express.Router();
 
 router.get("/products/list", asyncHandler(productController.getProductList));
+router.get(
+  "/products/list/export",
+  asyncHandler(productController.exportProductList),
+);
 router.get("/products", asyncHandler(productController.getProducts));
 router.get("/sub-products", asyncHandler(productController.getSubProducts));
 router.post("/sub-products", asyncHandler(productController.getSubProducts));

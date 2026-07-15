@@ -5,36 +5,36 @@
  *   'live'  → https://devjeweltrack.2cqr.in/api/v1
  */
 
-export const API_MODE = 'dev' // 'local' or 'live'
+export const API_MODE = "local"; // 'local' or 'live'
 
 const API_ORIGINS = {
-  local: 'http://localhost:5005',
-  dev: 'https://devjeweltrack.2cqr.in',
-  live: 'https://jtgoldhouse.2cqr.in',
-}
+  local: "http://localhost:5005",
+  dev: "https://devjeweltrack.2cqr.in",
+  live: "https://jtgoldhouse.2cqr.in",
+};
 
 /** Always use this prefix — all backend routes are under /api/v1 */
-export const API_V1_PREFIX = '/api/v1'
+export const API_V1_PREFIX = "/api/v1";
 
-export const API_ORIGIN = API_ORIGINS[API_MODE] ?? API_ORIGINS.local
+export const API_ORIGIN = API_ORIGINS[API_MODE] ?? API_ORIGINS.local;
 
 /** Full base URL including /api/v1 */
-export const API_BASE = `${API_ORIGIN}${API_V1_PREFIX}`
+export const API_BASE = `${API_ORIGIN}${API_V1_PREFIX}`;
 
 /**
  * Build a full API URL. Ensures /api/v1 is always present.
  * @param {string} path e.g. '/products/list' or 'products/import'
  */
-export function apiUrl(path = '') {
-  const segment = path.startsWith('/') ? path : `/${path}`
+export function apiUrl(path = "") {
+  const segment = path.startsWith("/") ? path : `/${path}`;
 
   if (segment.startsWith(API_V1_PREFIX)) {
-    return `${API_ORIGIN}${segment}`
+    return `${API_ORIGIN}${segment}`;
   }
 
-  return `${API_BASE}${segment}`
+  return `${API_BASE}${segment}`;
 }
 
 export function getApiModeLabel() {
-  return API_MODE === 'live' ? 'Live' : 'Local'
+  return API_MODE === "live" ? "Live" : "Local";
 }

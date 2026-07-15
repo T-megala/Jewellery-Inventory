@@ -331,6 +331,45 @@
   cursor: not-allowed;
 }
 
+.stock-btn--export {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 96px;
+  border: none;
+  background: linear-gradient(135deg, #c9971a, #b8860b);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(184, 134, 11, 0.22);
+}
+
+.stock-btn--export:hover:not(:disabled) {
+  color: #fff;
+  background: linear-gradient(135deg, #d4a21a, #c9971a);
+  border-color: transparent;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(184, 134, 11, 0.28);
+}
+
+.stock-btn--loading {
+  pointer-events: none;
+}
+
+.stock-btn__spin {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: stock-spin 0.7s linear infinite;
+}
+
+@keyframes stock-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (max-width: 640px) {
   .stock-meta {
     flex-direction: column;

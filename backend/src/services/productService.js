@@ -1,3 +1,4 @@
+import ExcelJS from "exceljs";
 import pool from "../config/database.js";
 import {
   getActiveBatchId,
@@ -13,6 +14,26 @@ import {
   buildBranchSqlFilter,
   normalizeBranchIds,
 } from "../utils/branchScope.js";
+
+const STOCK_EXCEL_COLUMNS = [
+  { header: "S.No", key: "sno", width: 8 },
+  { header: "Pro Code", key: "proCode", width: 12 },
+  { header: "Product", key: "product", width: 28 },
+  { header: "Tag No", key: "tagPacketNo", width: 16 },
+  { header: "Gross Wt", key: "grossWeight", width: 12 },
+  { header: "Net Wt", key: "netWeight", width: 12 },
+  { header: "Less Wt", key: "lessWt", width: 12 },
+  { header: "Wastage", key: "wastagePercentage", width: 12 },
+  { header: "Making Charge", key: "makingCharge", width: 14 },
+  { header: "Tran No", key: "tranNo", width: 12 },
+  { header: "Tran Date", key: "tranDate", width: 14 },
+  { header: "Branch", key: "branchName", width: 16 },
+  { header: "Sub Product", key: "subProduct", width: 22 },
+  { header: "Pieces", key: "pieces", width: 10 },
+  { header: "Counter", key: "counterName", width: 18 },
+  { header: "Size", key: "size", width: 10 },
+  { header: "Tag Type", key: "tagType", width: 12 },
+];
 
 const formatDateTime = (value) => {
   if (!value) return null;
@@ -465,7 +486,122 @@ const getPrintDetails = async ({
   };
 };
 
-export { getProductList, getPrintDetails };
+const getAllProductsForExport = async ({
+  search,
+  batchId = null,
+  branchIds = [],
+}) => {
+  const query = buildProductListQuery({ search, batchId, branchIds });
+
+  if (!query) {
+    return { data: [], totalRecords: 0 };
+  }
+
+  const { baseFrom, params } = query;
+
+  const [countRows] = await pool.execute(
+    `SELECT COUNT(*) AS totalRecords ${baseFrom}`,
+    params,
+  );
+
+  const totalRecords = Number(countRows[0].totalRecords);
+
+  if (totalRecords === 0) {
+    return { data: [], totalRecords: 0 };
+  }
+
+  const [rows] = await pool.execute(
+    `SELECT
+       p.id, p.batch_id, pub.branch_id, b.name AS branch_name,
+       p.tran_no, p.tran_date, p.product, p.sub_product, p.tag_packet_no,
+       p.pieces, p.gross_wt, p.net_wt, p.counter_name, p.size, p.tag_type,
+       p.item_pieces, p.weight_gram, p.weight_carat, p.created_at,
+       pp.less_weight, pp.wastage_percentage, pp.wastage_amount, pp.making_charge, pp.max_mc,
+       pm.erp_pro_code
+     ${baseFrom}
+     ORDER BY p.id DESC`,
+    params,
+  );
+
+  const productNameToProCode =
+    await erpProductCodeService.buildProductNameToCodeMap();
+
+  return {
+    totalRecords,
+    data: rows.map((row) => mapProductRow(row, { productNameToProCode })),
+  };
+};
+
+const buildStockExcelBuffer = async (rows) => {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet("Stock");
+
+  worksheet.columns = STOCK_EXCEL_COLUMNS;
+
+  const headerRow = worksheet.getRow(1);
+  headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
+  headerRow.fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: "FFB8860B" },
+  };
+
+  rows.forEach((row, index) => {
+    worksheet.addRow({
+      sno: index + 1,
+      proCode: row.proCode ?? "",
+      product: row.product ?? "",
+      tagPacketNo: row.tagPacketNo ?? "",
+      grossWeight: row.grossWeight ?? "",
+      netWeight: row.netWeight ?? "",
+      lessWt: row.lessWt ?? "",
+      wastagePercentage: row.wastagePercentage ?? "",
+      makingCharge: row.makingCharge ?? "",
+      tranNo: row.tranNo ?? "",
+      tranDate: row.tranDate ?? "",
+      branchName: row.branchName ?? "",
+      subProduct: row.subProduct ?? "",
+      pieces: row.pieces ?? "",
+      counterName: row.counterName ?? "",
+      size: row.size ?? "",
+      tagType: row.tagType ?? "",
+    });
+  });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
+};
+
+const getStockExportFileName = () => {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  return `stock-list-${stamp}.xlsx`;
+};
+
+const exportProductListExcel = async ({
+  search,
+  batchId = null,
+  branchIds = [],
+}) => {
+  const { data } = await getAllProductsForExport({
+    search,
+    batchId,
+    branchIds,
+  });
+
+  const buffer = await buildStockExcelBuffer(data);
+
+  return {
+    buffer,
+    contentType:
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    fileName: getStockExportFileName(),
+    rowCount: data.length,
+  };
+};
+
+export { getProductList, getPrintDetails, exportProductListExcel };
 
 export default {
   getProducts,
@@ -474,4 +610,5 @@ export default {
   getCenters,
   getProductList,
   getPrintDetails,
+  exportProductListExcel,
 };

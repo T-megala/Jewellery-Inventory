@@ -25,6 +25,25 @@ const sendSuccess = (res, data) => {
   });
 };
 
+const parseProductListFilters = async (req) => {
+  const search =
+    getRequestParam(req, "search") ??
+    (req.query.search ? String(req.query.search).trim() : null);
+  const batchIdValue =
+    getRequestParam(req, "batchId") ?? req.query.batchId ?? null;
+  const batchId = batchIdValue
+    ? Number.parseInt(String(batchIdValue), 10)
+    : null;
+
+  if (batchId !== null && (!Number.isInteger(batchId) || batchId < 1)) {
+    throw new ApiError(400, "batchId must be a positive integer");
+  }
+
+  const branchIds = await resolveRequestBranchIds(req);
+
+  return { search, batchId, branchIds };
+};
+
 export const getProductList = async (req, res) => {
   const page = parsePositiveInt(
     getRequestParam(req, "page") ?? req.query.page,
@@ -41,20 +60,7 @@ export const getProductList = async (req, res) => {
     throw new ApiError(400, "limit cannot exceed 100");
   }
 
-  const search =
-    getRequestParam(req, "search") ??
-    (req.query.search ? String(req.query.search).trim() : null);
-  const batchIdValue =
-    getRequestParam(req, "batchId") ?? req.query.batchId ?? null;
-  const batchId = batchIdValue
-    ? Number.parseInt(String(batchIdValue), 10)
-    : null;
-
-  if (batchId !== null && (!Number.isInteger(batchId) || batchId < 1)) {
-    throw new ApiError(400, "batchId must be a positive integer");
-  }
-
-  const branchIds = await resolveRequestBranchIds(req);
+  const { search, batchId, branchIds } = await parseProductListFilters(req);
 
   const result = await productService.getProductList({
     search,
@@ -74,6 +80,23 @@ export const getProductList = async (req, res) => {
     pagination: result.pagination,
     data: result.data,
   });
+};
+
+export const exportProductList = async (req, res) => {
+  const { search, batchId, branchIds } = await parseProductListFilters(req);
+
+  const file = await productService.exportProductListExcel({
+    search,
+    batchId,
+    branchIds,
+  });
+
+  res.setHeader("Content-Type", file.contentType);
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${file.fileName}"`,
+  );
+  return res.status(200).send(file.buffer);
 };
 
 export const getProducts = async (req, res) => {

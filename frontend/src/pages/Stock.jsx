@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import TablePagination, { DEFAULT_PAGE_SIZE } from '../components/TablePagination.jsx'
 import { useBranchScope } from '../hooks/useBranchScope.js'
 import { getUser, hasPermission, isAuthenticated, isLogoutInProgress } from '../services/auth.js'
-import { fetchProductList } from '../services/stock.js'
+import { downloadStockExport, fetchProductList } from '../services/stock.js'
 import './Module.css'
 import './Stock.css'
 
@@ -26,6 +26,7 @@ export default function Stock() {
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [loading, setLoading] = useState(true)
+  const [exporting, setExporting] = useState(false)
   const [error, setError] = useState('')
 
   const loadStock = useCallback(async (pageNum, searchTerm, limit = pageSize) => {
@@ -70,6 +71,19 @@ export default function Stock() {
   function handlePageSizeChange(nextSize) {
     setPageSize(nextSize)
     loadStock(1, search, nextSize)
+  }
+
+  async function handleExportExcel() {
+    setExporting(true)
+    setError('')
+
+    try {
+      await downloadStockExport({ search: search || undefined })
+    } catch (err) {
+      setError(err.message || 'Failed to export stock to Excel.')
+    } finally {
+      setExporting(false)
+    }
   }
 
   if (isLogoutInProgress()) {
@@ -132,6 +146,20 @@ export default function Stock() {
               {pagination.totalRecords.toLocaleString('en-IN')} item{pagination.totalRecords === 1 ? '' : 's'}
             </span>
           )}
+          <button
+            type="button"
+            className={`stock-btn stock-btn--export${exporting ? ' stock-btn--loading' : ''}`}
+            onClick={handleExportExcel}
+            disabled={exporting || loading || !pagination || pagination.totalRecords === 0}
+            title={
+              !pagination || pagination.totalRecords === 0
+                ? 'No data to export'
+                : 'Export stock to Excel'
+            }
+          >
+            {exporting && <span className="stock-btn__spin" aria-hidden="true" />}
+            Excel
+          </button>
         </div>
       </div>
 
