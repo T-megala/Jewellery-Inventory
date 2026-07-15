@@ -48,24 +48,10 @@ const describeGroupHeaderSkip = (legacy) => {
   return `Category or section header row "${product}" (no transaction or tag number)`;
 };
 
-const isNegativeNumber = (value) =>
-  value !== null && value !== undefined && Number(value) < 0;
-
-const isValidDateString = (value) => {
-  if (!value) {
-    return true;
-  }
-
-  const str = String(value).trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-    return false;
-  }
-
-  const date = new Date(`${str}T00:00:00`);
-  return !Number.isNaN(date.getTime());
-};
-
 /**
+ * Lightweight validation: product + tag/tran only.
+ * Weights, dates, and pricing are stored as mapped without extra checks.
+ *
  * @param {Record<string, Record<string, unknown>>} record
  * @param {number} rowNumber
  */
@@ -114,61 +100,6 @@ export const validateProductRecord = (record, rowNumber) => {
       row: rowNumber,
       field: 'tran_no',
       message: 'Transaction number or tag number is required',
-    });
-  }
-
-  if (
-    String(legacy.tran_no ?? '').trim() &&
-    !/^\d+$/.test(String(legacy.tran_no).trim())
-  ) {
-    errors.push({ row: rowNumber, field: 'tran_no', message: 'Invalid transaction number' });
-  }
-
-  if (legacy.tran_date && !isValidDateString(legacy.tran_date)) {
-    errors.push({ row: rowNumber, field: 'tran_date', message: 'Invalid transaction date' });
-  }
-
-  const weightFields = [
-    ['gross_wt', legacy.gross_wt],
-    ['net_wt', legacy.net_wt],
-    ['weight_gram', legacy.weight_gram],
-    ['weight_carat', legacy.weight_carat],
-  ];
-
-  for (const [field, value] of weightFields) {
-    if (isNegativeNumber(value)) {
-      errors.push({ row: rowNumber, field, message: `${field} cannot be negative` });
-    }
-  }
-
-  const printRateFields = [
-    'sale_value',
-    'rate',
-    'rate_id',
-    'per_pcs_value',
-    'per_gram_value',
-  ];
-
-  const pricing = record[PRODUCT_IMPORT_TABLES.PRICING] ?? {};
-  for (const [field, value] of Object.entries(pricing)) {
-    if (printRateFields.includes(field)) {
-      continue;
-    }
-
-    if (typeof value === 'number' && !Number.isFinite(value)) {
-      errors.push({ row: rowNumber, field, message: `Invalid numeric value for ${field}` });
-    }
-  }
-
-  if (
-    legacy.gross_wt !== null &&
-    legacy.net_wt !== null &&
-    Number(legacy.net_wt) > Number(legacy.gross_wt)
-  ) {
-    errors.push({
-      row: rowNumber,
-      field: 'net_wt',
-      message: 'Net weight cannot exceed gross weight',
     });
   }
 

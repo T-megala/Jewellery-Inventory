@@ -6,6 +6,7 @@ import {
 } from "../config/productImportColumnMapping.js";
 import {
   buildDynamicColumnMap,
+  buildFieldTypeLookup,
   findHeaderRowIndex,
   isProbableHeaderRow,
   mapRawRowToProductRecord,
@@ -13,7 +14,7 @@ import {
   validateRequiredHeaders,
 } from "./productImportMapper.js";
 
-const DEBUG = process.env.EXCEL_PARSE_DEBUG !== "false";
+const DEBUG = process.env.EXCEL_PARSE_DEBUG === "true";
 const STREAMING_THRESHOLD_BYTES = Number.parseInt(
   process.env.EXCEL_STREAMING_THRESHOLD_BYTES ?? `${1024 * 1024}`,
   10,
@@ -214,18 +215,40 @@ const worksheetToRows = (worksheet) => {
 
 const createParseContext = (mappings) => {
   const resolvedMappings = getProductImportMappings(mappings);
+  const fieldTypes = buildFieldTypeLookup(resolvedMappings);
 
   return {
     mappings: resolvedMappings,
+    fieldTypes,
     buildColumnMap(headers) {
       const columnMap = buildDynamicColumnMap(headers, resolvedMappings);
       validateRequiredHeaders(columnMap, REQUIRED_HEADER_FIELDS);
       return columnMap;
     },
     mapRow(rawRow, columnMap) {
-      return mapRawRowToProductRecord(rawRow, columnMap, resolvedMappings);
+      return mapRawRowToProductRecord(rawRow, columnMap, fieldTypes);
     },
   };
+};
+
+const isBlankRawRow = (rawRow) => {
+  if (!Array.isArray(rawRow) || rawRow.length === 0) {
+    return true;
+  }
+
+  for (const cell of rawRow) {
+    if (cell === null || cell === undefined || cell === "") {
+      continue;
+    }
+
+    if (typeof cell === "string" && !cell.trim()) {
+      continue;
+    }
+
+    return false;
+  }
+
+  return true;
 };
 
 const logHeaderScanFailure = (rows, mappings) => {
@@ -256,6 +279,11 @@ const parseRowsToResult = (rows, parseContext) => {
 
   for (let index = 0; index < dataRows.length; index += 1) {
     const rawRow = dataRows[index];
+
+    if (isBlankRawRow(rawRow)) {
+      continue;
+    }
+
     const record = parseContext.mapRow(rawRow, columnMap);
 
     parsedRows.push({
@@ -321,12 +349,20 @@ const parseWithExcelJSStreaming = async (buffer, parseContext) => {
 
         logExcel("header row found in stream", {
           rowNumber: row.number,
-          columnMap,
+          mappedFields: Object.values(columnMap).reduce(
+            (count, tableMap) => count + Object.keys(tableMap).length,
+            0,
+          ),
         });
         continue;
       }
 
       totalRowsInFile += 1;
+
+      if (isBlankRawRow(rawRow)) {
+        continue;
+      }
+
       const record = parseContext.mapRow(rawRow, columnMap);
 
       parsedRows.push({
@@ -427,19 +463,12 @@ export const parseStockExcel = async (buffer, options = {}) => {
     mappingCount: parseContext.mappings.length,
   });
 
-  const attempts = [];
-
-  if (fileBuffer.length >= STREAMING_THRESHOLD_BYTES) {
-    attempts.push("exceljs-stream");
-  } else {
-    attempts.push("exceljs-load");
-  }
-
-  attempts.push("exceljs-load", "exceljs-stream", "sheetjs-fallback");
+  // SheetJS is much faster on large JewelTrack exports; fall back to ExcelJS if needed.
+  const attempts = ["sheetjs-fallback", "exceljs-stream", "exceljs-load"];
 
   let lastError = null;
 
-  for (const strategy of [...new Set(attempts)]) {
+  for (const strategy of attempts) {
     try {
       if (strategy === "exceljs-load") {
         const workbook = await loadWorkbookWithExcelJS(fileBuffer);

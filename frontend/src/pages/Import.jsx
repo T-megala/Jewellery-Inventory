@@ -247,9 +247,9 @@ export default function Import() {
     setError('')
   }
 
-  const step1State = selectedFile ? 'done' : 'active'
+  const step1State = selectedFile || result ? 'done' : 'active'
   const step2State = result ? 'done' : selectedFile ? 'active' : 'pending'
-  const step3State = result ? 'active' : 'pending'
+  const step3State = result ? 'done' : 'pending'
   const progressValue = importStatus?.progress ?? 0
   const progressLabel = importStatus?.message
     || (isUploading ? 'Uploading file…' : 'Processing import…')

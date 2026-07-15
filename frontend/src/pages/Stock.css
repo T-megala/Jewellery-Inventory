@@ -265,35 +265,25 @@
   font-weight: 400;
 }
 
-/* numeric columns: Tran No, Pieces, Gross Wt, Net Wt */
-.stock-table th:nth-child(2),
-.stock-table td:nth-child(2),
-.stock-table th:nth-child(8),
-.stock-table td:nth-child(8),
-.stock-table th:nth-child(9),
-.stock-table td:nth-child(9),
-.stock-table th:nth-child(10),
-.stock-table td:nth-child(10) {
+.stock-cell--num {
   text-align: right;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.stock-cell--tag {
+  font-weight: 500;
+  color: #8b6914;
+  white-space: nowrap;
 }
 
 /* product emphasis */
-.stock-table td:nth-child(5) {
+.stock-table td:nth-child(3) {
   font-weight: 600;
   color: #1c1410;
-  max-width: 180px;
+  max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.stock-table td:nth-child(7) {
-  font-weight: 500;
-  color: #8b6914;
-}
-
-.stock-table td:nth-child(11) {
-  color: #5c4f3f;
 }
 
 .stock-empty {

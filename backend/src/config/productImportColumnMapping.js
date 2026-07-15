@@ -63,11 +63,13 @@ export const DEFAULT_PRODUCT_IMPORT_MAPPINGS = [
 
   // ── Pricing ──
   { headers: ['GoldRate', 'Gold Rate', 'G.Rate', 'G Rate', 'GRate', 'g_rate', 'g rate', 'grate'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'gold_rate', type: 'decimal' },
-  { headers: ['MakingCharge', 'Making Charge', 'Making Charges', 'making_charges', 'making charges', 'MC', 'M.C.', 'M/C', 'mc'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'making_charge', type: 'decimal' },
+  // MaxMc / MC → making charge (JewelTrack tag print field)
+  { headers: ['MakingCharge', 'Making Charge', 'Making Charges', 'making_charges', 'making charges', 'MC', 'M.C.', 'M/C', 'mc', 'MaxMC', 'Max Mc', 'Max MC', 'max_mc', 'max mc', 'MaxMakingCharge', 'Max Making Charge'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'making_charge', type: 'decimal' },
   { headers: ['MaxMC', 'Max MC', 'Max Mc', 'max_mc', 'max mc', 'MaxMakingCharge', 'Max Making Charge'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'max_mc', type: 'decimal' },
   { headers: ['MakingChargeType', 'Making Charge Type', 'making_charge_type', 'making charge type'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'making_charge_type', type: 'string' },
-  { headers: ['WastagePercentage', 'Wastage Percentage', 'WastagePercent', 'Wastage %', 'wastage_pct', 'wastage pct', 'wastage_percent', 'MinWasperGrm', 'Min Was per Grm', 'MinWasPerGrm', 'Min Wastage Per Grm', 'min_was_per_grm', 'min was per grm'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'wastage_percentage', type: 'decimal' },
-  { headers: ['WastageAmount', 'Wastage Amount'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'wastage_amount', type: 'decimal' },
+  // MaxWasPerGrm → wastage %; MaxWastage → wastage amount (separate Excel columns)
+  { headers: ['MaxWasPerGrm', 'Max Was Per Grm', 'MaxWasPerGrn', 'Max Was Per Grn', 'max_was_per_grm', 'max was per grm', 'max_was_per_grn', 'max was per grn', 'WasPerGrm', 'Was Per Grm', 'Wastage%', 'Wastage %', 'WastagePercent', 'Wastage Percent'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'wastage_percentage', type: 'decimal' },
+  { headers: ['MaxWastage', 'Max Wastage', 'max_wastage', 'max wastage', 'WastageAmount', 'Wastage Amount', 'Wastage'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'wastage_amount', type: 'decimal' },
   { headers: ['StoneAmount', 'Stone Amount'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'stone_amount', type: 'decimal' },
   { headers: ['DiamondAmount', 'Diamond Amount'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'diamond_amount', type: 'decimal' },
   { headers: ['LabourCharge', 'Labour Charge', 'LaborCharge', 'Labor Charge'], table: PRODUCT_IMPORT_TABLES.PRICING, field: 'labour_charge', type: 'decimal' },

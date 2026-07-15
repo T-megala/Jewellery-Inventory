@@ -13,6 +13,7 @@ import {
   VALID_IMPORT_MODES,
 } from '../config/productImportColumnMapping.js';
 import {
+  applyGroupHeaderInheritance,
   buildTaggedRowKey,
   enrichRecordFromProductCodes,
   flattenToLegacyProductRow,
@@ -39,7 +40,7 @@ const importLogger = createFileLogger('product-import');
 
 const BATCH_SIZE = Math.max(
   500,
-  Number.parseInt(process.env.IMPORT_BATCH_SIZE ?? '5000', 10) || 5000,
+  Number.parseInt(process.env.IMPORT_BATCH_SIZE ?? '2000', 10) || 2000,
 );
 
 const DEFER_POST_PROCESSING =
@@ -56,20 +57,8 @@ const logSkippedRows = (phase, { skipped, skippedRows }) => {
 
   logImport(`${phase}: ${skipped} row(s) skipped`, {
     skipped,
-    skippedRows,
+    sampleSkippedRows: skippedRows.slice(0, 20),
   });
-
-  for (const entry of skippedRows) {
-    logImport(`skipped row ${entry.row}: ${entry.message}`, {
-      row: entry.row,
-      reason: entry.reason,
-      product: entry.product,
-      subProduct: entry.subProduct,
-      tranNo: entry.tranNo,
-      tag: entry.tag,
-      barcode: entry.barcode,
-    });
-  }
 };
 
 const describeUpdateModeSkip = (tagKey, barcode) => {
@@ -128,9 +117,6 @@ const rowToProductValues = (batchId, legacyRow) => [
   legacyRow.weight_carat,
 ];
 
-const buildPlaceholders = (rowCount, columnCount) =>
-  Array.from({ length: rowCount }, () => `(${Array(columnCount).fill('?').join(', ')})`).join(', ');
-
 const syncTagDetails = (record) => {
   const products = record.products ?? {};
   const tagDetails = { ...(record.product_tag_details ?? {}) };
@@ -149,6 +135,7 @@ const syncTagDetails = (record) => {
 
 const enableBulkSession = async (connection) => {
   await connection.query('SET SESSION foreign_key_checks = 0');
+  await connection.query('SET SESSION unique_checks = 0');
 
   try {
     await connection.query('SET SESSION sql_log_bin = 0');
@@ -158,6 +145,7 @@ const enableBulkSession = async (connection) => {
 };
 
 const disableBulkSession = async (connection) => {
+  await connection.query('SET SESSION unique_checks = 1');
   await connection.query('SET SESSION foreign_key_checks = 1');
 
   try {
@@ -229,10 +217,11 @@ const processParsedRows = (parsedRows, productCodeLookup = null) => {
   const summary = createImportSummary();
   const duplicateTracker = createDuplicateTracker();
   const validRows = [];
+  const rowsWithInheritedPricing = applyGroupHeaderInheritance(parsedRows);
 
-  summary.totalRecords = parsedRows.length;
+  summary.totalRecords = rowsWithInheritedPricing.length;
 
-  for (const { record, rowNumber } of parsedRows) {
+  for (const { record, rowNumber } of rowsWithInheritedPricing) {
     enrichRecordFromProductCodes(record, productCodeLookup);
     syncTagDetails(record);
     sanitizePrintRatePricing(record);
@@ -289,12 +278,11 @@ const bulkInsertProducts = async (connection, batchId, rows) => {
     return { inserted: 0, productIds: [] };
   }
 
-  const placeholders = buildPlaceholders(rows.length, PRODUCT_INSERT_COLUMNS.length);
-  const values = rows.flatMap(({ legacy }) => rowToProductValues(batchId, legacy));
+  const values = rows.map(({ legacy }) => rowToProductValues(batchId, legacy));
 
   const [result] = await connection.query(
-    `INSERT INTO products (${PRODUCT_INSERT_COLUMNS.join(', ')}) VALUES ${placeholders}`,
-    values,
+    `INSERT INTO products (${PRODUCT_INSERT_COLUMNS.join(', ')}) VALUES ?`,
+    [values],
   );
 
   const firstId = Number(result.insertId);
@@ -304,42 +292,59 @@ const bulkInsertProducts = async (connection, batchId, rows) => {
   return { inserted: count, productIds };
 };
 
-const updateProductRow = async (connection, productId, legacyRow) => {
+const PRODUCT_UPDATE_COLUMNS = [
+  'id',
+  'tran_no',
+  'tran_date',
+  'product',
+  'sub_product',
+  'tag_packet_no',
+  'pieces',
+  'gross_wt',
+  'net_wt',
+  'counter_name',
+  'size',
+  'tag_type',
+  'item_pieces',
+  'weight_gram',
+  'weight_carat',
+];
+
+const PRODUCT_UPDATE_ASSIGNMENTS = PRODUCT_UPDATE_COLUMNS
+  .filter((column) => column !== 'id')
+  .map((column) => `${column} = VALUES(${column})`)
+  .join(', ');
+
+const bulkUpdateProducts = async (connection, rows) => {
+  if (rows.length === 0) {
+    return 0;
+  }
+
+  const updateValues = rows.map(({ productId, legacy }) => [
+    productId,
+    legacy.tran_no,
+    legacy.tran_date,
+    legacy.product,
+    legacy.sub_product,
+    legacy.tag_packet_no,
+    legacy.pieces,
+    legacy.gross_wt,
+    legacy.net_wt,
+    legacy.counter_name,
+    legacy.size,
+    legacy.tag_type,
+    legacy.item_pieces,
+    legacy.weight_gram,
+    legacy.weight_carat,
+  ]);
+
   await connection.query(
-    `UPDATE products SET
-      tran_no = ?,
-      tran_date = ?,
-      product = ?,
-      sub_product = ?,
-      tag_packet_no = ?,
-      pieces = ?,
-      gross_wt = ?,
-      net_wt = ?,
-      counter_name = ?,
-      size = ?,
-      tag_type = ?,
-      item_pieces = ?,
-      weight_gram = ?,
-      weight_carat = ?
-     WHERE id = ?`,
-    [
-      legacyRow.tran_no,
-      legacyRow.tran_date,
-      legacyRow.product,
-      legacyRow.sub_product,
-      legacyRow.tag_packet_no,
-      legacyRow.pieces,
-      legacyRow.gross_wt,
-      legacyRow.net_wt,
-      legacyRow.counter_name,
-      legacyRow.size,
-      legacyRow.tag_type,
-      legacyRow.item_pieces,
-      legacyRow.weight_gram,
-      legacyRow.weight_carat,
-      productId,
-    ],
+    `INSERT INTO products (${PRODUCT_UPDATE_COLUMNS.join(', ')}) VALUES ?
+     ON DUPLICATE KEY UPDATE ${PRODUCT_UPDATE_ASSIGNMENTS}`,
+    [updateValues],
   );
+
+  return rows.length;
 };
 
 const classifyRowsForMode = async (
@@ -407,12 +412,11 @@ const runChunkedInsert = async (
   progressEnd,
 ) => {
   if (rows.length === 0) {
-    return { inserted: 0, records: [] };
+    return { inserted: 0 };
   }
 
   const totalChunks = Math.ceil(rows.length / BATCH_SIZE);
   let inserted = 0;
-  const persisted = [];
 
   for (let index = 0; index < rows.length; index += BATCH_SIZE) {
     const chunk = rows.slice(index, index + BATCH_SIZE);
@@ -425,11 +429,6 @@ const runChunkedInsert = async (
     await bulkInsertNormalizedDetails(connection, productIds, chunk.map((row) => row.record));
 
     inserted += chunkInserted;
-    persisted.push(...chunk.map((row, chunkIndex) => ({
-      productId: productIds[chunkIndex],
-      record: row.record,
-      legacy: row.legacy,
-    })));
 
     if (onProgress) {
       const chunkIndex = Math.floor(index / BATCH_SIZE) + 1;
@@ -444,7 +443,7 @@ const runChunkedInsert = async (
     }
   }
 
-  return { inserted, records: persisted };
+  return { inserted };
 };
 
 const runChunkedUpdate = async (
@@ -464,10 +463,7 @@ const runChunkedUpdate = async (
   for (let index = 0; index < rows.length; index += BATCH_SIZE) {
     const chunk = rows.slice(index, index + BATCH_SIZE);
 
-    for (const row of chunk) {
-      await updateProductRow(connection, row.productId, row.legacy);
-    }
-
+    await bulkUpdateProducts(connection, chunk);
     await bulkUpsertNormalizedDetails(
       connection,
       chunk.map((row) => row.productId),

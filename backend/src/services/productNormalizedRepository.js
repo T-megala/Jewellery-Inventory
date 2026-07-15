@@ -30,9 +30,6 @@ const hasTableData = (table, data) => {
   return columns.some((column) => data[column] !== undefined && data[column] !== null);
 };
 
-const buildPlaceholders = (rowCount, columnCount) =>
-  Array.from({ length: rowCount }, () => `(${Array(columnCount).fill('?').join(', ')})`).join(', ');
-
 const buildInsertValues = (table, productIds, records) => {
   const columns = ['product_id', ...TABLE_COLUMNS[table]];
   const values = [];
@@ -61,12 +58,9 @@ const bulkInsertNormalizedTable = async (connection, table, productIds, records)
     return 0;
   }
 
-  const placeholders = buildPlaceholders(values.length, columns.length);
-  const flatValues = values.flat();
-
   await connection.query(
-    `INSERT INTO ${table} (${columns.join(', ')}) VALUES ${placeholders}`,
-    flatValues,
+    `INSERT INTO ${table} (${columns.join(', ')}) VALUES ?`,
+    [values],
   );
 
   return values.length;

@@ -10,6 +10,8 @@ import { normalizeDate, toLocalDateString } from './productBatchHelper.js';
  * @property {boolean} [required]
  * @property {boolean} [requiredColumn]
  * @property {number} [occurrence]
+ * @typedef {{ index: number, priority: number }} ColumnCandidate
+ * @typedef {Record<string, Record<string, ColumnCandidate[]>>} DynamicColumnMap
  */
 
 export const normalizeHeader = (value) =>
@@ -21,6 +23,50 @@ export const normalizeHeader = (value) =>
 
 const normalizeMappingHeader = (header) => normalizeHeader(header);
 
+/** Prefer MaxWasPerGrm for %; MaxWastage for amount when aliases collide. */
+const getWastageHeaderPriority = (normalizedHeader, field) => {
+  if (field === 'wastage_percentage') {
+    if (
+      normalizedHeader.includes('maxwaspergr') ||
+      normalizedHeader.includes('waspergr') ||
+      normalizedHeader.includes('wastagepercent') ||
+      normalizedHeader.includes('wastagepct') ||
+      normalizedHeader === 'wastage%'
+    ) {
+      return 100;
+    }
+
+    if (normalizedHeader.startsWith('min')) {
+      return 10;
+    }
+
+    return 50;
+  }
+
+  // wastage_amount: prefer MaxWastage / WastageAmount
+  if (
+    normalizedHeader === 'maxwastage' ||
+    normalizedHeader.includes('wastageamount') ||
+    normalizedHeader === 'wastage'
+  ) {
+    return 100;
+  }
+
+  if (normalizedHeader.startsWith('min')) {
+    return 10;
+  }
+
+  return 50;
+};
+
+const getHeaderPriority = (normalizedHeader, field) => {
+  if (field === 'wastage_percentage' || field === 'wastage_amount') {
+    return getWastageHeaderPriority(normalizedHeader, field);
+  }
+
+  return 0;
+};
+
 const buildHeaderLookup = (mappings) => {
   const lookup = new Map();
 
@@ -28,7 +74,11 @@ const buildHeaderLookup = (mappings) => {
     for (const header of entry.headers) {
       const key = normalizeMappingHeader(header);
       const list = lookup.get(key) ?? [];
-      list.push(entry);
+
+      if (!list.includes(entry)) {
+        list.push(entry);
+      }
+
       lookup.set(key, list);
     }
   }
@@ -36,14 +86,25 @@ const buildHeaderLookup = (mappings) => {
   return lookup;
 };
 
+const sortColumnCandidates = (candidates) =>
+  [...candidates].sort((left, right) => {
+    if (right.priority !== left.priority) {
+      return right.priority - left.priority;
+    }
+
+    // Same priority: prefer later Excel columns (previous last-wins behavior).
+    return right.index - left.index;
+  });
+
 /**
  * @param {string[]} headers
  * @param {ColumnMappingEntry[]} mappings
+ * @returns {DynamicColumnMap}
  */
 export const buildDynamicColumnMap = (headers, mappings) => {
   const headerLookup = buildHeaderLookup(mappings);
   const occurrenceCounters = new Map();
-  /** @type {Record<string, Record<string, number>>} */
+  /** @type {DynamicColumnMap} */
   const columnMap = {};
 
   headers.forEach((header, index) => {
@@ -69,11 +130,37 @@ export const buildDynamicColumnMap = (headers, mappings) => {
         columnMap[entry.table] = {};
       }
 
-      columnMap[entry.table][entry.field] = index;
+      const candidates = columnMap[entry.table][entry.field] ?? [];
+      candidates.push({
+        index,
+        priority: getHeaderPriority(key, entry.field),
+      });
+      columnMap[entry.table][entry.field] = candidates;
     }
   });
 
+  for (const tableMap of Object.values(columnMap)) {
+    for (const field of Object.keys(tableMap)) {
+      tableMap[field] = sortColumnCandidates(tableMap[field]);
+    }
+  }
+
   return columnMap;
+};
+
+const resolveColumnCandidates = (tableMap, field) => {
+  const candidates = tableMap?.[field];
+
+  if (!candidates) {
+    return [];
+  }
+
+  if (Array.isArray(candidates)) {
+    return candidates;
+  }
+
+  // Backward-compatible single index
+  return [{ index: candidates, priority: 0 }];
 };
 
 const toNumber = (value, integer = false) => {
@@ -172,6 +259,25 @@ const coerceDate = (value) => {
   return normalizeDate(value);
 };
 
+const parseDecimalInput = (value) => {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    const percentMatch = trimmed.match(/^(-?\d+(?:\.\d+)?)\s*%$/);
+
+    if (percentMatch) {
+      return toNumber(percentMatch[1], false);
+    }
+
+    const normalized = trimmed.replace(/,/g, '');
+
+    if (normalized !== trimmed) {
+      return toNumber(normalized, false);
+    }
+  }
+
+  return toNumber(value, false);
+};
+
 const coerceValue = (value, type = 'string') => {
   if (value === null || value === undefined || value === '') {
     return null;
@@ -181,7 +287,7 @@ const coerceValue = (value, type = 'string') => {
     case 'integer':
       return toNumber(value, true);
     case 'decimal':
-      return toNumber(value, false);
+      return parseDecimalInput(value);
     case 'date':
       return coerceDate(value);
     default:
@@ -198,11 +304,29 @@ const getCell = (row, index) => {
 };
 
 /**
- * @param {unknown[]} rawRow
- * @param {Record<string, Record<string, number>>} columnMap
+ * Precompute field → type so row mapping only walks detected columns.
  * @param {ColumnMappingEntry[]} mappings
+ * @returns {Map<string, ColumnValueType>}
  */
-export const mapRawRowToProductRecord = (rawRow, columnMap, mappings) => {
+export const buildFieldTypeLookup = (mappings) => {
+  const lookup = new Map();
+
+  for (const entry of mappings) {
+    const key = `${entry.table}.${entry.field}`;
+    if (!lookup.has(key)) {
+      lookup.set(key, entry.type ?? 'string');
+    }
+  }
+
+  return lookup;
+};
+
+/**
+ * @param {unknown[]} rawRow
+ * @param {DynamicColumnMap} columnMap
+ * @param {Map<string, ColumnValueType> | ColumnMappingEntry[]} fieldTypesOrMappings
+ */
+export const mapRawRowToProductRecord = (rawRow, columnMap, fieldTypesOrMappings) => {
   /** @type {Record<string, Record<string, unknown>>} */
   const record = {
     products: {},
@@ -212,19 +336,31 @@ export const mapRawRowToProductRecord = (rawRow, columnMap, mappings) => {
     product_tag_details: {},
   };
 
-  for (const entry of mappings) {
-    const tableMap = columnMap[entry.table];
-    const columnIndex = tableMap?.[entry.field];
+  const fieldTypes = Array.isArray(fieldTypesOrMappings)
+    ? buildFieldTypeLookup(fieldTypesOrMappings)
+    : fieldTypesOrMappings;
 
-    if (columnIndex === undefined) {
-      continue;
+  for (const [table, fields] of Object.entries(columnMap)) {
+    if (!record[table]) {
+      record[table] = {};
     }
 
-    const rawValue = getCell(rawRow, columnIndex);
-    const coerced = coerceValue(rawValue, entry.type ?? 'string');
+    for (const [field, candidateList] of Object.entries(fields)) {
+      const candidates = resolveColumnCandidates(fields, field);
+      if (candidates.length === 0) {
+        continue;
+      }
 
-    if (coerced !== null && coerced !== '') {
-      record[entry.table][entry.field] = coerced;
+      const type = fieldTypes.get(`${table}.${field}`) ?? 'string';
+
+      for (const candidate of candidates) {
+        const coerced = coerceValue(getCell(rawRow, candidate.index), type);
+
+        if (coerced !== null && coerced !== '') {
+          record[table][field] = coerced;
+          break;
+        }
+      }
     }
   }
 
@@ -318,10 +454,98 @@ export const enrichRecordFromProductCodes = (record, lookup = null) => {
   record.products = products;
 };
 
-export const hasNormalizedData = (record) => {
-  const tables = ['product_master', 'product_inventory', 'product_pricing', 'product_tag_details'];
+export const INHERITABLE_IMPORT_TABLES = [
+  'product_master',
+  'product_inventory',
+  'product_pricing',
+  'product_tag_details',
+];
 
-  return tables.some((table) => {
+export const createEmptyImportContext = () =>
+  Object.fromEntries(INHERITABLE_IMPORT_TABLES.map((table) => [table, {}]));
+
+/**
+ * Merge group-header context into a tag/data row.
+ * Row values win; empty fields inherit from the header (e.g. MaxWasPerGrm, MaxMc).
+ */
+export const mergeRecordContext = (context, record) => {
+  /** @type {Record<string, Record<string, unknown>>} */
+  const merged = { ...record };
+
+  for (const table of INHERITABLE_IMPORT_TABLES) {
+    merged[table] = {
+      ...(context[table] ?? {}),
+      ...(record[table] ?? {}),
+    };
+  }
+
+  return merged;
+};
+
+export const mergeIntoImportContext = (context, record, { lockFields = [] } = {}) => {
+  const locked = new Set(lockFields);
+
+  for (const table of INHERITABLE_IMPORT_TABLES) {
+    const incoming = record[table] ?? {};
+
+    if (Object.keys(incoming).length === 0) {
+      continue;
+    }
+
+    const current = { ...(context[table] ?? {}) };
+
+    for (const [field, value] of Object.entries(incoming)) {
+      if (locked.has(field) && current[field] !== undefined && current[field] !== null) {
+        continue;
+      }
+
+      current[field] = value;
+    }
+
+    context[table] = current;
+  }
+
+  return context;
+};
+
+/**
+ * MaxWasPerGrm / MaxMc / MaxWastage from group headers fill empty tag-row cells.
+ * Tag-row values always win when present (store Excel values as-is; no recalculation).
+ *
+ * @param {{ record: Record<string, Record<string, unknown>>, rowNumber: number }[]} parsedRows
+ */
+export const applyGroupHeaderInheritance = (parsedRows) => {
+  let context = createEmptyImportContext();
+  let currentProductKey = null;
+  const lockPricingFields = ['wastage_percentage', 'wastage_amount', 'making_charge', 'max_mc'];
+
+  return parsedRows.map(({ record, rowNumber }) => {
+    const legacy = flattenToLegacyProductRow(record);
+
+    if (isGroupHeaderRow(legacy)) {
+      const productKey = String(legacy.product ?? '').trim().toLowerCase();
+      const isNewProduct = Boolean(productKey && productKey !== currentProductKey);
+
+      if (isNewProduct) {
+        context = createEmptyImportContext();
+        currentProductKey = productKey;
+      }
+
+      mergeIntoImportContext(context, record, {
+        lockFields: isNewProduct ? [] : lockPricingFields,
+      });
+      return { record, rowNumber };
+    }
+
+    return {
+      record: mergeRecordContext(context, record),
+      rowNumber,
+    };
+  });
+};
+
+export const hasNormalizedData = (record) => {
+  return INHERITABLE_IMPORT_TABLES.some((table) => {
     const data = record[table];
     return data && Object.keys(data).length > 0;
   });
@@ -366,7 +590,10 @@ export const isDataRowCandidate = (legacyRow) => {
 
 export const validateRequiredHeaders = (columnMap, requiredFields) => {
   const productsMap = columnMap.products ?? {};
-  const missing = requiredFields.filter((field) => productsMap[field] === undefined);
+  const missing = requiredFields.filter((field) => {
+    const candidates = resolveColumnCandidates(productsMap, field);
+    return candidates.length === 0;
+  });
 
   if (missing.length > 0) {
     throw new Error(
@@ -374,8 +601,8 @@ export const validateRequiredHeaders = (columnMap, requiredFields) => {
     );
   }
 
-  const hasTran = productsMap.tran_no !== undefined;
-  const hasTag = productsMap.tag_packet_no !== undefined;
+  const hasTran = resolveColumnCandidates(productsMap, 'tran_no').length > 0;
+  const hasTag = resolveColumnCandidates(productsMap, 'tag_packet_no').length > 0;
 
   if (!hasTran && !hasTag) {
     throw new Error(

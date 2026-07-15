@@ -166,15 +166,19 @@ export default function Stock() {
                 <thead>
                   <tr>
                     <th>S.No</th>
+                    <th>Pro Code</th>
+                    <th>Product</th>
+                    <th>Tag No</th>
+                    <th>Gross Wt</th>
+                    <th>Net Wt</th>
+                    <th>Less Wt</th>
+                    <th>Wastage</th>
+                    <th>Making Charge</th>
                     <th>Tran No</th>
                     <th>Tran Date</th>
                     <th>Branch</th>
-                    <th>Product</th>
                     <th>Sub Product</th>
-                    <th>Tag / Packet No</th>
                     <th>Pieces</th>
-                    <th>Gross Wt</th>
-                    <th>Net Wt</th>
                     <th>Counter</th>
                     <th>Size</th>
                     <th>Tag Type</th>
@@ -184,15 +188,19 @@ export default function Stock() {
                   {rows.map((row, index) => (
                     <tr key={row.id}>
                       <td className="stock-cell--sno">{(page - 1) * pageSize + index + 1}</td>
+                      <td className="stock-cell--num">{formatValue(row.proCode)}</td>
+                      <td>{formatValue(row.product)}</td>
+                      <td className="stock-cell--tag">{formatValue(row.tagPacketNo ?? row.tagNo)}</td>
+                      <td className="stock-cell--num">{formatValue(row.grossWeight ?? row.grossWt)}</td>
+                      <td className="stock-cell--num">{formatValue(row.netWeight ?? row.netWt)}</td>
+                      <td className="stock-cell--num">{formatValue(row.lessWt)}</td>
+                      <td className="stock-cell--num">{formatValue(row.wastagePercentage)}</td>
+                      <td className="stock-cell--num">{formatValue(row.makingCharge ?? row.maxMC)}</td>
                       <td>{formatValue(row.tranNo)}</td>
                       <td>{formatValue(row.tranDate)}</td>
                       <td>{formatValue(row.branchName)}</td>
-                      <td>{formatValue(row.product)}</td>
                       <td>{formatValue(row.subProduct)}</td>
-                      <td>{formatValue(row.tagPacketNo)}</td>
-                      <td>{formatValue(row.pieces)}</td>
-                      <td>{formatValue(row.grossWt)}</td>
-                      <td>{formatValue(row.netWt)}</td>
+                      <td className="stock-cell--num">{formatValue(row.pieces)}</td>
                       <td>{formatValue(row.counterName)}</td>
                       <td>{formatValue(row.size)}</td>
                       <td>{formatValue(row.tagType)}</td>

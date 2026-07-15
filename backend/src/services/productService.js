@@ -24,7 +24,67 @@ const formatDateTime = (value) => {
 
 const formatDate = (value) => formatCalendarDate(value);
 
-const mapProductRow = (row) => ({
+const toNumber = (value) => (value != null && value !== "" ? Number(value) : null);
+
+const preserveDecimal = (value, scale = null) => {
+  if (value == null || value === "") {
+    return null;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed || Number.isNaN(Number(trimmed))) {
+      return null;
+    }
+
+    return trimmed;
+  }
+
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    return null;
+  }
+
+  return scale == null ? String(value) : num.toFixed(scale);
+};
+
+const WEIGHT_DECIMAL_SCALE = 3;
+const MONEY_DECIMAL_SCALE = 2;
+
+const formatWastagePercentage = (value) => {
+  const preserved = preserveDecimal(value, WEIGHT_DECIMAL_SCALE);
+  if (preserved == null) {
+    return null;
+  }
+
+  return `${preserved}%`;
+};
+
+const resolveProCode = (row, productNameToProCode = null) => {
+  if (productNameToProCode?.size) {
+    for (const name of [row.product, row.sub_product]) {
+      if (!name) {
+        continue;
+      }
+
+      const code = productNameToProCode.get(String(name).trim().toUpperCase());
+      if (code != null) {
+        return code;
+      }
+    }
+  }
+
+  if (row.erp_pro_code != null && row.erp_pro_code !== '') {
+    const code = Number(row.erp_pro_code);
+    if (Number.isFinite(code)) {
+      return code;
+    }
+  }
+
+  return null;
+};
+
+const mapProductRow = (row, { productNameToProCode = null } = {}) => ({
   id: row.id,
   batchId: row.batch_id,
   branchId: row.branch_id ? Number(row.branch_id) : null,
@@ -32,11 +92,21 @@ const mapProductRow = (row) => ({
   tranNo: row.tran_no,
   tranDate: formatDate(row.tran_date),
   product: row.product,
+  productName: row.product ?? null,
   subProduct: row.sub_product,
   tagPacketNo: row.tag_packet_no,
+  tagNo: row.tag_packet_no ?? null,
   pieces: row.pieces,
   grossWt: row.gross_wt,
+  grossWeight: preserveDecimal(row.gross_wt, WEIGHT_DECIMAL_SCALE),
   netWt: row.net_wt,
+  netWeight: preserveDecimal(row.net_wt, WEIGHT_DECIMAL_SCALE),
+  lessWt: preserveDecimal(row.less_weight, WEIGHT_DECIMAL_SCALE),
+  wastagePercentage: formatWastagePercentage(row.wastage_percentage),
+  wastageAmount: preserveDecimal(row.wastage_amount, WEIGHT_DECIMAL_SCALE),
+  makingCharge: preserveDecimal(row.making_charge ?? row.max_mc, MONEY_DECIMAL_SCALE),
+  maxMC: preserveDecimal(row.max_mc, MONEY_DECIMAL_SCALE),
+  proCode: resolveProCode(row, productNameToProCode),
   counterName: row.counter_name,
   size: row.size,
   tagType: row.tag_type,
@@ -70,6 +140,10 @@ const buildSearchClause = (search) => {
 const buildProductListQuery = ({ search, batchId = null, branchIds = [] }) => {
   const { clause: searchClause, params: searchParams } =
     buildSearchClause(search);
+  const pricingJoin = `
+    LEFT JOIN product_pricing pp ON pp.product_id = p.id
+    LEFT JOIN product_master pm ON pm.product_id = p.id
+  `;
 
   if (batchId) {
     return {
@@ -77,6 +151,7 @@ const buildProductListQuery = ({ search, batchId = null, branchIds = [] }) => {
         FROM products p
         INNER JOIN product_upload_batches pub ON pub.id = p.batch_id
         LEFT JOIN branches b ON b.id = pub.branch_id
+        ${pricingJoin}
         WHERE ${batchAllProductsWhere.replace("batch_id = ?", "p.batch_id = ?")}
         ${searchClause}
       `,
@@ -97,6 +172,7 @@ const buildProductListQuery = ({ search, batchId = null, branchIds = [] }) => {
     baseFrom: `
       ${activeBranchProductsJoin("pub")}
       LEFT JOIN branches b ON b.id = pub.branch_id
+      ${pricingJoin}
       WHERE ${activeBranchProductsWhere}
       ${branchFilter.clause}
       ${searchClause}
@@ -141,7 +217,9 @@ const getProductList = async ({
        p.id, p.batch_id, pub.branch_id, b.name AS branch_name,
        p.tran_no, p.tran_date, p.product, p.sub_product, p.tag_packet_no,
        p.pieces, p.gross_wt, p.net_wt, p.counter_name, p.size, p.tag_type,
-       p.item_pieces, p.weight_gram, p.weight_carat, p.created_at
+       p.item_pieces, p.weight_gram, p.weight_carat, p.created_at,
+       pp.less_weight, pp.wastage_percentage, pp.wastage_amount, pp.making_charge, pp.max_mc,
+       pm.erp_pro_code
      ${baseFrom}
      ORDER BY p.id DESC
      LIMIT ${limit} OFFSET ${offset}`,
@@ -154,11 +232,13 @@ const getProductList = async ({
     resolvedBatchId = await getActiveBatchId(scope[0]);
   }
 
+  const productNameToProCode = await erpProductCodeService.buildProductNameToCodeMap();
+
   return {
     batchId: resolvedBatchId,
     branchIds: scope,
     pagination: { page, limit, totalRecords, totalPages },
-    data: rows.map(mapProductRow),
+    data: rows.map((row) => mapProductRow(row, { productNameToProCode })),
   };
 };
 
@@ -174,52 +254,11 @@ export const getSubProducts = (product, branchIds = []) =>
 export const getCenters = (product, subProduct, branchIds = []) =>
   inventoryDropdownService.getCenters(product, subProduct, { branchIds });
 
-const toNumber = (value) => (value != null && value !== "" ? Number(value) : null);
-
-const preserveDecimal = (value, scale = null) => {
-  if (value == null || value === "") {
-    return null;
-  }
-
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    if (!trimmed || Number.isNaN(Number(trimmed))) {
-      return null;
-    }
-
-    return trimmed;
-  }
-
-  const num = Number(value);
-  if (!Number.isFinite(num)) {
-    return null;
-  }
-
-  return scale == null ? String(value) : num.toFixed(scale);
-};
-
-const WEIGHT_DECIMAL_SCALE = 3;
-const MONEY_DECIMAL_SCALE = 2;
-
-const formatPercentage = (value) => {
-  const preserved = preserveDecimal(value, WEIGHT_DECIMAL_SCALE);
-  if (preserved == null) {
-    return null;
-  }
-
-  return `${preserved}%`;
-};
-
 const mapPrintDetailRow = (row, { branchName = null, productNameToProCode = null } = {}) => {
   const grossWt = preserveDecimal(row.gross_wt, WEIGHT_DECIMAL_SCALE);
   const netWt = preserveDecimal(row.net_wt, WEIGHT_DECIMAL_SCALE);
   const tagNo = row.tag_packet_no ?? null;
   const productName = row.product ?? null;
-  const resolvedProCode = row.erp_pro_code != null
-    ? Number(row.erp_pro_code)
-    : (productName && productNameToProCode
-      ? productNameToProCode.get(String(productName).trim().toUpperCase()) ?? null
-      : null);
 
   return {
     productName,
@@ -231,14 +270,15 @@ const mapPrintDetailRow = (row, { branchName = null, productNameToProCode = null
     weightCarat: preserveDecimal(row.weight_carat, WEIGHT_DECIMAL_SCALE),
     pieces: toNumber(row.pieces),
     counterName: row.counter_name ?? null,
-    proCode: resolvedProCode,
+    proCode: resolveProCode(row, productNameToProCode),
     purity: row.purity ?? null,
     metal: row.metal ?? null,
     grossWeight: grossWt,
     netWeight: netWt,
     lessWt: preserveDecimal(row.less_weight, WEIGHT_DECIMAL_SCALE),
-    wastagePercentage: formatPercentage(row.wastage_percentage),
-    makingCharge: preserveDecimal(row.making_charge, MONEY_DECIMAL_SCALE),
+    wastagePercentage: formatWastagePercentage(row.wastage_percentage),
+    wastageAmount: preserveDecimal(row.wastage_amount, WEIGHT_DECIMAL_SCALE),
+    makingCharge: preserveDecimal(row.making_charge ?? row.max_mc, MONEY_DECIMAL_SCALE),
     maxMC: preserveDecimal(row.max_mc, MONEY_DECIMAL_SCALE),
     goldRate: preserveDecimal(row.gold_rate, MONEY_DECIMAL_SCALE),
     amount: preserveDecimal(row.selling_price, MONEY_DECIMAL_SCALE),
@@ -284,6 +324,7 @@ const PRINT_DETAILS_EXTENDED_SELECT = `
   pm.purity,
   pm.metal,
   pp.wastage_percentage,
+  pp.wastage_amount,
   pp.making_charge,
   pp.max_mc,
   pp.less_weight,
