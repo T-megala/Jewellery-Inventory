@@ -1,5 +1,6 @@
 import pool from '../config/database.js';
 import { getActiveBatchId } from './productBatchService.js';
+import { TAG_FILTER } from '../utils/productQueryHelper.js';
 import {
   ALL_SCOPE_ID,
   SCOPE_NAMES,
@@ -169,8 +170,56 @@ const getCenters = async (
   return [{ id: ALL_SCOPE_ID, name: SCOPE_NAMES.ALL_CENTERS }, ...centers];
 };
 
+/**
+ * Tagged inventory count for active batch(es) in the given branch scope.
+ * Optionally scoped by product / sub-product (Android dropdown APIs).
+ */
+const getLocationStockCount = async ({
+  branchId = null,
+  branchIds = null,
+  product = null,
+  subProduct = null,
+} = {}) => {
+  const scope = await buildInventoryScope({ branchId, branchIds });
+
+  if (!scope) {
+    return 0;
+  }
+
+  const filters = [];
+  const params = [];
+
+  if (product && !isAllProductsByName(product)) {
+    filters.push('AND p.product = ?');
+    params.push(product);
+
+    if (subProduct && !isAllSubProductsByName(subProduct)) {
+      filters.push('AND p.sub_product = ?');
+      params.push(subProduct);
+    }
+  }
+
+  const taggedFilter = TAG_FILTER.replace(/\n\s*/g, ' ').replace(
+    /tag_packet_no/g,
+    'p.tag_packet_no',
+  );
+
+  const [rows] = await pool.execute(
+    `SELECT COUNT(*) AS locationStockCount
+     ${scope.from}
+     WHERE ${activeBranchProductsWhere}
+     ${scope.clause}
+     ${filters.join(' ')}
+       AND ${taggedFilter}`,
+    [...scope.params, ...params],
+  );
+
+  return Number(rows[0]?.locationStockCount ?? 0);
+};
+
 export default {
   getProducts,
   getSubProducts,
   getCenters,
+  getLocationStockCount,
 };

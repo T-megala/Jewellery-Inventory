@@ -46,6 +46,99 @@ const BATCH_SIZE = Math.max(
 const DEFER_POST_PROCESSING =
   process.env.IMPORT_DEFER_POST_PROCESSING !== 'false';
 
+const LOCK_WAIT_MAX_RETRIES = Math.max(
+  1,
+  Number.parseInt(process.env.IMPORT_LOCK_WAIT_RETRIES ?? '3', 10) || 3,
+);
+
+const LOCK_WAIT_RETRY_DELAY_MS = Math.max(
+  250,
+  Number.parseInt(process.env.IMPORT_LOCK_WAIT_RETRY_MS ?? '2000', 10) || 2000,
+);
+
+/** One active Excel import per branch (in-process mutex). */
+const branchImportLocks = new Map();
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isLockWaitError = (error) => {
+  const code = String(error?.code ?? error?.errno ?? '');
+  const message = String(error?.message ?? '').toLowerCase();
+  return (
+    code === 'ER_LOCK_WAIT_TIMEOUT' ||
+    code === '1205' ||
+    message.includes('lock wait timeout') ||
+    message.includes('deadlock found')
+  );
+};
+
+const acquireBranchImportLock = (branchId, ownerId) => {
+  const key = Number(branchId) || 0;
+  const existing = branchImportLocks.get(key);
+
+  if (existing) {
+    if (existing.ownerId === ownerId) {
+      return;
+    }
+
+    throw new ApiError(
+      409,
+      `An import is already running for this branch (job ${existing.ownerId}). Wait for it to finish, then try again.`,
+    );
+  }
+
+  branchImportLocks.set(key, {
+    ownerId: ownerId ?? `sync-${Date.now()}`,
+    startedAt: Date.now(),
+  });
+};
+
+const releaseBranchImportLock = (branchId, ownerId) => {
+  const key = Number(branchId) || 0;
+  const existing = branchImportLocks.get(key);
+
+  if (!existing) {
+    return;
+  }
+
+  if (!ownerId || existing.ownerId === ownerId) {
+    branchImportLocks.delete(key);
+  }
+};
+
+const withLockWaitRetry = async (label, work, onRetry) => {
+  let attempt = 0;
+
+  while (true) {
+    try {
+      return await work();
+    } catch (error) {
+      attempt += 1;
+
+      if (!isLockWaitError(error) || attempt > LOCK_WAIT_MAX_RETRIES) {
+        throw error;
+      }
+
+      logImport('lock wait / deadlock — retrying chunk', {
+        label,
+        attempt,
+        maxRetries: LOCK_WAIT_MAX_RETRIES,
+        error: error.message,
+      });
+
+      if (onRetry) {
+        onRetry({
+          attempt,
+          maxRetries: LOCK_WAIT_MAX_RETRIES,
+          error,
+        });
+      }
+
+      await sleep(LOCK_WAIT_RETRY_DELAY_MS * attempt);
+    }
+  }
+};
+
 const logImport = (message, meta = undefined) => {
   importLogger.info(message, meta);
 };
@@ -141,6 +234,13 @@ const enableBulkSession = async (connection) => {
     await connection.query('SET SESSION sql_log_bin = 0');
   } catch {
     // Managed/replica MySQL may not allow changing sql_log_bin
+  }
+
+  try {
+    // Prefer failing a chunk sooner so lock-wait retry can kick in.
+    await connection.query('SET SESSION innodb_lock_wait_timeout = 30');
+  } catch {
+    // Some hosts disallow changing this session variable
   }
 };
 
@@ -420,18 +520,60 @@ const runChunkedInsert = async (
 
   for (let index = 0; index < rows.length; index += BATCH_SIZE) {
     const chunk = rows.slice(index, index + BATCH_SIZE);
-    const { inserted: chunkInserted, productIds } = await bulkInsertProducts(
-      connection,
-      batchId,
-      chunk,
-    );
+    const chunkStart = index + 1;
+    const chunkEnd = Math.min(index + chunk.length, rows.length);
+    const chunkIndex = Math.floor(index / BATCH_SIZE) + 1;
 
-    await bulkInsertNormalizedDetails(connection, productIds, chunk.map((row) => row.record));
+    if (onProgress) {
+      const percent =
+        progressStart +
+        Math.round(((chunkIndex - 1) / totalChunks) * (progressEnd - progressStart));
+      onProgress({
+        processed: index,
+        total: rows.length,
+        percent,
+        message: `Importing products (rows ${chunkStart}-${chunkEnd})`,
+      });
+    }
+
+    const { inserted: chunkInserted } = await withLockWaitRetry(
+      `insert-chunk-${chunkIndex}`,
+      async () => {
+        await connection.beginTransaction();
+
+        try {
+          const result = await bulkInsertProducts(connection, batchId, chunk);
+          await bulkInsertNormalizedDetails(
+            connection,
+            result.productIds,
+            chunk.map((row) => row.record),
+          );
+          await connection.commit();
+          return result;
+        } catch (error) {
+          await connection.rollback().catch(() => {});
+          throw error;
+        }
+      },
+      ({ attempt, maxRetries }) => {
+        if (onProgress) {
+          onProgress({
+            processed: index,
+            total: rows.length,
+            percent:
+              progressStart +
+              Math.round(
+                ((chunkIndex - 1) / totalChunks) * (progressEnd - progressStart),
+              ),
+            message: `Database busy — retrying rows ${chunkStart}-${chunkEnd} (${attempt}/${maxRetries})`,
+          });
+        }
+      },
+    );
 
     inserted += chunkInserted;
 
     if (onProgress) {
-      const chunkIndex = Math.floor(index / BATCH_SIZE) + 1;
       const percent =
         progressStart +
         Math.round((chunkIndex / totalChunks) * (progressEnd - progressStart));
@@ -439,6 +581,7 @@ const runChunkedInsert = async (
         processed: Math.min(index + chunk.length, rows.length),
         total: rows.length,
         percent,
+        message: 'Importing products',
       });
     }
   }
@@ -462,18 +605,59 @@ const runChunkedUpdate = async (
 
   for (let index = 0; index < rows.length; index += BATCH_SIZE) {
     const chunk = rows.slice(index, index + BATCH_SIZE);
+    const chunkStart = index + 1;
+    const chunkEnd = Math.min(index + chunk.length, rows.length);
+    const chunkIndex = Math.floor(index / BATCH_SIZE) + 1;
 
-    await bulkUpdateProducts(connection, chunk);
-    await bulkUpsertNormalizedDetails(
-      connection,
-      chunk.map((row) => row.productId),
-      chunk.map((row) => row.record),
+    if (onProgress) {
+      const percent =
+        progressStart +
+        Math.round(((chunkIndex - 1) / totalChunks) * (progressEnd - progressStart));
+      onProgress({
+        processed: index,
+        total: rows.length,
+        percent,
+        message: `Updating products (rows ${chunkStart}-${chunkEnd})`,
+      });
+    }
+
+    await withLockWaitRetry(
+      `update-chunk-${chunkIndex}`,
+      async () => {
+        await connection.beginTransaction();
+
+        try {
+          await bulkUpdateProducts(connection, chunk);
+          await bulkUpsertNormalizedDetails(
+            connection,
+            chunk.map((row) => row.productId),
+            chunk.map((row) => row.record),
+          );
+          await connection.commit();
+        } catch (error) {
+          await connection.rollback().catch(() => {});
+          throw error;
+        }
+      },
+      ({ attempt, maxRetries }) => {
+        if (onProgress) {
+          onProgress({
+            processed: index,
+            total: rows.length,
+            percent:
+              progressStart +
+              Math.round(
+                ((chunkIndex - 1) / totalChunks) * (progressEnd - progressStart),
+              ),
+            message: `Database busy — retrying update rows ${chunkStart}-${chunkEnd} (${attempt}/${maxRetries})`,
+          });
+        }
+      },
     );
 
     updated += chunk.length;
 
     if (onProgress) {
-      const chunkIndex = Math.floor(index / BATCH_SIZE) + 1;
       const percent =
         progressStart +
         Math.round((chunkIndex / totalChunks) * (progressEnd - progressStart));
@@ -481,6 +665,7 @@ const runChunkedUpdate = async (
         processed: Math.min(index + chunk.length, rows.length),
         total: rows.length,
         percent,
+        message: 'Updating products',
       });
     }
   }
@@ -540,6 +725,7 @@ const importProductsFromExcel = async (
     mappings = null,
     onProgress,
     deferPostProcessing = DEFER_POST_PROCESSING,
+    lockOwner = null,
   } = {},
 ) => {
   const mode = normalizeImportMode(importMode);
@@ -621,10 +807,16 @@ const importProductsFromExcel = async (
     };
   }
 
+  const resolvedBranchId = await resolveOperationalBranchId({ branchId });
+  const lockOwnerId = lockOwner ?? `sync-${resolvedBranchId}-${Date.now()}`;
+  acquireBranchImportLock(resolvedBranchId, lockOwnerId);
+
   const connection = await pool.getConnection();
+  let committedBatchId = null;
+  let committedPreviousBatchId = null;
+  let committedIsNewBatch = false;
 
   try {
-    await connection.beginTransaction();
     await enableBulkSession(connection);
 
     reportProgress({
@@ -635,22 +827,38 @@ const importProductsFromExcel = async (
       processed: 0,
     });
 
-    const resolvedBranchId = await resolveOperationalBranchId({ branchId });
+    await connection.beginTransaction();
 
-    const { batchId, isNewBatch, previousBatchId } = await resolveImportBatch(
-      connection,
-      resolvedBranchId,
-      uploadedBy,
-      mode,
-    );
+    let batchId;
+    let isNewBatch;
+    let previousBatchId;
+    let toInsert;
+    let toUpdate;
 
-    const { toInsert, toUpdate } = await classifyRowsForMode(
-      connection,
-      batchId,
-      validRows,
-      mode,
-      validationSummary,
-    );
+    try {
+      ({ batchId, isNewBatch, previousBatchId } = await resolveImportBatch(
+        connection,
+        resolvedBranchId,
+        uploadedBy,
+        mode,
+      ));
+
+      ({ toInsert, toUpdate } = await classifyRowsForMode(
+        connection,
+        batchId,
+        validRows,
+        mode,
+        validationSummary,
+      ));
+
+      await connection.commit();
+      committedBatchId = batchId;
+      committedPreviousBatchId = previousBatchId;
+      committedIsNewBatch = isNewBatch;
+    } catch (error) {
+      await connection.rollback().catch(() => {});
+      throw error;
+    }
 
     const classificationSkips = validationSummary.skipped - skippedAfterValidation;
     if (classificationSkips > 0) {
@@ -676,16 +884,18 @@ const importProductsFromExcel = async (
       toInsert: toInsert.length,
       toUpdate: toUpdate.length,
       batchSize: BATCH_SIZE,
+      commitPerChunk: true,
+      lockWaitRetries: LOCK_WAIT_MAX_RETRIES,
     });
 
     const { inserted } = await runChunkedInsert(
       connection,
       batchId,
       toInsert,
-      ({ processed, total, percent }) =>
+      ({ processed, total, percent, message }) =>
         reportProgress({
           phase: 'inserting',
-          message: 'Importing products',
+          message: message ?? 'Importing products',
           progress: 15 + Math.round((percent / 100) * 40),
           processed,
           total,
@@ -697,10 +907,10 @@ const importProductsFromExcel = async (
     const updated = await runChunkedUpdate(
       connection,
       toUpdate,
-      ({ processed, total, percent }) =>
+      ({ processed, total, percent, message }) =>
         reportProgress({
           phase: 'updating',
-          message: 'Updating products',
+          message: message ?? 'Updating products',
           progress: 55 + Math.round((percent / 100) * 40),
           processed,
           total,
@@ -710,7 +920,6 @@ const importProductsFromExcel = async (
     );
 
     await disableBulkSession(connection);
-    await connection.commit();
 
     validationSummary.importedRecords = inserted;
     validationSummary.updatedRecords = updated;
@@ -773,24 +982,76 @@ const importProductsFromExcel = async (
     };
   } catch (error) {
     await disableBulkSession(connection).catch(() => {});
-    await connection.rollback();
+    await connection.rollback().catch(() => {});
+
+    if (
+      mode === IMPORT_MODES.INSERT &&
+      committedIsNewBatch &&
+      committedBatchId
+    ) {
+      try {
+        await connection.beginTransaction();
+        await connection.execute(
+          `UPDATE product_upload_batches SET is_active = 0 WHERE id = ?`,
+          [committedBatchId],
+        );
+        if (committedPreviousBatchId) {
+          await connection.execute(
+            `UPDATE product_upload_batches SET is_active = 1 WHERE id = ?`,
+            [committedPreviousBatchId],
+          );
+        }
+        await connection.commit();
+        logImport('rolled back active batch after failed import', {
+          failedBatchId: committedBatchId,
+          restoredBatchId: committedPreviousBatchId,
+        });
+      } catch (restoreError) {
+        await connection.rollback().catch(() => {});
+        importLogger.error('failed to restore previous batch after import error', {
+          failedBatchId: committedBatchId,
+          restoredBatchId: committedPreviousBatchId,
+          error: restoreError.message,
+        });
+      }
+    }
+
     importLogger.error('Product import failed', { error: error.message, stack: error.stack });
     throw error;
   } finally {
     connection.release();
+    releaseBranchImportLock(resolvedBranchId, lockOwnerId);
   }
 };
 
 const startAsyncImport = (buffer, uploadedBy = null, meta = {}) => {
   const job = importJobStore.createJob();
+  const branchId = meta.branchId ?? null;
 
   logImport('async import queued', {
     jobId: job.id,
     uploadedBy,
+    branchId,
     importMode: meta.importMode ?? IMPORT_MODES.INSERT,
     fileName: meta.fileName ?? null,
     fileSize: meta.fileSize ?? (Buffer.isBuffer(buffer) ? buffer.length : null),
   });
+
+  if (branchId) {
+    try {
+      acquireBranchImportLock(branchId, job.id);
+    } catch (error) {
+      const failureMessage = error?.message || 'Import already in progress';
+      importJobStore.updateJob(job.id, {
+        status: 'failed',
+        phase: 'failed',
+        progress: 100,
+        message: failureMessage,
+        error: failureMessage,
+      });
+      return importJobStore.getJob(job.id);
+    }
+  }
 
   setImmediate(async () => {
     importJobStore.updateJob(job.id, {
@@ -802,9 +1063,10 @@ const startAsyncImport = (buffer, uploadedBy = null, meta = {}) => {
 
     try {
       const result = await importProductsFromExcel(buffer, uploadedBy, {
-        branchId: meta.branchId ?? null,
+        branchId,
         importMode: meta.importMode ?? IMPORT_MODES.INSERT,
         mappings: meta.mappings ?? null,
+        lockOwner: job.id,
         onProgress: ({
           phase,
           progress,
@@ -848,6 +1110,10 @@ const startAsyncImport = (buffer, uploadedBy = null, meta = {}) => {
         message: failureMessage,
         error: failureMessage,
       });
+    } finally {
+      if (branchId) {
+        releaseBranchImportLock(branchId, job.id);
+      }
     }
   });
 

@@ -269,6 +269,9 @@ export const getProducts = (options = {}) =>
 export const getProductsForBranch = (branchIds) =>
   inventoryDropdownService.getProducts({ branchIds });
 
+export const getLocationStockCount = (branchIds, { product = null, subProduct = null } = {}) =>
+  inventoryDropdownService.getLocationStockCount({ branchIds, product, subProduct });
+
 export const getSubProducts = (product, branchIds = []) =>
   inventoryDropdownService.getSubProducts(product, { branchIds });
 
@@ -606,6 +609,7 @@ export { getProductList, getPrintDetails, exportProductListExcel };
 export default {
   getProducts,
   getProductsForBranch,
+  getLocationStockCount,
   getSubProducts,
   getCenters,
   getProductList,

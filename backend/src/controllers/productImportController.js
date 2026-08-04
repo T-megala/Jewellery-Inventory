@@ -97,6 +97,18 @@ export const importProducts = async (req, res) => {
       },
     );
 
+    if (job.status === 'failed') {
+      return res.status(409).json({
+        success: false,
+        message: job.error || job.message || 'Import already in progress',
+        data: {
+          jobId: job.id,
+          status: job.status,
+          statusUrl: `/api/v1/products/import/status/${job.id}`,
+        },
+      });
+    }
+
     return res.status(202).json({
       success: true,
       message: 'Import started',

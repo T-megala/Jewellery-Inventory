@@ -13,8 +13,17 @@ const sendSuccess = (res, data) => {
 
 export const getProducts = async (req, res) => {
   const branchIds = await resolveDropdownBranchIds(req);
-  const data = await productService.getProductsForBranch(branchIds);
-  sendSuccess(res, data);
+  const [data, locationStockCount] = await Promise.all([
+    productService.getProductsForBranch(branchIds),
+    productService.getLocationStockCount(branchIds),
+  ]);
+
+  res.status(200).json({
+    success: true,
+    message: "Data fetched successfully",
+    data,
+    locationStockCount,
+  });
 };
 
 export const getSubProducts = async (req, res) => {
@@ -25,8 +34,17 @@ export const getSubProducts = async (req, res) => {
     throw new ApiError(400, 'Parameter "product" is required in query or body');
   }
 
-  const data = await productService.getSubProducts(product, branchIds);
-  sendSuccess(res, data);
+  const [data, locationStockCount] = await Promise.all([
+    productService.getSubProducts(product, branchIds),
+    productService.getLocationStockCount(branchIds, { product }),
+  ]);
+
+  res.status(200).json({
+    success: true,
+    message: "Data fetched successfully",
+    data,
+    locationStockCount,
+  });
 };
 
 export const getCenters = async (req, res) => {
@@ -45,8 +63,17 @@ export const getCenters = async (req, res) => {
     );
   }
 
-  const data = await productService.getCenters(product, subProduct, branchIds);
-  sendSuccess(res, data);
+  const [data, locationStockCount] = await Promise.all([
+    productService.getCenters(product, subProduct, branchIds),
+    productService.getLocationStockCount(branchIds, { product, subProduct }),
+  ]);
+
+  res.status(200).json({
+    success: true,
+    message: "Data fetched successfully",
+    data,
+    locationStockCount,
+  });
 };
 
 export const getPrintDetails = async (req, res) => {
