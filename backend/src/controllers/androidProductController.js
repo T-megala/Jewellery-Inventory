@@ -50,6 +50,13 @@ export const getSubProducts = async (req, res) => {
 export const getCenters = async (req, res) => {
   const product = getRequestParam(req, "product", "productName");
   const subProduct = getRequestParam(req, "subProduct", "subProductName");
+  const center = getRequestParam(
+    req,
+    "counter",
+    "center",
+    "centerName",
+    "counterName",
+  );
   const branchIds = await resolveDropdownBranchIds(req);
 
   if (!product) {
@@ -65,7 +72,11 @@ export const getCenters = async (req, res) => {
 
   const [data, locationStockCount] = await Promise.all([
     productService.getCenters(product, subProduct, branchIds),
-    productService.getLocationStockCount(branchIds, { product, subProduct }),
+    productService.getLocationStockCount(branchIds, {
+      product,
+      subProduct,
+      center,
+    }),
   ]);
 
   res.status(200).json({

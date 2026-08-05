@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import TablePagination, { DEFAULT_PAGE_SIZE } from '../components/TablePagination.jsx'
 import { useBranchScope } from '../hooks/useBranchScope.js'
 import { getUser, hasPermission, isAuthenticated, isLogoutInProgress } from '../services/auth.js'
+import { fetchCenters, fetchProducts, fetchSubProducts } from '../services/products.js'
 import { downloadStockExport, fetchProductList } from '../services/stock.js'
 import './Module.css'
 import './Stock.css'
@@ -25,11 +26,30 @@ export default function Stock() {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
+  const [product, setProduct] = useState('')
+  const [subProduct, setSubProduct] = useState('')
+  const [counter, setCounter] = useState('')
+  const [products, setProducts] = useState([])
+  const [subProducts, setSubProducts] = useState([])
+  const [counters, setCounters] = useState([])
+  const [loadingFilters, setLoadingFilters] = useState(true)
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState('')
 
-  const loadStock = useCallback(async (pageNum, searchTerm, limit = pageSize) => {
+  const filterParams = useMemo(
+    () => ({
+      search: search || undefined,
+      productName: product || undefined,
+      subProductName: subProduct || undefined,
+      centerName: counter || undefined,
+    }),
+    [search, product, subProduct, counter],
+  )
+
+  const hasActiveFilters = Boolean(search || product || subProduct || counter)
+
+  const loadStock = useCallback(async (pageNum, filters = filterParams, limit = pageSize) => {
     setLoading(true)
     setError('')
 
@@ -37,7 +57,7 @@ export default function Stock() {
       const result = await fetchProductList({
         page: pageNum,
         limit,
-        search: searchTerm || undefined,
+        ...filters,
       })
       setRows(result.rows)
       setPagination(result.pagination)
@@ -49,7 +69,7 @@ export default function Stock() {
     } finally {
       setLoading(false)
     }
-  }, [pageSize])
+  }, [filterParams, pageSize])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -61,16 +81,104 @@ export default function Stock() {
 
   useEffect(() => {
     if (!canViewStock) return undefined
-    loadStock(1, search)
-  }, [canViewStock, loadStock, search, operationalValue])
 
-  function handleClearSearch() {
+    let cancelled = false
+
+    async function loadProducts() {
+      setLoadingFilters(true)
+      try {
+        const data = await fetchProducts()
+        if (!cancelled) {
+          setProducts(data)
+          setProduct('')
+          setSubProduct('')
+          setCounter('')
+          setSubProducts([])
+          setCounters([])
+        }
+      } catch (err) {
+        if (!cancelled) setError(err.message || 'Failed to load products')
+      } finally {
+        if (!cancelled) setLoadingFilters(false)
+      }
+    }
+
+    loadProducts()
+    return () => { cancelled = true }
+  }, [canViewStock, operationalValue])
+
+  useEffect(() => {
+    if (!product) {
+      setSubProducts([])
+      setSubProduct('')
+      setCounters([])
+      setCounter('')
+      return undefined
+    }
+
+    let cancelled = false
+
+    async function loadSubProducts() {
+      try {
+        const data = await fetchSubProducts(product)
+        if (!cancelled) {
+          setSubProducts(data)
+          setSubProduct('')
+          setCounters([])
+          setCounter('')
+        }
+      } catch (err) {
+        if (!cancelled) setError(err.message || 'Failed to load sub products')
+      }
+    }
+
+    loadSubProducts()
+    return () => { cancelled = true }
+  }, [product])
+
+  useEffect(() => {
+    if (!product || !subProduct) {
+      setCounters([])
+      setCounter('')
+      return undefined
+    }
+
+    let cancelled = false
+
+    async function loadCounters() {
+      try {
+        const data = await fetchCenters(product, subProduct)
+        if (!cancelled) {
+          setCounters(data)
+          setCounter('')
+        }
+      } catch (err) {
+        if (!cancelled) setError(err.message || 'Failed to load counters')
+      }
+    }
+
+    loadCounters()
+    return () => { cancelled = true }
+  }, [product, subProduct])
+
+  useEffect(() => {
+    if (!canViewStock) return undefined
+    loadStock(1, filterParams)
+  }, [canViewStock, loadStock, filterParams, operationalValue])
+
+  function handleClearFilters() {
     setSearchInput('')
+    setSearch('')
+    setProduct('')
+    setSubProduct('')
+    setCounter('')
+    setSubProducts([])
+    setCounters([])
   }
 
   function handlePageSizeChange(nextSize) {
     setPageSize(nextSize)
-    loadStock(1, search, nextSize)
+    loadStock(1, filterParams, nextSize)
   }
 
   async function handleExportExcel() {
@@ -78,7 +186,7 @@ export default function Stock() {
     setError('')
 
     try {
-      await downloadStockExport({ search: search || undefined })
+      await downloadStockExport(filterParams)
     } catch (err) {
       setError(err.message || 'Failed to export stock to Excel.')
     } finally {
@@ -110,34 +218,89 @@ export default function Stock() {
   return (
     <div className="stock-page">
       <div className="stock-meta">
-        <div className="stock-search">
-          <div className="stock-search__field">
-            <span className="stock-search__icon" aria-hidden="true">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8" />
-                <path d="M20 20l-3.5-3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-              </svg>
-            </span>
-            <input
-              type="search"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search product, tag, counter…"
-              aria-label="Search stock"
-            />
-            {searchInput && (
-              <button
-                type="button"
-                className="stock-search__clear"
-                onClick={handleClearSearch}
-                aria-label="Clear search"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        <div className="stock-filters">
+          <div className="stock-search">
+            <div className="stock-search__field">
+              <span className="stock-search__icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8" />
+                  <path d="M20 20l-3.5-3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                 </svg>
-              </button>
-            )}
+              </span>
+              <input
+                type="search"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Search product, tag, counter…"
+                aria-label="Search stock"
+              />
+              {searchInput && (
+                <button
+                  type="button"
+                  className="stock-search__clear"
+                  onClick={() => setSearchInput('')}
+                  aria-label="Clear search"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                </button>
+              )}
+            </div>
           </div>
+
+          <label className="stock-filter">
+            <span>Product</span>
+            <select
+              value={product}
+              onChange={(e) => setProduct(e.target.value)}
+              disabled={loadingFilters}
+            >
+              <option value="">All Products</option>
+              {products.map((item) => (
+                <option key={item.id ?? item.name} value={item.name}>{item.name}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="stock-filter">
+            <span>Sub Product</span>
+            <select
+              value={subProduct}
+              onChange={(e) => setSubProduct(e.target.value)}
+              disabled={!product}
+            >
+              <option value="">All Sub Products</option>
+              {subProducts.map((item) => (
+                <option key={item.id ?? item.name} value={item.name}>{item.name}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="stock-filter">
+            <span>Counter</span>
+            <select
+              value={counter}
+              onChange={(e) => setCounter(e.target.value)}
+              disabled={!product || !subProduct}
+            >
+              <option value="">All Counters</option>
+              {counters.map((item) => (
+                <option key={item.id ?? item.name} value={item.name}>{item.name}</option>
+              ))}
+            </select>
+          </label>
+
+          {hasActiveFilters && (
+            <button
+              type="button"
+              className="stock-btn"
+              onClick={handleClearFilters}
+              disabled={loading || exporting}
+            >
+              Clear filters
+            </button>
+          )}
         </div>
 
         <div className="stock-meta__actions">
@@ -177,12 +340,12 @@ export default function Stock() {
           </div>
         ) : rows.length === 0 ? (
           <p className="stock-empty">
-            {search ? 'No products found for your search.' : 'No stock records found.'}
-            {search && (
+            {hasActiveFilters ? 'No products found for the selected filters.' : 'No stock records found.'}
+            {hasActiveFilters && (
               <>
                 {' '}
-                <button type="button" className="stock-btn" onClick={handleClearSearch}>
-                  Clear search
+                <button type="button" className="stock-btn" onClick={handleClearFilters}>
+                  Clear filters
                 </button>
               </>
             )}
@@ -246,7 +409,7 @@ export default function Stock() {
                 totalPages={pagination.totalPages}
                 totalRecords={pagination.totalRecords}
                 rowCount={rows.length}
-                onPageChange={(nextPage) => loadStock(nextPage, search)}
+                onPageChange={(nextPage) => loadStock(nextPage, filterParams)}
                 onPageSizeChange={handlePageSizeChange}
                 disabled={loading}
               />

@@ -158,9 +158,50 @@ const buildSearchClause = (search) => {
   };
 };
 
-const buildProductListQuery = ({ search, batchId = null, branchIds = [] }) => {
+const buildScopeFilterClause = ({
+  productName = null,
+  subProductName = null,
+  centerName = null,
+} = {}) => {
+  const conditions = [];
+  const params = [];
+
+  if (productName) {
+    conditions.push("AND p.product = ?");
+    params.push(productName);
+  }
+
+  if (subProductName) {
+    conditions.push("AND p.sub_product = ?");
+    params.push(subProductName);
+  }
+
+  if (centerName) {
+    conditions.push("AND p.counter_name = ?");
+    params.push(centerName);
+  }
+
+  return {
+    clause: conditions.join(" "),
+    params,
+  };
+};
+
+const buildProductListQuery = ({
+  search,
+  batchId = null,
+  branchIds = [],
+  productName = null,
+  subProductName = null,
+  centerName = null,
+}) => {
   const { clause: searchClause, params: searchParams } =
     buildSearchClause(search);
+  const { clause: scopeClause, params: scopeParams } = buildScopeFilterClause({
+    productName,
+    subProductName,
+    centerName,
+  });
   const pricingJoin = `
     LEFT JOIN product_pricing pp ON pp.product_id = p.id
     LEFT JOIN product_master pm ON pm.product_id = p.id
@@ -174,9 +215,10 @@ const buildProductListQuery = ({ search, batchId = null, branchIds = [] }) => {
         LEFT JOIN branches b ON b.id = pub.branch_id
         ${pricingJoin}
         WHERE ${batchAllProductsWhere.replace("batch_id = ?", "p.batch_id = ?")}
+        ${scopeClause}
         ${searchClause}
       `,
-      params: [batchId, ...searchParams],
+      params: [batchId, ...scopeParams, ...searchParams],
       batchId,
     };
   }
@@ -196,9 +238,10 @@ const buildProductListQuery = ({ search, batchId = null, branchIds = [] }) => {
       ${pricingJoin}
       WHERE ${activeBranchProductsWhere}
       ${branchFilter.clause}
+      ${scopeClause}
       ${searchClause}
     `,
-    params: [...branchFilter.params, ...searchParams],
+    params: [...branchFilter.params, ...scopeParams, ...searchParams],
     batchId: null,
   };
 };
@@ -210,8 +253,18 @@ const getProductList = async ({
   offset,
   batchId = null,
   branchIds = [],
+  productName = null,
+  subProductName = null,
+  centerName = null,
 }) => {
-  const query = buildProductListQuery({ search, batchId, branchIds });
+  const query = buildProductListQuery({
+    search,
+    batchId,
+    branchIds,
+    productName,
+    subProductName,
+    centerName,
+  });
 
   if (!query) {
     return {
@@ -269,8 +322,16 @@ export const getProducts = (options = {}) =>
 export const getProductsForBranch = (branchIds) =>
   inventoryDropdownService.getProducts({ branchIds });
 
-export const getLocationStockCount = (branchIds, { product = null, subProduct = null } = {}) =>
-  inventoryDropdownService.getLocationStockCount({ branchIds, product, subProduct });
+export const getLocationStockCount = (
+  branchIds,
+  { product = null, subProduct = null, center = null } = {},
+) =>
+  inventoryDropdownService.getLocationStockCount({
+    branchIds,
+    product,
+    subProduct,
+    center,
+  });
 
 export const getSubProducts = (product, branchIds = []) =>
   inventoryDropdownService.getSubProducts(product, { branchIds });
@@ -493,8 +554,18 @@ const getAllProductsForExport = async ({
   search,
   batchId = null,
   branchIds = [],
+  productName = null,
+  subProductName = null,
+  centerName = null,
 }) => {
-  const query = buildProductListQuery({ search, batchId, branchIds });
+  const query = buildProductListQuery({
+    search,
+    batchId,
+    branchIds,
+    productName,
+    subProductName,
+    centerName,
+  });
 
   if (!query) {
     return { data: [], totalRecords: 0 };
@@ -586,11 +657,17 @@ const exportProductListExcel = async ({
   search,
   batchId = null,
   branchIds = [],
+  productName = null,
+  subProductName = null,
+  centerName = null,
 }) => {
   const { data } = await getAllProductsForExport({
     search,
     batchId,
     branchIds,
+    productName,
+    subProductName,
+    centerName,
   });
 
   const buffer = await buildStockExcelBuffer(data);

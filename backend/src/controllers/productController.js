@@ -39,9 +39,30 @@ const parseProductListFilters = async (req) => {
     throw new ApiError(400, "batchId must be a positive integer");
   }
 
+  const productName = getRequestParam(req, "productName", "product");
+  const subProductName = getRequestParam(
+    req,
+    "subProductName",
+    "subProduct",
+  );
+  const centerName = getRequestParam(
+    req,
+    "centerName",
+    "counterName",
+    "center",
+    "counter",
+  );
+
   const branchIds = await resolveRequestBranchIds(req);
 
-  return { search, batchId, branchIds };
+  return {
+    search,
+    batchId,
+    branchIds,
+    productName,
+    subProductName,
+    centerName,
+  };
 };
 
 export const getProductList = async (req, res) => {
@@ -60,7 +81,14 @@ export const getProductList = async (req, res) => {
     throw new ApiError(400, "limit cannot exceed 100");
   }
 
-  const { search, batchId, branchIds } = await parseProductListFilters(req);
+  const {
+    search,
+    batchId,
+    branchIds,
+    productName,
+    subProductName,
+    centerName,
+  } = await parseProductListFilters(req);
 
   const result = await productService.getProductList({
     search,
@@ -69,6 +97,9 @@ export const getProductList = async (req, res) => {
     offset: (page - 1) * limit,
     batchId,
     branchIds,
+    productName,
+    subProductName,
+    centerName,
   });
 
   res.status(200).json({
@@ -77,18 +108,34 @@ export const getProductList = async (req, res) => {
     batchId: result.batchId,
     branchIds: result.branchIds,
     branchId: result.branchIds.length === 1 ? result.branchIds[0] : null,
+    filters: {
+      productName,
+      subProductName,
+      centerName,
+      search,
+    },
     pagination: result.pagination,
     data: result.data,
   });
 };
 
 export const exportProductList = async (req, res) => {
-  const { search, batchId, branchIds } = await parseProductListFilters(req);
+  const {
+    search,
+    batchId,
+    branchIds,
+    productName,
+    subProductName,
+    centerName,
+  } = await parseProductListFilters(req);
 
   const file = await productService.exportProductListExcel({
     search,
     batchId,
     branchIds,
+    productName,
+    subProductName,
+    centerName,
   });
 
   res.setHeader("Content-Type", file.contentType);

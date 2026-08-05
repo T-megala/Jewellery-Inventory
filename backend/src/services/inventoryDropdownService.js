@@ -6,6 +6,7 @@ import {
   SCOPE_NAMES,
   isAllProductsByName,
   isAllSubProductsByName,
+  isAllCentersByName,
 } from '../utils/verificationScope.js';
 import {
   activeBranchProductsJoin,
@@ -172,13 +173,14 @@ const getCenters = async (
 
 /**
  * Tagged inventory count for active batch(es) in the given branch scope.
- * Optionally scoped by product / sub-product (Android dropdown APIs).
+ * Optionally scoped by product / sub-product / counter (Android dropdown APIs).
  */
 const getLocationStockCount = async ({
   branchId = null,
   branchIds = null,
   product = null,
   subProduct = null,
+  center = null,
 } = {}) => {
   const scope = await buildInventoryScope({ branchId, branchIds });
 
@@ -197,6 +199,11 @@ const getLocationStockCount = async ({
       filters.push('AND p.sub_product = ?');
       params.push(subProduct);
     }
+  }
+
+  if (center && !isAllCentersByName(center)) {
+    filters.push('AND p.counter_name = ?');
+    params.push(center);
   }
 
   const taggedFilter = TAG_FILTER.replace(/\n\s*/g, ' ').replace(

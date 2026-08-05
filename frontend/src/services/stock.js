@@ -1,8 +1,26 @@
 import { createUserError } from '../utils/userErrorMessage.js';
 import { apiFetchPaged, apiFetchRaw, buildQueryString, withBranchParams } from './api.js';
 
-export function fetchProductList({ page = 1, limit = 50, search } = {}) {
-  const query = buildQueryString(withBranchParams({ page, limit, search }));
+function buildStockParams({
+  page = 1,
+  limit = 50,
+  search,
+  productName,
+  subProductName,
+  centerName,
+} = {}) {
+  return withBranchParams({
+    page,
+    limit,
+    search,
+    productName,
+    subProductName,
+    centerName,
+  });
+}
+
+export function fetchProductList(filters = {}) {
+  const query = buildQueryString(buildStockParams(filters));
   return apiFetchPaged(`/products/list?${query}`);
 }
 
@@ -12,8 +30,20 @@ function parseFilename(res, fallback) {
   return match?.[1] || fallback;
 }
 
-export async function downloadStockExport({ search } = {}) {
-  const query = buildQueryString(withBranchParams({ search }));
+export async function downloadStockExport({
+  search,
+  productName,
+  subProductName,
+  centerName,
+} = {}) {
+  const query = buildQueryString(
+    withBranchParams({
+      search,
+      productName,
+      subProductName,
+      centerName,
+    }),
+  );
   const path = query ? `/products/list/export?${query}` : '/products/list/export';
   const res = await apiFetchRaw(path);
 
