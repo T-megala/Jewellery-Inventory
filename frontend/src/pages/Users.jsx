@@ -21,6 +21,8 @@ import { mapUserSaveError, scrollToFirstFieldError } from '../utils/formValidati
 import './Users.css'
 
 const SUPER_ADMIN_ROLE = 'Super Admin'
+const ADMIN_ROLE = 'Admin'
+const ALL_BRANCHES_ROLES = new Set([SUPER_ADMIN_ROLE, ADMIN_ROLE])
 
 function normalizeBranchIds(branchIds) {
   return [
@@ -34,6 +36,10 @@ function normalizeBranchIds(branchIds) {
 
 function isSuperAdminRole(role) {
   return role?.name === SUPER_ADMIN_ROLE
+}
+
+function isAllBranchesRole(role) {
+  return ALL_BRANCHES_ROLES.has(role?.name)
 }
 
 function mergeBranchOptions(...lists) {
@@ -241,7 +247,7 @@ export default function Users() {
     [roles, roleId],
   )
 
-  const isSuperAdmin = isSuperAdminRole(selectedRole)
+  const isAllBranchesUser = isAllBranchesRole(selectedRole)
 
   const formBranches = useMemo(
     () => mergeBranchOptions(branches, editingUser?.branches),
@@ -344,7 +350,7 @@ export default function Users() {
       errors.roleId = 'Role is required.'
     }
 
-    if (!isSuperAdmin && selectedBranchIds.length === 0) {
+    if (!isAllBranchesUser && selectedBranchIds.length === 0) {
       errors.branches = 'Select at least one branch.'
     }
 
@@ -389,7 +395,7 @@ export default function Users() {
           payload.roleId = parsedRoleId
         }
 
-        if (!isSuperAdmin) {
+        if (!isAllBranchesUser) {
           const nextBranchIds = normalizeBranchIds(selectedBranchIds)
           const currentBranchIds = (editingUser?.branches || []).map((branch) => branch.id)
 
@@ -406,7 +412,7 @@ export default function Users() {
           roleId: parsedRoleId,
         }
 
-        if (!isSuperAdmin) {
+        if (!isAllBranchesUser) {
           createPayload.branchIds = normalizeBranchIds(selectedBranchIds)
         }
 
@@ -759,13 +765,15 @@ export default function Users() {
               <div className={`users-field users-field--branches${fieldErrors.branches ? ' field-invalid' : ''}`}>
                 <span>
                   Branches
-                  {!isSuperAdmin && (
+                  {!isAllBranchesUser && (
                     <span className="users-field__required" aria-hidden="true">*</span>
                   )}
                 </span>
-                {isSuperAdmin ? (
+                {isAllBranchesUser ? (
                   <p className="users-field__hint users-field__hint--info">
-                    Super Admin users automatically have access to all branches.
+                    {isSuperAdminRole(selectedRole)
+                      ? 'Super Admin users automatically have access to all branches.'
+                      : 'Admin users automatically have access to all branches.'}
                   </p>
                 ) : (
                   <BranchMultiSelect

@@ -22,6 +22,16 @@ const toPermission = (row) => ({
 });
 
 export const SUPER_ADMIN_ROLE_NAME = "Super Admin";
+export const ADMIN_ROLE_NAME = "Admin";
+
+/** Roles that automatically receive every branch mapping. */
+export const ALL_BRANCHES_ROLE_NAMES = [
+  SUPER_ADMIN_ROLE_NAME,
+  ADMIN_ROLE_NAME,
+];
+
+export const isAllBranchesRoleName = (roleName) =>
+  ALL_BRANCHES_ROLE_NAMES.includes(roleName);
 
 export const getAllPermissions = async () => {
   const [rows] = await pool.execute(
@@ -119,6 +129,11 @@ export const getRoleById = async (id) => {
 export const isSuperAdminRole = async (roleId) => {
   const role = await getRoleById(roleId);
   return role?.name === SUPER_ADMIN_ROLE_NAME;
+};
+
+export const isAllBranchesRole = async (roleId) => {
+  const role = await getRoleById(roleId);
+  return isAllBranchesRoleName(role?.name);
 };
 
 const replaceRolePermissions = async (connection, roleId, permissionIds) => {
@@ -286,8 +301,13 @@ export default {
   getAllRoles,
   getRoleById,
   isSuperAdminRole,
+  isAllBranchesRole,
+  isAllBranchesRoleName,
   getPermissionNamesForRole,
   createRole,
   updateRole,
   deleteRole,
+  SUPER_ADMIN_ROLE_NAME,
+  ADMIN_ROLE_NAME,
+  ALL_BRANCHES_ROLE_NAMES,
 };

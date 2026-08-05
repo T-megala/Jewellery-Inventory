@@ -3,7 +3,10 @@ import { hashPassword } from "../utils/passwordHasher.js";
 import ApiError from "../utils/ApiError.js";
 import userBranchService from "./userBranchService.js";
 import branchService from "./branchService.js";
-import roleService, { SUPER_ADMIN_ROLE_NAME } from "./roleService.js";
+import roleService, {
+  SUPER_ADMIN_ROLE_NAME,
+  isAllBranchesRoleName,
+} from "./roleService.js";
 
 const USER_SELECT_SQL = `
   SELECT
@@ -93,7 +96,7 @@ const resolveBranchAssignment = ({ branchId, branchIds, defaultBranchId }) => {
   return null;
 };
 
-const buildSuperAdminBranchAssignment = async ({
+const buildAllBranchesAssignment = async ({
   branchId,
   branchIds,
   defaultBranchId,
@@ -131,8 +134,8 @@ const resolveCreateBranchAssignment = async ({
 }) => {
   const role = await roleService.getRoleById(roleId);
 
-  if (role?.name === SUPER_ADMIN_ROLE_NAME) {
-    return buildSuperAdminBranchAssignment({
+  if (isAllBranchesRoleName(role?.name)) {
+    return buildAllBranchesAssignment({
       branchId,
       branchIds,
       defaultBranchId,
@@ -270,8 +273,8 @@ export const updateUser = async (id, fields) => {
     const parsedRoleId = parseRequiredId(fields.roleId, "roleId");
     const role = await roleService.getRoleById(parsedRoleId);
 
-    if (role?.name === SUPER_ADMIN_ROLE_NAME) {
-      branchAssignment = await buildSuperAdminBranchAssignment({
+    if (isAllBranchesRoleName(role?.name)) {
+      branchAssignment = await buildAllBranchesAssignment({
         branchId: fields.branchId,
         branchIds: fields.branchIds,
         defaultBranchId: fields.defaultBranchId,

@@ -2,7 +2,7 @@ import pool from "../config/database.js";
 import ApiError from "../utils/ApiError.js";
 import { createAccessToken } from "../utils/token.js";
 import { verifyPassword } from "../utils/passwordHasher.js";
-import roleService, { SUPER_ADMIN_ROLE_NAME } from "./roleService.js";
+import roleService, { isAllBranchesRoleName } from "./roleService.js";
 import userBranchService from "./userBranchService.js";
 import userLogService from "./userLogService.js";
 
@@ -23,11 +23,11 @@ const resolveDefaultBranchId = (internalBranches) => {
   return defaultBranch?.id ?? null;
 };
 
-const isSuperAdminProfile = (profile) =>
-  profile?.role?.name === SUPER_ADMIN_ROLE_NAME;
+const isAllBranchesProfile = (profile) =>
+  isAllBranchesRoleName(profile?.role?.name);
 
 const assertUserHasBranchAccess = (profile, branches) => {
-  if (isSuperAdminProfile(profile)) {
+  if (isAllBranchesProfile(profile)) {
     return;
   }
 

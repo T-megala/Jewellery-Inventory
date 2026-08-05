@@ -90,7 +90,7 @@ export const createBranch = async (payload) => {
     );
 
     const branchId = result.insertId;
-    await userBranchService.assignBranchToSuperAdminUsers(branchId, connection);
+    await userBranchService.assignBranchToAllBranchRoleUsers(branchId, connection);
     await connection.commit();
 
     return getBranchById(branchId);
